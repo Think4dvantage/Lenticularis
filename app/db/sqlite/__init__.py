@@ -1,0 +1,3 @@
+"""
+SQLite database package
+"""

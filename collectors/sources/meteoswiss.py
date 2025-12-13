@@ -1,89 +1,158 @@
+"""
+MeteoSwiss weather data collector
+Fetches data from Swiss Federal Office of Meteorology and Climatology
+"""
 import requests
 import json
-import sys
+from typing import List, Dict, Any, Optional
+from datetime import datetime
+from collectors.base import BaseCollector, CollectorError
 
-#Library with all needed Endpoints deliverying the needed Measurements
-SOURCES = {
+
+class MeteoSwissCollector(BaseCollector):
+    """
+    Collector for MeteoSwiss weather stations
+    
+    Fetches data from public APIs:
+    - Wind speed and gusts
+    - Temperature
+    - Humidity
+    - Pressure
+    """
+    
+    SOURCES = {
         "speed": "https://data.geo.admin.ch/ch.meteoschweiz.messwerte-windgeschwindigkeit-kmh-10min/ch.meteoschweiz.messwerte-windgeschwindigkeit-kmh-10min_en.json",
-        "gusts":"https://data.geo.admin.ch/ch.meteoschweiz.messwerte-wind-boeenspitze-kmh-10min/ch.meteoschweiz.messwerte-wind-boeenspitze-kmh-10min_en.json",
-        "temperature":"https://data.geo.admin.ch/ch.meteoschweiz.messwerte-lufttemperatur-10min/ch.meteoschweiz.messwerte-lufttemperatur-10min_en.json",
-        "humidity":"https://data.geo.admin.ch/ch.meteoschweiz.messwerte-luftfeuchtigkeit-10min/ch.meteoschweiz.messwerte-luftfeuchtigkeit-10min_en.json",
-        "pressure":"https://data.geo.admin.ch/ch.meteoschweiz.messwerte-luftdruck-qff-10min/ch.meteoschweiz.messwerte-luftdruck-qff-10min_en.json"
-    }
-
-def fetch_all_measurements(SOURCES):
-    # Headers to not be blocked by WAF
-    headers = {
-        "User-Agent": "Lenticularis/0.1 (Linux Alpine 3.23; x64)"
-    }
-
-    RAW_DATA = {
-        "speed":requests.get(SOURCES["speed"], headers=headers),
-        "gusts":requests.get(SOURCES["gusts"], headers=headers),
-        "temp":requests.get(SOURCES["temperature"], headers=headers),
-        "humi":requests.get(SOURCES["humidity"], headers=headers),
-        "press":requests.get(SOURCES["pressure"], headers=headers)
+        "gusts": "https://data.geo.admin.ch/ch.meteoschweiz.messwerte-wind-boeenspitze-kmh-10min/ch.meteoschweiz.messwerte-wind-boeenspitze-kmh-10min_en.json",
+        "temperature": "https://data.geo.admin.ch/ch.meteoschweiz.messwerte-lufttemperatur-10min/ch.meteoschweiz.messwerte-lufttemperatur-10min_en.json",
+        "humidity": "https://data.geo.admin.ch/ch.meteoschweiz.messwerte-luftfeuchtigkeit-10min/ch.meteoschweiz.messwerte-luftfeuchtigkeit-10min_en.json",
+        "pressure": "https://data.geo.admin.ch/ch.meteoschweiz.messwerte-luftdruck-qff-10min/ch.meteoschweiz.messwerte-luftdruck-qff-10min_en.json",
+        "wind_direction": "https://data.geo.admin.ch/ch.meteoschweiz.messwerte-windrichtung-10min/ch.meteoschweiz.messwerte-windrichtung-10min_en.json"
     }
     
-
-
-def inspect_raw_data():
-
-    {
-    "station_id": "INT",       # String
-    "source": "meteoswiss",    # String (To track where it came from)
-    "timestamp": "...",        # ISO Format String
-    "wind_speed": 15.5,        # Float (km/h) - Note: Holfuy sends m/s!
-    "wind_gust": 28.0,         # Float (km/h)
-    "wind_dir": 260,           # Int (Degrees)
-    "temp": 12.0,              # Float (Celsius)
-    "humidity": 65,            # Float (%)
-    "pressure": 1013,          # Float (hPa)
-}
-
-    
-
-    target_url = SOURCES["speed"]
-    print(f"Fetching raw data from: {target_url}")
-    
-    response = requests.get(target_url, headers=headers)
-
-    # --- SAFETY CHECK ---
-    if response.status_code != 200:
-        print(f"CRITICAL ERROR: Server returned status {response.status_code}")
-        # Print a bit less text this time to keep it clean
-        print("Response:", response.text[:200]) 
-        sys.exit(1)
-
-    try:
-        data = response.json()
-    except json.JSONDecodeError:
-        print("Error: The data returned was not valid JSON.")
-        sys.exit(1)
-    
-    # Success! Let's print the structure.
-    print(f"\nRoot Keys: {list(data.keys())}")
-    
-    if 'features' in data and len(data['features']) > 0:
-        # Get the first station
-        first_station = data['features'][0]
-        
-        # We only want to see the essential fields, let's filter the output slightly
-        # so it's not a huge wall of text
-        simplified_view = {
-            "id": first_station.get("id"),
-            "station_name": first_station.get("properties", {}).get("station_name"),
-            "value": first_station.get("properties", {}).get("value"),
-            "unit": "km/h"
+    def __init__(self):
+        super().__init__("meteoswiss")
+        self.headers = {
+            "User-Agent": "Lenticularis/0.1 (Weather forecasting tool for paragliding)"
         }
+    
+    def fetch_data(self, station_ids: Optional[List[str]] = None) -> Dict[str, Any]:
+        """
+        Fetch raw data from all MeteoSwiss endpoints
         
-        print("\n--- RAW DATA SAMPLE (First Station) ---")
-        print(json.dumps(first_station, indent=4))
-        print("\n--- WHAT WE LIKELY WANT ---")
-        print(json.dumps(simplified_view, indent=4))
-        print("---------------------------------------")
-    else:
-        print("Warning: No 'features' found in the data.")
+        Returns:
+            Dictionary with measurement types as keys and API responses as values
+        """
+        raw_data = {}
+        
+        for measurement_type, url in self.SOURCES.items():
+            try:
+                self.logger.debug(f"Fetching {measurement_type} from MeteoSwiss")
+                response = requests.get(url, headers=self.headers, timeout=30)
+                
+                if response.status_code != 200:
+                    self.logger.error(f"HTTP {response.status_code} for {measurement_type}")
+                    continue
+                
+                data = response.json()
+                raw_data[measurement_type] = data
+                
+            except requests.RequestException as e:
+                self.logger.error(f"Request failed for {measurement_type}: {e}")
+            except json.JSONDecodeError as e:
+                self.logger.error(f"Invalid JSON for {measurement_type}: {e}")
+        
+        if not raw_data:
+            raise CollectorError("Failed to fetch any data from MeteoSwiss")
+        
+        return raw_data
+    
+    def normalize_data(self, raw_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """
+        Normalize MeteoSwiss data to standard format
+        
+        Combines data from different endpoints by station_id
+        """
+        # Build a dictionary of stations with all their measurements
+        stations = {}
+        
+        # Process each measurement type
+        for measurement_type, data in raw_data.items():
+            if "features" not in data:
+                continue
+            
+            for feature in data["features"]:
+                try:
+                    station_id = feature.get("id")
+                    if not station_id:
+                        continue
+                    
+                    props = feature.get("properties", {})
+                    
+                    # Initialize station entry if needed
+                    if station_id not in stations:
+                        stations[station_id] = {
+                            "station_id": station_id,
+                            "source": self.source_name,
+                            "station_name": props.get("station_name", "Unknown"),
+                            "timestamp": None
+                        }
+                    
+                    # Add measurement data
+                    value = props.get("value")
+                    if value is None:
+                        continue
+                    
+                    # Convert values based on type
+                    if measurement_type == "speed":
+                        stations[station_id]["wind_speed"] = self.kmh_to_ms(value)
+                    elif measurement_type == "gusts":
+                        stations[station_id]["gust_speed"] = self.kmh_to_ms(value)
+                    elif measurement_type == "wind_direction":
+                        stations[station_id]["wind_direction"] = int(value)
+                    elif measurement_type == "temperature":
+                        stations[station_id]["temperature"] = float(value)
+                    elif measurement_type == "humidity":
+                        stations[station_id]["humidity"] = float(value)
+                    elif measurement_type == "pressure":
+                        stations[station_id]["pressure"] = float(value)
+                    
+                    # Use reference_ts for timestamp
+                    if "reference_ts" in props and not stations[station_id]["timestamp"]:
+                        try:
+                            # Parse timestamp: "2025-12-13T14:30:00Z"
+                            ts_str = props["reference_ts"]
+                            stations[station_id]["timestamp"] = datetime.fromisoformat(
+                                ts_str.replace("Z", "+00:00")
+                            )
+                        except (ValueError, AttributeError) as e:
+                            self.logger.warning(f"Failed to parse timestamp for {station_id}: {e}")
+                
+                except Exception as e:
+                    self.logger.warning(f"Error processing feature: {e}")
+                    continue
+        
+        # Convert to list and add current timestamp if none available
+        normalized = []
+        for station_data in stations.values():
+            if station_data["timestamp"] is None:
+                station_data["timestamp"] = datetime.utcnow()
+            
+            normalized.append(station_data)
+        
+        return normalized
 
+
+# For backwards compatibility and testing
 if __name__ == "__main__":
-    inspect_raw_data()
+    import logging
+    logging.basicConfig(level=logging.INFO)
+    
+    collector = MeteoSwissCollector()
+    try:
+        data = collector.collect()
+        print(f"Collected {len(data)} stations")
+        if data:
+            print("\nSample station:")
+            print(json.dumps(data[0], indent=2, default=str))
+    except CollectorError as e:
+        print(f"Error: {e}")

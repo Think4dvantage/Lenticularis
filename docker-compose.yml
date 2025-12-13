@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  lenticularis:
+    build: .
+    container_name: lenticularis-app
+    ports:
+      - "8000:8000"
+    environment:
+      - INFLUXDB_URL=${INFLUXDB_URL}
+      - INFLUXDB_TOKEN=${INFLUXDB_TOKEN}
+      - INFLUXDB_ORG=${INFLUXDB_ORG}
+      - INFLUXDB_BUCKET=${INFLUXDB_BUCKET}
+      - SQLITE_DB_PATH=/app/data/lenticularis.db
+      - LOG_FILE=/app/logs/lenticularis.log
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    restart: unless-stopped
+    networks:
+      - lenticularis-network
+
+networks:
+  lenticularis-network:
+    driver: bridge
+
+# Note: This assumes InfluxDB is running separately in your homelab
+# To connect to external InfluxDB, ensure it's accessible from this container
+# and update INFLUXDB_URL in your .env file accordingly
