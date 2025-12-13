@@ -1,0 +1,72 @@
+# Lenticularis Project Rules
+
+## Project Overview
+Lenticularis is a Python-based weather data tracking and analysis system for paragliding decision support. It collects weather data from multiple Swiss weather networks (Meteoswiss, Holfuy, SLF, Windline, Ecovitt), normalizes the data, stores it in InfluxDB, and applies rule-based analysis to create traffic light decisions (GREEN/ORANGE/RED) for launch sites.
+
+## Tech Stack
+- **Language**: Python 3.11+
+- **Web Framework**: FastAPI (with automatic OpenAPI docs)
+- **Dependency Management**: Poetry (modern Python packaging)
+- **Data Validation**: Pydantic (type hints and validation)
+- **Database**: InfluxDB (time series) + SQLite (metadata)
+- **Configuration**: YAML files
+- **Scheduler**: APScheduler (periodic data collection)
+- **HTTP Client**: httpx (async API calls)
+- **Containerization**: Docker + docker-compose
+
+## Project Structure
+
+src/lenticularis/
+├── collectors/ # Weather data collectors (base + implementations)
+├── database/ # InfluxDB and SQLite clients
+├── models/ # Pydantic data models for normalization
+├── rules/ # Rule engine (base + rule implementations)
+├── api/ # FastAPI routes and main app
+└── scheduler.py # APScheduler for periodic data fetching
+
+## Coding Conventions
+- **Type hints**: Always use type hints (like PowerShell [string] parameter types)
+- **Async/await**: Prefer async patterns for I/O operations (API calls, database writes)
+- **Pydantic models**: Use for data validation and schemas
+- **Abstract base classes**: Use ABC for extensible components (collectors, rules)
+- **Configuration**: Load from YAML, validate on startup
+- **Logging**: Use Python logging module, configurable via YAML
+
+## Architecture Guidelines
+- **Collectors**: Each weather network has its own collector inheriting from BaseCollector
+- **Normalization**: Raw API responses → Pydantic models → unified schema
+- **BYO Database**: InfluxDB connection should be configurable (optional bundled vs external)
+- **Rules Engine**: Modular rules that can be combined with AND/OR logic
+- **Traffic Light System**: Rules evaluate to GREEN (go), ORANGE (caution), or RED (no-go)
+
+## Learning Approach
+- User is fluent in PowerShell, learning Python through this project
+- Provide PowerShell conceptual parallels in comments when helpful
+- User writes code themselves with AI guidance (not full code generation)
+- Focus on understanding patterns, not just copying code
+- **No testing initially** - focus on building functionality first
+
+## Data Collection
+- **Frequency**: Each collector has configurable interval (e.g., Meteoswiss every 10 minutes)
+- **Coverage**: Collect ALL available Swiss weather stations, regardless of ruleset usage
+- **Storage**: Write to InfluxDB with proper tags (station_id, location, network) and fields (measurements)
+
+## Development Workflow
+1. Build collectors framework first (base + one implementation)
+2. Add data normalization and InfluxDB integration
+3. Implement rules engine
+4. Build FastAPI web interface with map GUI
+5. Docker deployment with compose
+
+## When Making Changes
+- Follow modern Python best practices (PEP 8, type hints)
+- Keep modules loosely coupled and highly cohesive
+- Document API endpoints with FastAPI automatic docs
+- Use environment variables or YAML for configuration, never hardcode
+- Log important events (data collection, rule evaluations, errors)
+
+## Future Features (Not Yet Implemented)
+- Web GUI with interactive Switzerland map (Leaflet.js)
+- Launch site and landing zone management
+- Visual rule builder interface
+- Historical analysis and accuracy tracking
