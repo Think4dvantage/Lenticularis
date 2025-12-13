@@ -1,3 +1,0 @@
-"""
-Collector sources package
-"""
