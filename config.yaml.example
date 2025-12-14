@@ -1,0 +1,60 @@
+# Lenticularis Configuration Template
+# Copy this file to config.yaml and fill in your values
+
+# InfluxDB Configuration (optional - leave empty for BYO-DB)
+influxdb:
+  enabled: true
+  url: "http://localhost:8086"
+  token: "your-influxdb-token-here"
+  org: "lenticularis"
+  bucket: "weather_data"
+  timeout: 10000  # milliseconds
+
+# Weather Data Collectors
+collectors:
+  - name: "meteoswiss"
+    enabled: true
+    interval_minutes: 10
+    config:
+      # MeteoSwiss provides separate endpoints for each measurement
+      endpoints:
+        speed: "https://data.geo.admin.ch/ch.meteoschweiz.messwerte-windgeschwindigkeit-kmh-10min/ch.meteoschweiz.messwerte-windgeschwindigkeit-kmh-10min_en.json"
+        gusts: "https://data.geo.admin.ch/ch.meteoschweiz.messwerte-wind-boeenspitze-kmh-10min/ch.meteoschweiz.messwerte-wind-boeenspitze-kmh-10min_en.json"
+        temperature: "https://data.geo.admin.ch/ch.meteoschweiz.messwerte-lufttemperatur-10min/ch.meteoschweiz.messwerte-lufttemperatur-10min_en.json"
+        humidity: "https://data.geo.admin.ch/ch.meteoschweiz.messwerte-luftfeuchtigkeit-10min/ch.meteoschweiz.messwerte-luftfeuchtigkeit-10min_en.json"
+        pressure: "https://data.geo.admin.ch/ch.meteoschweiz.messwerte-luftdruck-qff-10min/ch.meteoschweiz.messwerte-luftdruck-qff-10min_en.json"
+  
+  # Future collectors (disabled by default)
+  - name: "holfuy"
+    enabled: false
+    interval_minutes: 5
+    config:
+      api_key: "your-holfuy-api-key"
+  
+  - name: "slf"
+    enabled: false
+    interval_minutes: 30
+  
+  - name: "windline"
+    enabled: false
+    interval_minutes: 10
+  
+  - name: "ecovitt"
+    enabled: false
+    interval_minutes: 15
+
+# SQLite Database
+database:
+  path: "data/lenticularis.db"
+
+# Logging Configuration
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  format: "json"  # json or text
+  file: "logs/lenticularis.log"
+
+# API Server
+api:
+  host: "0.0.0.0"
+  port: 8000
+  reload: false  # Set to true for development
