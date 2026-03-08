@@ -106,16 +106,34 @@ And comment out the InfluxDB service in `docker-compose.yml`.
 
 ## Development Status
 
-This project is in active development. Current progress:
+### MVP 0.1 — ✅ Deployed
 
-- [x] Project structure and configuration
-- [ ] Weather data collectors
-- [ ] Data normalization
-- [ ] InfluxDB integration
-- [ ] Rule engine
-- [ ] Web API
-- [ ] Interactive map GUI
-- [ ] Docker deployment
+- [x] Project structure and configuration (`config.py`, Pydantic models)
+- [x] `WeatherStation` + `WeatherMeasurement` models (3 pressure variants, snow depth)
+- [x] `BaseCollector` abstract class with HTTP helpers and station-ID namespacing
+- [x] InfluxDB 2.x client (`write_measurements`, `query_latest`, `query_history`, `has_measure`)
+- [x] MeteoSwiss collector — 8 GeoJSON endpoints, LV95→WGS84 coordinate transform, 154 stations, 299 measurements/cycle
+- [x] APScheduler wiring with per-job jitter
+- [x] FastAPI app with lifespan, station registry, static file serving
+- [x] `/api/stations` REST endpoints (list, single, latest, history)
+- [x] Live data table dashboard (sortable, filterable, auto-refreshing)
+- [x] `Dockerfile` + `docker-compose.yml` + `docker-compose.dev.yml` (dev overlay with Traefik labels)
+- [x] Remote deployment to homelab Fedora host via `scripts/remote.ps1`
+- [x] Live at `https://lenti-dev.lg4.ch` behind Traefik v3 + pocket-id OIDC auth
+
+### 0.2 — In Progress
+- [ ] Holfuy collector (free REST API — wind + temperature + pressure)
+- [ ] SLF collector (free JSON API — alpine stations)
+- [ ] Ecovitt collector (personal weather stations)
+- [ ] Leaflet.js map view with station pins (color = data freshness)
+- [ ] Click-to-popup with sparkline (Chart.js last 24 h)
+
+### 1.0 — Planned
+- [ ] SQLAlchemy ORM — launch sites, rule sets, condition tree
+- [ ] Rule engine evaluator (AND/OR tree → GREEN/ORANGE/RED)
+- [ ] Traffic light layer on the map
+- [ ] Rule set editor UI
+- [ ] Scheduler triggers rule evaluation after each collection run
 
 ## Contributing
 
