@@ -17,7 +17,9 @@ dependencies = [
     "httpx (>=0.28.1,<0.29.0)",
     "apscheduler (>=3.11.1,<4.0.0)",
     "sqlalchemy (>=2.0.45,<3.0.0)",
-    "alembic (>=1.17.2,<2.0.0)"
+    "alembic (>=1.17.2,<2.0.0)",
+    "pyproj (>=3.7.0,<4.0.0)",
+    "python-multipart (>=0.0.20,<0.1.0)"
 ]
 
 

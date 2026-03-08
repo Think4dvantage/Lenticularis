@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lenticularis — Weather Dashboard</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: #0f1117;
+      color: #e2e8f0;
+      min-height: 100vh;
+    }
+
+    header {
+      background: #1a1f2e;
+      border-bottom: 1px solid #2d3748;
+      padding: 14px 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    header h1 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      color: #90cdf4;
+    }
+
+    header .subtitle {
+      font-size: 0.8rem;
+      color: #718096;
+    }
+
+    .status-bar {
+      display: flex;
+      gap: 24px;
+      margin-left: auto;
+      font-size: 0.78rem;
+      color: #718096;
+    }
+
+    .status-bar span { display: flex; align-items: center; gap: 6px; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; }
+    .dot.green { background: #48bb78; }
+    .dot.grey  { background: #4a5568; }
+
+    .toolbar {
+      background: #1a1f2e;
+      padding: 10px 24px;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      border-bottom: 1px solid #2d3748;
+      flex-wrap: wrap;
+    }
+
+    .toolbar input {
+      background: #2d3748;
+      border: 1px solid #4a5568;
+      border-radius: 6px;
+      color: #e2e8f0;
+      padding: 6px 12px;
+      font-size: 0.85rem;
+      width: 220px;
+    }
+
+    .toolbar input::placeholder { color: #718096; }
+    .toolbar input:focus { outline: none; border-color: #63b3ed; }
+
+    .toolbar select {
+      background: #2d3748;
+      border: 1px solid #4a5568;
+      border-radius: 6px;
+      color: #e2e8f0;
+      padding: 6px 10px;
+      font-size: 0.85rem;
+    }
+
+    .badge {
+      font-size: 0.75rem;
+      padding: 2px 8px;
+      border-radius: 12px;
+      background: #2d3748;
+      color: #a0aec0;
+      margin-left: auto;
+    }
+
+    .refresh-btn {
+      background: #2b6cb0;
+      border: none;
+      border-radius: 6px;
+      color: #fff;
+      padding: 6px 14px;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .refresh-btn:hover { background: #3182ce; }
+    .refresh-btn:disabled { background: #4a5568; cursor: default; }
+
+    .table-container {
+      padding: 20px 24px;
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+    }
+
+    thead th {
+      background: #1a1f2e;
+      color: #a0aec0;
+      font-weight: 500;
+      text-align: left;
+      padding: 10px 14px;
+      border-bottom: 1px solid #2d3748;
+      white-space: nowrap;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    thead th:hover { color: #e2e8f0; }
+    thead th.sorted { color: #90cdf4; }
+
+    tbody tr {
+      border-bottom: 1px solid #1e2533;
+      transition: background 0.1s;
+    }
+
+    tbody tr:hover { background: #1a2035; }
+
+    td {
+      padding: 9px 14px;
+      white-space: nowrap;
+    }
+
+    .network-badge {
+      display: inline-block;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .network-meteoswiss { background: #2a4365; color: #90cdf4; }
+    .network-holfuy     { background: #22543d; color: #9ae6b4; }
+    .network-slf        { background: #44337a; color: #d6bcfa; }
+    .network-ecovitt    { background: #7b341e; color: #fbd38d; }
+    .network-unknown    { background: #2d3748; color: #a0aec0; }
+
+    .wind-dir-arrow {
+      display: inline-block;
+      font-size: 1rem;
+      transition: transform 0.3s;
+    }
+
+    .freshness { font-size: 0.75rem; }
+    .freshness.fresh   { color: #48bb78; }
+    .freshness.recent  { color: #ed8936; }
+    .freshness.stale   { color: #fc8181; }
+    .freshness.unknown { color: #718096; }
+
+    .empty-state {
+      text-align: center;
+      padding: 60px 0;
+      color: #4a5568;
+    }
+
+    .empty-state h2 { font-size: 1rem; margin-bottom: 8px; }
+    .empty-state p { font-size: 0.85rem; }
+
+    .spinner {
+      border: 2px solid #2d3748;
+      border-top: 2px solid #63b3ed;
+      border-radius: 50%;
+      width: 20px;
+      height: 20px;
+      animation: spin 0.8s linear infinite;
+      display: inline-block;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .value-missing { color: #4a5568; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>🪁 Lenticularis</h1>
+  <span class="subtitle">Swiss Weather — Live Data</span>
+  <div class="status-bar" id="statusBar">
+    <span><span class="dot grey" id="dbDot"></span><span id="dbLabel">Connecting…</span></span>
+    <span id="lastRefresh"></span>
+  </div>
+</header>
+
+<div class="toolbar">
+  <input type="text" id="searchInput" placeholder="Search station or canton…" />
+  <select id="networkFilter">
+    <option value="">All networks</option>
+    <option value="meteoswiss">MeteoSwiss</option>
+    <option value="holfuy">Holfuy</option>
+    <option value="slf">SLF</option>
+    <option value="ecovitt">Ecovitt</option>
+  </select>
+  <button class="refresh-btn" id="refreshBtn" onclick="loadStations()">↻ Refresh</button>
+  <span class="badge" id="countBadge">0 stations</span>
+</div>
+
+<div class="table-container">
+  <div id="loadingState" style="text-align:center;padding:40px 0;">
+    <div class="spinner"></div>
+    <p style="margin-top:10px;color:#718096;font-size:.85rem">Loading stations…</p>
+  </div>
+  <div id="emptyState" class="empty-state" style="display:none">
+    <h2>No stations found</h2>
+    <p>No weather data has been collected yet. Check that a collector is running.</p>
+  </div>
+  <table id="stationTable" style="display:none">
+    <thead>
+      <tr>
+        <th onclick="sortBy('name')">Station <span class="sort-icon"></span></th>
+        <th onclick="sortBy('network')">Network</th>
+        <th onclick="sortBy('canton')">Canton</th>
+        <th onclick="sortBy('elevation')">Elev. (m)</th>
+        <th onclick="sortBy('wind_speed')">Wind (km/h)</th>
+        <th>Dir</th>
+        <th onclick="sortBy('wind_gust')">Gust (km/h)</th>
+        <th onclick="sortBy('temperature')">Temp (°C)</th>
+        <th onclick="sortBy('humidity')">Hum (%)</th>
+        <th onclick="sortBy('pressure_qnh')">QNH (hPa)</th>
+        <th onclick="sortBy('precipitation')">Precip (mm)</th>
+        <th onclick="sortBy('_age')">Last seen</th>
+      </tr>
+    </thead>
+    <tbody id="tableBody"></tbody>
+  </table>
+</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

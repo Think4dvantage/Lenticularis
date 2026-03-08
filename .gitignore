@@ -46,6 +46,7 @@ poetry.lock
 
 # Config with secrets
 config.yaml
+config.yml
 
 # Logs
 *.log

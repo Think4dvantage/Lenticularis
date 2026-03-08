@@ -1,0 +1,45 @@
+# docker-compose.dev.yml — DEV overlay for the lg4 homelab host
+#
+# Extends docker-compose.yml with dev-specific settings:
+#   - container named "lenticularis-dev" (won't collide with a future prod container)
+#   - dev labels for easy identification in Portainer / dozzle
+#   - extra_hosts: host-gateway → Docker host IP, so the app can reach
+#     the homelab InfluxDB at http://host-gateway:8086
+#   - image tagged as lenticularis:dev
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build -d
+#   (the remote.ps1 script handles this automatically)
+
+services:
+  lenticularis:
+    container_name: lenticularis-dev
+    image: lenticularis:dev
+    extra_hosts:
+      - "host-gateway:host-gateway"   # resolves to the Docker host IP at runtime
+    labels:
+      - "lenticularis.env=dev"
+      - "lenticularis.version=0.1.0"
+      - "traefik.enable=true"
+      - "traefik.docker.network=proxy"
+      - "traefik.http.routers.lenticularis-dev.rule=Host(`lenti-dev.lg4.ch`)"
+      - "traefik.http.routers.lenticularis-dev.entrypoints=websecure"
+      - "traefik.http.routers.lenticularis-dev.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.lenticularis-dev.middlewares=pocket-id-auth@file"
+      - "traefik.http.services.lenticularis-dev.loadbalancer.server.port=8000"
+    networks:
+      - default
+      - proxy
+    # Dev: mount source directories live so code changes don't require a rebuild.
+    # After syncing, a container restart picks up the new code immediately.
+    volumes:
+      - ./src:/app/src:ro,z
+      - ./static:/app/static:ro,z
+    environment:
+      CONFIG_PATH: /app/config.yml
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONPYCACHEPREFIX: /tmp/pycache
+
+networks:
+  proxy:
+    external: true

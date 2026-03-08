@@ -1,0 +1,33 @@
+services:
+
+  # ---------------------------------------------------------------------------
+  # Lenticularis application — base definition (production-safe)
+  #
+  # InfluxDB is NOT managed here. It must exist externally and be reachable
+  # at the URL/token set in config.yml (or overridden by the env).
+  #
+  # Dev usage (lg4 host, reuses existing influxdb):
+  #   docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build -d
+  #
+  # Production: the pipeline supplies its own compose override.
+  # ---------------------------------------------------------------------------
+  lenticularis:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: lenticularis:latest
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./config.yml:/app/config.yml:ro,z
+      - ./data:/app/data:z
+      - ./logs:/app/logs:z
+    environment:
+      CONFIG_PATH: /app/config.yml
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/')\""]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s

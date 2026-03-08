@@ -1,563 +1,261 @@
-# Plan: Structure Lenticularis with FastAPI, Poetry, YAML Config, and Scheduler
+# Plan: Lenticularis — Product Spec & Implementation Brief (v2.3)
 
-Create a modern Python project using Poetry, `src/` layout, FastAPI with automatic OpenAPI docs, Pydantic models for type safety, YAML-based configuration, and APScheduler for periodic weather data collection. Build incrementally: project documentation → project skeleton → config system → first weather collector → scheduled data fetching → normalization → InfluxDB integration → rules engine → web GUI with map → Docker deployment.
+## Overview
 
-## Steps
+Lenticularis is a weather aggregation and paragliding decision-support system for Switzerland. It collects data from 5 weather networks, normalises and stores it in InfluxDB, and lets each pilot build graphical per-site rule sets using a condition builder. Each condition targets a specific station — a single rule set can freely combine data from multiple stations. The system produces GREEN/ORANGE/RED decisions, stores full per-condition decision history, and exposes a statistics dashboard showing flyability patterns over time.
 
-### 0. Create project context documentation
-**Goal**: Document tech stack decisions and architecture for future AI sessions and contributors.
-
-**Files to create**:
-- `.cursorrules` or `.github/copilot-instructions.md`
-
-**Content**:
-- Tech stack decisions (FastAPI, Poetry, APScheduler, InfluxDB, YAML config)
-- Module architecture (collectors, database, models, rules, api)
-- Coding conventions (async/await, type hints, Pydantic)
-- Learning approach (guided with PowerShell parallels)
-
-**PowerShell parallel**: Like creating a README with team conventions, but specifically for AI assistants.
+Core differentiator: **rules are fully pilot-owned and self-served** through a graphical editor. No admin-imposed logic.
 
 ---
 
-### 1. Bootstrap project foundation
-**Goal**: Set up Poetry project and create directory structure.
+## User Roles
 
-**Commands**:
-```bash
-poetry init
-poetry add fastapi uvicorn pydantic influxdb-client pyyaml httpx apscheduler
-poetry add --group dev black ruff
-```
-
-**Directory structure to create**:
-```
-src/lenticularis/
-├── __init__.py
-├── collectors/
-│   └── __init__.py
-├── database/
-│   └── __init__.py
-├── models/
-│   └── __init__.py
-├── rules/
-│   └── __init__.py
-└── api/
-    └── __init__.py
-```
-
-**Files to create**:
-- `.gitignore` (Python-specific: `*.pyc`, `__pycache__/`, `.env`, `venv/`, `.venv/`, `poetry.lock`)
-- `README.md` (project description, setup instructions)
-- `config.yaml.example` (template configuration file)
-- `pyproject.toml` (managed by Poetry)
-
-**PowerShell parallel**: Like creating a PowerShell module structure with folders for Public/Private functions, but Python uses packages (folders with `__init__.py`).
+| Role | Responsibilities |
+|---|---|
+| **Pilot (user)** | Manage own launch sites, build own rule sets, view stats, configure notifications, share/clone rule sets |
+| **Admin** | Manage user accounts, enable/disable collectors and collection intervals — no involvement in rules or sites |
 
 ---
 
-### 2. Implement configuration system
-**Goal**: Load and validate YAML configuration with proper defaults.
+## User Stories
 
-**File**: `src/lenticularis/config.py`
-
-**What to implement**:
-- Function to load `config.yaml` using PyYAML
-- Pydantic model `Config` with nested models for:
-  - `InfluxDBConfig` (url, token, org, bucket, optional=True for BYO-DB)
-  - `CollectorConfig` (name, enabled, interval_minutes)
-  - `LoggingConfig` (level, format)
-- Validation logic (required fields, sensible defaults)
-- Singleton pattern to load config once
-
-**PowerShell parallel**: 
-```powershell
-# PowerShell would do:
-$config = Get-Content config.yaml | ConvertFrom-Yaml
-# Python with Pydantic validates types automatically and raises errors
-```
-
-**Example config.yaml.example structure**:
-```yaml
-influxdb:
-  url: "http://localhost:8086"
-  token: "your-token-here"
-  org: "lenticularis"
-  bucket: "weather_data"
-  
-collectors:
-  - name: "meteoswiss"
-    enabled: true
-    interval_minutes: 10
-    
-logging:
-  level: "INFO"
-  format: "json"
-```
+1. As a **pilot**, I open the map and see a traffic light for each of my launch sites.
+2. As a **pilot**, I tap a launch site to see which conditions triggered the current status and why.
+3. As a **pilot**, I use the rule editor to build conditions across multiple stations, e.g. Station A wind from S AND Station B wind from W both under 30 km/h → site is flyable.
+4. As a **pilot**, I combine conditions with AND/OR groups and choose a combination logic.
+5. As a **pilot**, I ask: "How many days was this site flyable in the last 6 months?"
+6. As a **pilot**, I see which hours of the day are most often GREEN for a given site.
+7. As a **pilot**, I see a seasonal/monthly flyability breakdown.
+8. As a **pilot**, I see which specific rule conditions trigger RED most often, and from which station.
+9. As a **pilot**, I compare flyability across two or more of my sites.
+10. As a **pilot**, I find the longest consecutive GREEN windows in a past period.
+11. As a **pilot**, I receive alerts when a site changes traffic light status.
+12. As a **pilot**, I can publish a rule set for others to clone (not co-edit).
+13. As an **admin**, I can enable/disable data sources and manage user accounts.
 
 ---
 
-### 3. Build collector framework
-**Goal**: Create abstract base class and first concrete collector (MeteoSwiss).
+## Rule Editor Design
 
-**File**: `src/lenticularis/collectors/base.py`
+The rule editor is a **condition builder** (Zapier-style). Each condition row is fully independent — it carries its own station, field, operator, and value. A single rule set can freely combine data from any number of stations.
 
-**What to implement**:
-- Abstract base class `BaseCollector` using `ABC` (Abstract Base Class)
-- Abstract methods:
-  - `async def fetch_data()` → returns raw API response
-  - `async def get_stations()` → returns list of available stations
-- Common functionality:
-  - Error handling wrapper
-  - Rate limiting logic
-  - Logging
+### Condition row fields
 
-**PowerShell parallel**:
-```powershell
-# PowerShell abstract class:
-class BaseCollector {
-    [void] FetchData() { throw "Must override" }
-}
-# Python uses ABC module with @abstractmethod decorator
+- **Station picker** — search/filter all active stations across all networks (per-row, not per-ruleset)
+- **Station B picker** — only shown when field = `pressure_delta`
+- **Field** — any available measurement: `wind_speed`, `wind_gust`, `wind_direction`, `temperature`, `humidity`, `pressure`, `pressure_delta`, `precipitation`, `snow_depth`
+- **Operator** — `>`, `<`, `>=`, `<=`, `=`, `between`, `not between`, `in direction range`
+- **Value A / Value B** — numeric input with inferred units displayed; direction range shows a compass graphic
+- **Result colour** — GREEN / ORANGE / RED
+
+### AND/OR grouping
+
+Conditions can be nested into AND/OR groups (minimum 1 level of nesting supported). The station picker is per-condition row — no global station selection for a rule set.
+
+### Multi-station example (key use case)
+
+```
+AND group
+  [Station A - Beatenberg]  wind_speed       <  30 km/h          → GREEN
+  [Station A - Beatenberg]  wind_direction   in range  160–220°  → GREEN
+  [Station B - Niesen]      wind_speed       <  30 km/h          → GREEN
+  [Station B - Niesen]      wind_direction   in range  250–310°  → GREEN
+
+Combination logic: Worst wins
+→ All four pass → GREEN (flyable)
+→ Any one fails → ORANGE or RED
 ```
 
-**File**: `src/lenticularis/collectors/meteoswiss.py`
+### Pressure delta (Föhn detection)
 
-**What to implement**:
-- Class `MeteoSwissCollector` inheriting from `BaseCollector`
-- Implement `fetch_data()`:
-  - Use `httpx.AsyncClient` to call Meteoswiss API
-  - Handle authentication if needed
-  - Parse JSON response
-  - Return raw data
-- Implement `get_stations()`:
-  - Query stations endpoint
-  - Return list of station metadata
+A condition with field `pressure_delta` shows two station pickers. The runtime evaluator computes `|station_A.pressure - station_B.pressure|` and applies the operator/value normally.
 
-**Meteoswiss API hints**:
-- Base URL: Research actual Meteoswiss API endpoints
-- Look for open data portal or public APIs
-- May need to handle authentication or rate limits
+### Combination logic
+
+- `Worst wins` (default) — any RED → RED; any ORANGE → ORANGE; else GREEN
+- `Majority vote` — most common colour wins
+
+### Rule set metadata
+
+`name`, `description`, `launch_site_id`, `is_public` (false by default), `clone_count` (read-only), `cloned_from_id`
 
 ---
 
-### 4. Create Pydantic models and normalization
-**Goal**: Define unified data schema that all collectors transform into.
+## Data Sources
 
-**File**: `src/lenticularis/models/weather.py`
-
-**Models to create**:
-
-**`WeatherStation`** (Pydantic model):
-- `station_id: str` (unique identifier)
-- `name: str` (human-readable name)
-- `network: str` (e.g., "meteoswiss", "holfuy")
-- `latitude: float`
-- `longitude: float`
-- `elevation: int` (meters above sea level)
-- `canton: Optional[str]` (Swiss canton)
-
-**`WeatherMeasurement`** (Pydantic model):
-- `station_id: str`
-- `timestamp: datetime` (UTC)
-- `temperature: Optional[float]` (Celsius)
-- `wind_speed: Optional[float]` (km/h)
-- `wind_direction: Optional[int]` (degrees 0-360)
-- `wind_gust: Optional[float]` (km/h)
-- `barometric_pressure: Optional[float]` (hPa)
-- `humidity: Optional[float]` (percentage)
-- `precipitation: Optional[float]` (mm)
-
-**PowerShell parallel**:
-```powershell
-# PowerShell class with typed properties:
-class WeatherStation {
-    [string]$StationId
-    [double]$Latitude
-    [ValidateRange(0,360)][int]$WindDirection
-}
-# Pydantic does this validation automatically
-```
-
-**File**: `src/lenticularis/collectors/meteoswiss.py` (add normalization method)
-
-**What to add**:
-- Method `normalize_data(raw_data)`:
-  - Takes raw API response
-  - Maps API fields to `WeatherMeasurement` model
-  - Handles unit conversions if needed
-  - Returns list of `WeatherMeasurement` objects
+| Source | Auth | Key measurements | Interval |
+|---|---|---|---|
+| MeteoSwiss | None (open data) | wind speed/gust, temp, humidity, pressure | 10 min |
+| Holfuy | API key | wind speed/gust/direction | 5 min |
+| SLF | None (open data) | snow depth, temp | 30 min |
+| Windline | API key | wind speed/direction | 10 min |
+| Ecovitt | API key (personal weather station) | all sensor data | 15 min |
 
 ---
 
-### 5. Build InfluxDB integration
-**Goal**: Write normalized weather data to InfluxDB time series database.
+## Data Models
 
-**File**: `src/lenticularis/database/influx.py`
+### InfluxDB
 
-**What to implement**:
+**`weather_data`** measurement:
+- Tags: `station_id`, `network`, `canton`
+- Fields: `wind_speed`, `wind_gust`, `wind_direction`, `temperature`, `humidity`, `pressure`, `precipitation`, `snow_depth`
 
-**Class `InfluxDBClient`**:
-- `__init__()`: Initialize connection using config
-- `async def connect()`: Establish connection, test with ping
-- `async def write_measurement(measurement: WeatherMeasurement)`: Write single measurement
-- `async def write_measurements(measurements: List[WeatherMeasurement])`: Batch write
-- `async def close()`: Close connection properly
+**`rule_decisions`** measurement:
+- Tags: `launch_site_id`, `ruleset_id`, `owner_id`
+- Fields:
+  - `decision` — green / orange / red
+  - `condition_results` — JSON array: `[{condition_id, station_id, field, operator, value_a, value_b, actual_value, result_colour}]`
+  - `blocking_conditions` — JSON array of condition IDs that voted non-GREEN
+- Timestamp: evaluation time
 
-**Data structure**:
-- **Measurement name**: `weather_data`
-- **Tags** (indexed, for filtering):
-  - `station_id`
-  - `network`
-  - `canton`
-- **Fields** (values):
-  - `temperature`
-  - `wind_speed`
-  - `wind_direction`
-  - `wind_gust`
-  - `barometric_pressure`
-  - `humidity`
-  - `precipitation`
-- **Timestamp**: From `WeatherMeasurement.timestamp`
+> Storing `condition_results` per evaluation enables per-condition and per-station trigger statistics without re-querying raw weather data.
 
-**PowerShell parallel**:
-```powershell
-# PowerShell might use REST API directly:
-$body = @{ measurement = "weather"; tags = @{ station = "ABC" } }
-Invoke-RestMethod -Uri $influxUrl -Method POST -Body $body
-# Python client library handles protocol details
-```
+### SQLite tables
 
-**Error handling**:
-- Handle connection failures gracefully
-- Retry logic for transient errors
-- Log failed writes
+- `users` — `id`, `username`, `email`, `hashed_password`, `role`, `created_at`
+- `weather_stations` — `station_id`, `name`, `network`, `latitude`, `longitude`, `elevation`, `canton`, `active`
+- `launch_sites` — `id`, `name`, `latitude`, `longitude`, `owner_id` FK → users
+- `rulesets` — `id`, `name`, `description`, `launch_site_id`, `owner_id`, `combination_logic`, `is_public`, `clone_count`, `cloned_from_id`, `created_at`, `updated_at`
+- `rule_conditions` — `id`, `ruleset_id`, `group_id` (nullable), `station_id`, `station_b_id` (nullable), `field`, `operator`, `value_a`, `value_b` (nullable), `result_colour`, `sort_order`
+- `condition_groups` — `id`, `ruleset_id`, `parent_group_id` (nullable), `logic` (AND/OR), `sort_order`
+- `notification_configs` — `id`, `user_id`, `launch_site_id`, `channel`, `config_json`, `on_transitions_json`
 
-**BYO-DB support**:
-- Check if InfluxDB config exists
-- If not configured, skip writes and log warning
-- Allow app to run without InfluxDB for testing
+### Pydantic models
+
+- `models/weather.py` — `WeatherStation`, `WeatherMeasurement`
+- `models/auth.py` — `User`, `UserCreate`, `Token`
+- `models/sites.py` — `LaunchSite`, `LaunchSiteCreate`
+- `models/rules.py` — `RuleSet`, `RuleSetCreate`, `Condition`, `ConditionGroup`, `TrafficLightDecision`
+- `models/decisions.py` — `DecisionRecord`, `ConditionResult`
+- `models/stats.py` — response shapes for all 7 statistics endpoints
 
 ---
 
-### 6. Implement scheduler service
-**Goal**: Automatically fetch weather data at configured intervals.
+## Statistics Module
 
-**File**: `src/lenticularis/scheduler.py`
+All metrics are computed from the `rule_decisions` InfluxDB measurement using Flux queries plus server-side aggregation. No raw weather re-processing needed.
 
-**What to implement**:
+### Metrics
 
-**Class `WeatherScheduler`**:
-- `__init__(config, collectors, influx_client)`: Initialize with dependencies
-- `start()`: Start scheduler
-- `stop()`: Gracefully stop scheduler
-- `_schedule_collector(collector, interval_minutes)`: Add job for specific collector
+| Metric | Description | Endpoint |
+|---|---|---|
+| Flyable days | Count of calendar days with ≥1 GREEN evaluation | `GET /api/stats/{ruleset_id}/flyable-days` |
+| Hourly pattern | GREEN % per hour-of-day (0–23) | `GET /api/stats/{ruleset_id}/hourly-pattern` |
+| Monthly breakdown | GREEN/ORANGE/RED counts per calendar month | `GET /api/stats/{ruleset_id}/monthly` |
+| Seasonal breakdown | Same grouped by meteorological season | `GET /api/stats/{ruleset_id}/seasonal` |
+| Condition trigger rate | % of evaluations where each condition voted non-GREEN, attributed to station | `GET /api/stats/{ruleset_id}/condition-triggers` |
+| Site comparison | Flyable days side-by-side for ≥2 rulesets | `GET /api/stats/compare?ruleset_ids=1,2,3` |
+| Best windows | Top N longest consecutive GREEN streaks | `GET /api/stats/{ruleset_id}/best-windows` |
 
-**Using APScheduler**:
-```python
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-
-# Create job that:
-# 1. Calls collector.fetch_data()
-# 2. Calls collector.normalize_data()
-# 3. Calls influx_client.write_measurements()
-# 4. Handles errors and logs results
-```
-
-**PowerShell parallel**:
-```powershell
-# PowerShell scheduled task:
-$trigger = New-ScheduledTaskTrigger -Every (New-TimeSpan -Minutes 10)
-Register-ScheduledTask -Action { Invoke-FetchWeather } -Trigger $trigger
-# APScheduler is similar but embedded in your app
-```
-
-**Features**:
-- Configurable intervals per collector (Meteoswiss every 10 min)
-- Error handling per job (one collector failure doesn't stop others)
-- Logging of collection stats (records fetched, errors)
-- Graceful startup (stagger initial runs to avoid thundering herd)
+All time-range endpoints accept `?from=&to=` parameters. Best-windows also accepts `?top_n=5`.
 
 ---
 
-### 7. Create rules engine architecture
-**Goal**: Modular system for evaluating weather conditions and making decisions.
+## Full API Contracts
 
-**File**: `src/lenticularis/models/common.py`
+### Auth
+- `POST /auth/register` — `{username, email, password}` → `{user_id, token}`
+- `POST /auth/login` — `{username, password}` → `{access_token, refresh_token}`
+- `POST /auth/refresh` — `{refresh_token}` → `{access_token}`
 
-**What to create**:
-```python
-from enum import Enum
+### Stations
+- `GET /api/stations` — list all active stations (`?network=&canton=`)
+- `GET /api/stations/{station_id}` — station metadata
+- `GET /api/stations/{station_id}/latest` — most recent measurement
+- `GET /api/stations/{station_id}/history` — `?from=&to=&fields=`
 
-class TrafficLight(Enum):
-    GREEN = "green"   # Go, flyable
-    ORANGE = "orange" # Caution advised
-    RED = "red"       # No-go, not flyable
-```
+### Launch Sites
+- `GET /api/launch-sites`
+- `POST /api/launch-sites`
+- `GET /api/launch-sites/{id}`
+- `PUT /api/launch-sites/{id}`
+- `DELETE /api/launch-sites/{id}`
 
-**File**: `src/lenticularis/rules/base.py`
+### Rule Sets
+- `GET /api/rulesets` — user's own (`?launch_site_id=`)
+- `POST /api/rulesets` — create with full condition tree in body
+- `GET /api/rulesets/{id}` — full rule set including condition tree
+- `PUT /api/rulesets/{id}` — replace full condition tree (editor save)
+- `DELETE /api/rulesets/{id}`
+- `POST /api/rulesets/{id}/evaluate` — evaluate NOW, return decision + per-condition reasoning
+- `POST /api/rulesets/{id}/publish`
+- `POST /api/rulesets/{id}/unpublish`
 
-**What to implement**:
+### Community Gallery
+- `GET /api/gallery` — public rule sets (`?q=&sort=clone_count`)
+- `GET /api/gallery/{id}` — read-only view
+- `POST /api/gallery/{id}/clone` — clone into current user's rule sets
 
-**Abstract class `BaseRule`**:
-- `name: str` (rule identifier)
-- `description: str` (human-readable explanation)
-- `async def evaluate(context: dict) -> TrafficLight`: Abstract method
-- `get_reasoning() -> str`: Explain why rule returned specific result
+### Statistics
+- `GET /api/stats/{ruleset_id}/flyable-days`
+- `GET /api/stats/{ruleset_id}/hourly-pattern`
+- `GET /api/stats/{ruleset_id}/monthly`
+- `GET /api/stats/{ruleset_id}/seasonal`
+- `GET /api/stats/{ruleset_id}/condition-triggers`
+- `GET /api/stats/compare?ruleset_ids=1,2,3`
+- `GET /api/stats/{ruleset_id}/best-windows`
 
-**File**: `src/lenticularis/rules/wind.py`
+### Decisions history
+- `GET /api/decisions?launch_site_id=&from=&to=`
 
-**Example rules to implement**:
+### Notifications
+- `GET /api/notifications`
+- `POST /api/notifications`
+- `PUT /api/notifications/{id}`
+- `DELETE /api/notifications/{id}`
 
-**`WindSpeedRule`**:
-- Parameters: `max_green: float`, `max_orange: float`
-- Logic: If wind_speed < max_green → GREEN, elif < max_orange → ORANGE, else RED
-- Example: max_green=20 km/h, max_orange=35 km/h
+### Admin (require_admin dependency)
+- `GET /api/admin/users`
+- `PUT /api/admin/users/{id}`
+- `GET /api/admin/collectors`
+- `PUT /api/admin/collectors/{name}`
 
-**`WindDirectionRule`**:
-- Parameters: `green_range: tuple`, `orange_range: tuple`
-- Logic: Check if direction falls in acceptable ranges
-- Example: green_range=(180, 270) for south-west winds
-
-**`WindGustRule`**:
-- Parameters: `max_gust_ratio: float`
-- Logic: Compare gust speed to average wind speed
-- Example: If gust > wind_speed * 1.5 → RED (too gusty)
-
-**File**: `src/lenticularis/rules/pressure.py`
-
-**`BarometricPressureDeltaRule`**:
-- Parameters: `station_1_id: str`, `station_2_id: str`, `max_delta_orange: float`, `max_delta_red: float`
-- Logic: Query both stations, calculate pressure difference
-- Example: Föhn detection - if delta > 4 hPa between valley and mountain station
-- Must fetch current data from InfluxDB
-
-**File**: `src/lenticularis/rules/ruleset.py`
-
-**What to implement**:
-
-**Class `RuleSet`**:
-- `name: str` (e.g., "Interlaken Launch Site")
-- `launch_site_id: str`
-- `rules: List[BaseRule]`
-- `combination_logic: str` ("all_must_be_green", "majority", "any_red_blocks")
-- `async def evaluate() -> TrafficLight`: Run all rules and combine results
-- `get_full_reasoning() -> dict`: Collect reasoning from all rules
-
-**Combination logic examples**:
-- **all_must_be_green**: All rules GREEN → overall GREEN; any ORANGE → overall ORANGE; any RED → overall RED
-- **majority**: Most common result wins
-- **any_red_blocks**: Any single RED → overall RED, otherwise use majority
-
-**PowerShell parallel**:
-```powershell
-# PowerShell scriptblock evaluation:
-$rules = @(
-    { param($data) if($data.Wind -lt 20) { "Green" } else { "Red" } }
-)
-$results = $rules | ForEach-Object { & $_ $weatherData }
-# Python uses class inheritance and polymorphism
-```
-
-**Logging to InfluxDB**:
-- Create measurement `rule_decisions`
-- Tags: `launch_site_id`, `ruleset_name`
-- Fields: `decision` (green/orange/red), `reasoning` (JSON), `timestamp`
+### System
+- `GET /health`
+- `GET /docs` (FastAPI auto-generated Swagger UI)
 
 ---
 
-### 8. Develop FastAPI application
-**Goal**: Web API and GUI for viewing stations, managing launch sites, and evaluating rules.
+## Implementation Steps
 
-**File**: `src/lenticularis/api/main.py`
-
-**What to implement**:
-
-**FastAPI app initialization**:
-```python
-from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
-
-app = FastAPI(
-    title="Lenticularis",
-    description="Weather tracking for paragliding decisions",
-    version="0.1.0"
-)
-
-# Startup event: Initialize scheduler, database connections
-# Shutdown event: Stop scheduler, close connections
-```
-
-**File**: `src/lenticularis/api/routers/stations.py`
-
-**Endpoints**:
-- `GET /api/stations`: List all weather stations
-- `GET /api/stations/{station_id}`: Get specific station details
-- `GET /api/stations/{station_id}/latest`: Get latest measurement from InfluxDB
-
-**File**: `src/lenticularis/api/routers/launch_sites.py`
-
-**Endpoints**:
-- `GET /api/launch-sites`: List all launch sites
-- `POST /api/launch-sites`: Create new launch site
-  - Body: `{ name, latitude, longitude, default_landing_zones: [...] }`
-- `GET /api/launch-sites/{id}`: Get launch site details
-- `PUT /api/launch-sites/{id}`: Update launch site
-- `DELETE /api/launch-sites/{id}`: Delete launch site
-
-**File**: `src/lenticularis/api/routers/rules.py`
-
-**Endpoints**:
-- `GET /api/rulesets`: List all rulesets
-- `POST /api/rulesets`: Create new ruleset
-- `GET /api/rulesets/{id}`: Get ruleset details
-- `PUT /api/rulesets/{id}`: Update ruleset
-- `POST /api/rulesets/{id}/evaluate`: Evaluate ruleset NOW and return decision
-
-**File**: `src/lenticularis/api/routers/evaluation.py`
-
-**Endpoints**:
-- `POST /api/evaluate`: Evaluate specific ruleset
-- `GET /api/evaluations/history`: Get historical decisions from InfluxDB
-
-**Static files for map GUI**:
-- `static/index.html`: Main page with Leaflet.js map
-- `static/app.js`: JavaScript for map interaction
-- `static/style.css`: Styling
-
-**Map features**:
-- Display Switzerland basemap (OpenStreetMap)
-- Show all weather stations as markers
-- Click map to create launch site
-- Click map to create landing zone
-- Visual indicators for current traffic light status per launch site
-
-**PowerShell parallel**:
-```powershell
-# PowerShell web server (Polaris module):
-New-PolarisRoute -Path "/api/stations" -Method GET -ScriptBlock {
-    Get-WeatherStations | ConvertTo-Json
-}
-# FastAPI handles routing, validation, docs automatically
-```
-
-**Automatic docs**:
-- FastAPI generates interactive docs at `/docs` (Swagger UI)
-- Alternative docs at `/redoc`
+1. Update `.cursorrules` and `.github/copilot-instructions.md` with final project conventions
+2. Finalise `pyproject.toml` — add `python-jose`, `passlib`, `aiosmtplib`
+3. SQLite schema + Alembic migrations — all 7 tables in `database/models.py`
+4. Auth system — JWT in `api/routers/auth.py`; `get_current_user` + `require_admin` dependencies
+5. Config system — complete `config.py` for all 5 collectors, InfluxDB, SQLite, SMTP/Pushover
+6. Collector framework — complete `collectors/base.py`; build all 5 collectors
+7. Pydantic models — all 6 model files listed above
+8. InfluxDB client — `database/influx.py`; write + query + `query_decisions()` helper
+9. Rules evaluator — `rules/evaluator.py`; walks condition tree, fetches live data per condition (per station), applies operator logic, resolves combination logic, writes full `condition_results` to InfluxDB
+10. Statistics service — `services/stats.py`; Flux queries for all 7 metrics; best-windows as server-side algorithm
+11. Scheduler — `scheduler.py`; all enabled collectors + periodic evaluation of all active rulesets
+12. API routers — wire all endpoints; `api/main.py` startup/shutdown lifecycle
+13. Notification service — `services/notifications.py`; status-transition triggers; email + Pushover dispatch
+14. Frontend — Rule Editor (`static/editor.js`): per-row station picker, field/operator/value inputs, AND/OR group nesting, pressure-delta two-station mode, direction range compass graphic, live preview panel, save
+15. Frontend — Statistics Dashboard (`static/stats.js`): flyable days card, hourly heatmap, monthly bar chart, condition trigger leaderboard (with station attribution), site comparison chart, best windows list
+16. Frontend — Map & Dashboard (`static/app.js`): Leaflet.js map, traffic light badges per site, weather history chart panel, community gallery page, mobile-responsive layout
+17. Docker — `Dockerfile` (multi-stage), `docker-compose.yml` (app + InfluxDB), health checks, `restart: unless-stopped`, updated `README.md`
 
 ---
 
-### 9. Package in Docker
-**Goal**: Containerize application for easy deployment to homelab.
+## Verification
 
-**File**: `Dockerfile`
-
-**Multi-stage build**:
-
-**Stage 1 - Builder**:
-```dockerfile
-FROM python:3.11-slim as builder
-WORKDIR /app
-RUN pip install poetry
-COPY pyproject.toml poetry.lock ./
-RUN poetry export -f requirements.txt > requirements.txt
-```
-
-**Stage 2 - Runtime**:
-```dockerfile
-FROM python:3.11-slim
-WORKDIR /app
-COPY --from=builder /app/requirements.txt .
-RUN pip install -r requirements.txt
-COPY src/ ./src/
-COPY config.yaml.example ./config.yaml
-CMD ["uvicorn", "src.lenticularis.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
-```
-
-**File**: `docker-compose.yml`
-
-**What to include**:
-
-**Service 1 - lenticularis** (main app):
-```yaml
-services:
-  lenticularis:
-    build: .
-    ports:
-      - "8000:8000"
-    volumes:
-      - ./config.yaml:/app/config.yaml
-      - ./data:/app/data
-    environment:
-      - INFLUXDB_URL=http://influxdb:8086
-    depends_on:
-      - influxdb  # Optional, comment out for BYO-DB
-```
-
-**Service 2 - influxdb** (optional, comment out for BYO-DB):
-```yaml
-  influxdb:
-    image: influxdb:2.7
-    ports:
-      - "8086:8086"
-    volumes:
-      - influxdb-data:/var/lib/influxdb2
-    environment:
-      - DOCKER_INFLUXDB_INIT_MODE=setup
-      - DOCKER_INFLUXDB_INIT_USERNAME=admin
-      - DOCKER_INFLUXDB_INIT_PASSWORD=changeme
-      - DOCKER_INFLUXDB_INIT_ORG=lenticularis
-      - DOCKER_INFLUXDB_INIT_BUCKET=weather_data
-```
-
-**Volume declarations**:
-```yaml
-volumes:
-  influxdb-data:
-```
-
-**PowerShell parallel**:
-```powershell
-# PowerShell Docker commands:
-docker build -t lenticularis .
-docker run -p 8000:8000 -v ${PWD}/config.yaml:/app/config.yaml lenticularis
-# docker-compose simplifies multi-container orchestration
-```
-
-**Health checks**:
-- Add health check endpoint `GET /health`
-- Docker health check in compose file
-- Restart policy: `restart: unless-stopped`
-
-**Documentation**:
-- Update README with:
-  - `docker-compose up -d` to start
-  - How to configure BYO-DB (comment out influxdb service, set external URL)
-  - How to access web GUI (http://localhost:8000)
-  - How to view API docs (http://localhost:8000/docs)
+- Unit tests (`pytest`): config loading, each collector's `normalize_data()`, all condition operators, pressure delta, AND/OR group logic, both combination modes, all 7 statistics metric functions with fixture data
+- Integration test: create user → site → rule set with multi-station conditions → trigger evaluations → query stats endpoints → assert flyable-day count matches seeded decisions
+- Manual: open rule editor, build a rule mixing Station A (wind speed) and Station B (wind direction), save, run scheduler, open stats dashboard, verify condition trigger chart attributes correctly to each station
+- Community gallery: publish as user 1 → clone as user 2 → verify `clone_count` increments
 
 ---
 
-## Summary of Learning Path
+## Key Decisions
 
-1. **Step 0-1**: Foundation (docs, structure, Poetry setup)
-2. **Step 2-3**: First data flow (config → collector → raw data)
-3. **Step 4-5**: Normalization and persistence (Pydantic models → InfluxDB)
-4. **Step 6**: Automation (scheduler runs collectors periodically)
-5. **Step 7**: Decision logic (rules engine with traffic lights)
-6. **Step 8**: User interface (FastAPI + web map)
-7. **Step 9**: Deployment (Docker for homelab)
-
-Each step builds on the previous one, allowing you to learn Python concepts incrementally while building a real, useful application.
-
-## PowerShell → Python Key Concepts
-
-- **Functions** → `def function_name():`
-- **Scriptblocks** → `lambda` or regular functions
-- **Pipeline** → List comprehensions or generator expressions
-- **Objects** → Classes with `__init__` constructor
-- **Modules** → Import system with `from module import Class`
-- **Error handling** → `try/except` instead of `try/catch`
-- **Async** → `async def` and `await` for concurrent operations
-- **Type hints** → `variable: str` similar to `[string]$variable`
-- **Validation** → Pydantic models instead of `[ValidateNotNull()]`
+- Rules are 100% pilot-owned; admin limited to collector config and user management
+- Station picker is **per condition row** — no ruleset-level station selection — enabling multi-station rules natively
+- `condition_results` JSON (including `station_id`) written per evaluation to InfluxDB enables per-station trigger statistics without raw weather re-queries
+- Condition tree stored normalised in `rule_conditions` + `condition_groups` tables (not a JSON blob) for queryability
+- Pressure delta is a first-class condition type with two-station picker
+- Best-windows metric computed server-side (not Flux) for simplicity
+- Rule sharing is clone-only (no co-editing); private by default, opt-in publish
+- Chart.js for all charts (lightweight, no framework required)
+- All 5 data sources in scope from v1 
