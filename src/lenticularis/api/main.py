@@ -29,6 +29,8 @@ from lenticularis.database.influx import InfluxClient
 from lenticularis.scheduler import CollectorScheduler
 from lenticularis.collectors.meteoswiss import MeteoSwissCollector
 from lenticularis.api.routers import stations as stations_router
+from lenticularis.api.routers import auth as auth_router
+from lenticularis.database.db import init_db
 
 
 # ---------------------------------------------------------------------------
@@ -61,6 +63,9 @@ async def lifespan(app: FastAPI):
     _configure_logging(cfg)
     logger = logging.getLogger(__name__)
     logger.info("Lenticularis starting up…")
+
+    # SQLite
+    init_db(cfg.database.path)
 
     # InfluxDB
     influx = InfluxClient(cfg.influxdb)
@@ -138,6 +143,7 @@ def create_app() -> FastAPI:
 
     # API routers
     app.include_router(stations_router.router)
+    app.include_router(auth_router.router)
 
     # Static files (frontend)
     static_dir = Path(__file__).parent.parent.parent.parent / "static"
@@ -167,6 +173,14 @@ def create_app() -> FastAPI:
         @app.get("/station-detail.html", include_in_schema=False)
         async def serve_station_detail_html():
             return FileResponse(str(static_dir / "station-detail.html"))
+
+        @app.get("/login", include_in_schema=False)
+        async def serve_login():
+            return FileResponse(str(static_dir / "login.html"))
+
+        @app.get("/register", include_in_schema=False)
+        async def serve_register():
+            return FileResponse(str(static_dir / "register.html"))
     else:
         @app.get("/", include_in_schema=False)
         async def root():

@@ -200,6 +200,10 @@
     }
     .nav-link:hover { background: #2d3748; color: #e2e8f0; }
     .nav-link.active { background: #2d4a6e; color: #90cdf4; font-weight: 500; }
+    .nav-user { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+    .nav-user-name { font-size: 0.85rem; color: #90cdf4; }
+    .nav-btn { background: transparent; border: 1px solid #4a5568; color: #a0aec0; font-size: 0.8rem; padding: 4px 10px; border-radius: 5px; cursor: pointer; transition: background 0.15s; }
+    .nav-btn:hover { background: #2d3748; color: #e2e8f0; }
   </style>
 </head>
 <body>
@@ -210,6 +214,7 @@
     <a href="/" class="nav-link">Map</a>
     <a href="/stations" class="nav-link">Stations</a>
   </div>
+  <div class="nav-user" id="navUser"></div>
 </nav>
 
 <header class="station-header">
@@ -299,5 +304,9 @@
 </div>
 
 <script src="/static/station-detail.js"></script>
+<script type="module">
+  import { renderNavAuth } from '/static/auth.js';
+  renderNavAuth('stations');
+</script>
 </body>
 </html>

@@ -5,14 +5,6 @@ from pydantic import BaseModel
 from typing import Optional
 from pathlib import Path
 
-#Create Pydantic models for each config section:
-#   - InfluxDBConfig (url, token, org, bucket, timeout, enabled)
-#   - CollectorConfigSection (name, enabled, interval_minutes, config dict)
-#   - DatabaseConfig (path)
-#   - LoggingConfig (level, format, file)
-#   - APIConfig (host, port, reload)
-#   - MainConfig (combines all above sections)
-
 class InfluxDBConfig(BaseModel):
     enabled: bool = True
     url: Optional[str] = None
@@ -30,6 +22,12 @@ class CollectorConfig(BaseModel):
 class DatabaseConfig(BaseModel):
     path: str = "data/lenticularis.db"
 
+class AuthConfig(BaseModel):
+    jwt_secret: str = "change-me-in-production"
+    jwt_algorithm: str = "HS256"
+    access_token_expire_minutes: int = 60
+    refresh_token_expire_days: int = 30
+
 class LoggingConfig(BaseModel):
     level: str = "debug"
     format: str = "json"
@@ -44,6 +42,7 @@ class MainConfig(BaseModel):
     influxdb: InfluxDBConfig
     collectors: list[CollectorConfig]
     database: DatabaseConfig
+    auth: AuthConfig = AuthConfig()
     logging: LoggingConfig
     api: APIConfig
 

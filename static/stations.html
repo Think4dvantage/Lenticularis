@@ -215,8 +215,11 @@
       gap: 6px;
       font-size: 0.78rem;
       color: #718096;
-      margin-left: auto;
     }
+    .nav-user { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+    .nav-user-name { font-size: 0.85rem; color: #90cdf4; }
+    .nav-btn { background: transparent; border: 1px solid #4a5568; color: #a0aec0; font-size: 0.8rem; padding: 4px 10px; border-radius: 5px; cursor: pointer; transition: background 0.15s; }
+    .nav-btn:hover { background: #2d3748; color: #e2e8f0; }
   </style>
 </head>
 <body>
@@ -232,6 +235,7 @@
     <span id="dbLabel">Connecting…</span>
     <span id="lastRefresh"></span>
   </div>
+  <div class="nav-user" id="navUser"></div>
 </nav>
 
 <div class="toolbar">
@@ -278,5 +282,9 @@
 </div>
 
 <script src="/static/app.js"></script>
+<script type="module">
+  import { renderNavAuth } from '/static/auth.js';
+  renderNavAuth('stations');
+</script>
 </body>
 </html>

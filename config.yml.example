@@ -54,6 +54,13 @@ collectors:
 database:
   path: "/app/data/lenticularis.db"
 
+# Authentication
+auth:
+  jwt_secret: "change-me-in-production-use-openssl-rand-hex-32"
+  jwt_algorithm: "HS256"
+  access_token_expire_minutes: 60
+  refresh_token_expire_days: 30
+
 # Logging
 logging:
   level: "INFO"   # DEBUG | INFO | WARNING | ERROR
