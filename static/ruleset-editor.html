@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lenticularis — Rule Set Editor</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: #0f1117; color: #e2e8f0; min-height: 100vh; display: flex; flex-direction: column;
+    }
+
+    /* ── Nav ── */
+    .top-nav { background: #1a1f2e; border-bottom: 1px solid #2d3748; padding: 0 24px; display: flex; align-items: center; flex-shrink: 0; height: 48px; }
+    .nav-brand { font-size: 1.1rem; font-weight: 600; color: #90cdf4; margin-right: 24px; white-space: nowrap; }
+    .nav-links { display: flex; gap: 2px; flex: 1; }
+    .nav-link { color: #718096; text-decoration: none; font-size: 0.85rem; padding: 6px 14px; border-radius: 6px; transition: background 0.15s, color 0.15s; }
+    .nav-link:hover { background: #2d3748; color: #e2e8f0; }
+    .nav-link.active { background: #2d4a6e; color: #90cdf4; font-weight: 500; }
+    .nav-user { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+    .nav-user-name { font-size: 0.85rem; color: #90cdf4; }
+    .nav-btn { background: transparent; border: 1px solid #4a5568; color: #a0aec0; font-size: 0.8rem; padding: 4px 10px; border-radius: 5px; cursor: pointer; }
+    .nav-btn:hover { background: #2d3748; color: #e2e8f0; }
+
+    /* ── Layout ── */
+    .page { max-width: 960px; margin: 0 auto; padding: 32px 20px 60px; width: 100%; }
+    .page-header { display: flex; align-items: center; gap: 14px; margin-bottom: 32px; }
+    .page-header a { color: #718096; text-decoration: none; font-size: 0.88rem; }
+    .page-header a:hover { color: #e2e8f0; }
+    .page-header h1 { font-size: 1.35rem; font-weight: 600; }
+
+    /* ── Sections ── */
+    .section { background: #1a1f2e; border: 1px solid #2d3748; border-radius: 10px; padding: 24px; margin-bottom: 20px; }
+    .section-title { font-size: 0.8rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: #718096; margin-bottom: 18px; }
+
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .form-row.three { grid-template-columns: 1fr 1fr 1fr; }
+    .form-row.full { grid-template-columns: 1fr; }
+    .form-group { display: flex; flex-direction: column; gap: 6px; }
+    .form-group label { font-size: 0.78rem; color: #a0aec0; font-weight: 500; }
+    .form-group input, .form-group select, .form-group textarea {
+      background: #0f1117; border: 1px solid #2d3748; border-radius: 7px;
+      padding: 9px 12px; color: #e2e8f0; font-size: 0.88rem; outline: none;
+      transition: border-color 0.15s;
+    }
+    .form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color: #4299e1; }
+    .form-group textarea { resize: vertical; min-height: 64px; }
+    .form-group select option { background: #1a1f2e; }
+    .form-hint { font-size: 0.73rem; color: #4a5568; }
+
+    /* ── Toggle ── */
+    .toggle-row { display: flex; align-items: center; gap: 10px; }
+    .toggle { position: relative; display: inline-block; width: 36px; height: 20px; }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .slider { position: absolute; inset: 0; background: #2d3748; border-radius: 20px; cursor: pointer; transition: background 0.2s; }
+    .slider::before { content: ''; position: absolute; width: 14px; height: 14px; left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: transform 0.2s; }
+    input:checked + .slider { background: #2b6cb0; }
+    input:checked + .slider::before { transform: translateX(16px); }
+    .toggle-label { font-size: 0.85rem; color: #a0aec0; }
+
+    /* ── Condition builder ── */
+    .conditions-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+
+    .condition-row {
+      background: #0f1117; border: 1px solid #2d3748; border-radius: 8px;
+      padding: 14px 16px; margin-bottom: 10px;
+      display: grid;
+      grid-template-columns: 1fr 140px 110px 90px 90px 90px 36px;
+      gap: 8px; align-items: center;
+    }
+    .condition-row.has-value-b {
+      grid-template-columns: 1fr 140px 110px 90px 90px 90px 36px;
+    }
+
+    .condition-row .station-search {
+      position: relative;
+    }
+    .station-input {
+      width: 100%;
+      background: #1a1f2e; border: 1px solid #2d3748; border-radius: 6px;
+      padding: 7px 10px; color: #e2e8f0; font-size: 0.82rem; outline: none;
+    }
+    .station-input:focus { border-color: #4299e1; }
+    .station-dropdown {
+      position: absolute; top: 100%; left: 0; right: 0; z-index: 100;
+      background: #1a1f2e; border: 1px solid #4299e1; border-radius: 6px;
+      max-height: 200px; overflow-y: auto; display: none;
+    }
+    .station-dropdown.open { display: block; }
+    .station-option {
+      padding: 8px 12px; font-size: 0.8rem; cursor: pointer; color: #e2e8f0;
+    }
+    .station-option:hover { background: #2d3748; }
+    .station-option .sid { font-family: monospace; color: #718096; font-size: 0.72rem; }
+
+    .cond-select {
+      width: 100%;
+      background: #1a1f2e; border: 1px solid #2d3748; border-radius: 6px;
+      padding: 7px 10px; color: #e2e8f0; font-size: 0.82rem; outline: none;
+    }
+    .cond-select:focus { border-color: #4299e1; }
+    .cond-input {
+      width: 100%;
+      background: #1a1f2e; border: 1px solid #2d3748; border-radius: 6px;
+      padding: 7px 10px; color: #e2e8f0; font-size: 0.82rem; outline: none; text-align: right;
+    }
+    .cond-input:focus { border-color: #4299e1; }
+
+    .colour-select { width: 100%; padding: 7px 6px; }
+    .colour-green { color: #68d391; }
+    .colour-orange { color: #f6ad55; }
+    .colour-red { color: #fc8181; }
+
+    .btn-remove {
+      background: transparent; border: 1px solid #4a5568; color: #718096;
+      width: 32px; height: 32px; border-radius: 6px; cursor: pointer; font-size: 1rem;
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+      transition: background 0.15s, color 0.15s;
+    }
+    .btn-remove:hover { background: #2d1515; border-color: #7b2020; color: #fc8181; }
+
+    .col-label { font-size: 0.7rem; color: #4a5568; text-align: center; margin-bottom: -4px; }
+
+    .conditions-labels {
+      display: grid;
+      grid-template-columns: 1fr 140px 110px 90px 90px 90px 36px;
+      gap: 8px; padding: 0 16px; margin-bottom: 4px;
+    }
+
+    /* ── Buttons ── */
+    .btn { display: inline-flex; align-items: center; gap: 7px; padding: 9px 18px; border-radius: 7px; font-size: 0.88rem; font-weight: 500; cursor: pointer; border: none; transition: background 0.15s; }
+    .btn-primary { background: #2b6cb0; color: #fff; }
+    .btn-primary:hover { background: #3182ce; }
+    .btn-primary:disabled { background: #2d3748; color: #718096; cursor: not-allowed; }
+    .btn-ghost { background: transparent; border: 1px solid #2d3748; color: #a0aec0; }
+    .btn-ghost:hover { background: #2d3748; color: #e2e8f0; }
+    .btn-add { background: #1a3a2e; border: 1px solid #276749; color: #68d391; font-size: 0.82rem; padding: 7px 14px; }
+    .btn-add:hover { background: #22543d; }
+
+    .save-bar { display: flex; align-items: center; gap: 12px; justify-content: flex-end; margin-top: 8px; }
+
+    .error-msg { background: #2d1515; border: 1px solid #7b2020; border-radius: 7px; color: #fc8181; font-size: 0.82rem; padding: 9px 12px; margin-bottom: 16px; display: none; }
+    .error-msg.visible { display: block; }
+    .success-msg { background: #1a3a2e; border: 1px solid #276749; border-radius: 7px; color: #68d391; font-size: 0.82rem; padding: 9px 12px; margin-bottom: 16px; display: none; }
+    .success-msg.visible { display: block; }
+  </style>
+</head>
+<body>
+
+<nav class="top-nav">
+  <span class="nav-brand">🪁 Lenticularis</span>
+  <div class="nav-links">
+    <a href="/" class="nav-link">Map</a>
+    <a href="/stations" class="nav-link">Stations</a>
+    <a href="/rulesets" class="nav-link active">Rule Sets</a>
+  </div>
+  <div class="nav-user" id="navUser"></div>
+</nav>
+
+<div class="page">
+  <div class="page-header">
+    <a href="/rulesets">← My Rule Sets</a>
+    <h1 id="pageTitle">New Rule Set</h1>
+  </div>
+
+  <div class="error-msg" id="errorMsg"></div>
+  <div class="success-msg" id="successMsg"></div>
+
+  <!-- ── Site info ── -->
+  <div class="section">
+    <div class="section-title">Launch Site</div>
+    <div class="form-row full" style="margin-bottom:14px">
+      <div class="form-group">
+        <label for="rsName">Name *</label>
+        <input type="text" id="rsName" placeholder="e.g. Beatenberg Südstart" maxlength="120" required />
+      </div>
+    </div>
+    <div class="form-row three" style="margin-bottom:14px">
+      <div class="form-group">
+        <label for="rsLat">Latitude</label>
+        <input type="number" id="rsLat" step="0.0001" placeholder="46.6863" />
+        <span class="form-hint">Decimal degrees (WGS84)</span>
+      </div>
+      <div class="form-group">
+        <label for="rsLon">Longitude</label>
+        <input type="number" id="rsLon" step="0.0001" placeholder="7.8632" />
+      </div>
+      <div class="form-group">
+        <label for="rsAlt">Altitude (m)</label>
+        <input type="number" id="rsAlt" step="1" placeholder="1250" />
+      </div>
+    </div>
+    <div class="form-row full">
+      <div class="form-group">
+        <label for="rsDesc">Description</label>
+        <textarea id="rsDesc" placeholder="Optional notes about this site or rule set…"></textarea>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Evaluation ── -->
+  <div class="section">
+    <div class="section-title">Evaluation</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="rsLogic">Combination logic</label>
+        <select id="rsLogic">
+          <option value="worst_wins">Worst wins — any RED → RED, any ORANGE → ORANGE</option>
+          <option value="majority_vote">Majority vote — most common colour wins</option>
+        </select>
+      </div>
+      <div class="form-group" style="justify-content:flex-end;padding-bottom:4px">
+        <label>Visibility</label>
+        <div class="toggle-row">
+          <label class="toggle">
+            <input type="checkbox" id="rsPublic" />
+            <span class="slider"></span>
+          </label>
+          <span class="toggle-label" id="publicLabel">Private (only you)</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Conditions ── -->
+  <div class="section">
+    <div class="section-title">Conditions</div>
+
+    <div class="conditions-labels">
+      <span class="col-label" style="text-align:left">Station</span>
+      <span class="col-label">Field</span>
+      <span class="col-label">Operator</span>
+      <span class="col-label">Value A</span>
+      <span class="col-label">Value B</span>
+      <span class="col-label">If met →</span>
+      <span></span>
+    </div>
+
+    <div id="conditionList"></div>
+
+    <button class="btn btn-add" id="addCondBtn">＋ Add condition</button>
+
+    <p style="margin-top:14px;font-size:0.78rem;color:#4a5568">
+      Each condition targets an independent station. "Value B" is only used for <em>between</em> and <em>in direction range</em> operators.
+    </p>
+  </div>
+
+  <!-- ── Save bar ── -->
+  <div class="save-bar">
+    <a href="/rulesets" class="btn btn-ghost">Cancel</a>
+    <button class="btn btn-primary" id="saveBtn">Save rule set</button>
+  </div>
+</div>
+
+<script type="module">
+  import { authHeader, renderNavAuth, isLoggedIn, getUser } from '/static/auth.js';
+
+  if (!isLoggedIn()) { window.location.href = '/login?next=' + encodeURIComponent(location.pathname + location.search); }
+  renderNavAuth('rulesets');
+
+  // ── State ──────────────────────────────────────────────────────────────
+  const params = new URLSearchParams(location.search);
+  const editId = params.get('id');
+  let allStations = [];   // [{station_id, name, network, canton}]
+  let condSeq = 0;
+
+  const FIELDS = [
+    { v: 'wind_speed',      l: 'Wind speed',     unit: 'km/h' },
+    { v: 'wind_gust',       l: 'Wind gust',      unit: 'km/h' },
+    { v: 'wind_direction',  l: 'Wind direction', unit: '°'    },
+    { v: 'temperature',     l: 'Temperature',    unit: '°C'   },
+    { v: 'humidity',        l: 'Humidity',       unit: '%'    },
+    { v: 'pressure',        l: 'Pressure',       unit: 'hPa'  },
+    { v: 'pressure_delta',  l: 'Pressure delta', unit: 'hPa'  },
+    { v: 'precipitation',   l: 'Precipitation',  unit: 'mm'   },
+    { v: 'snow_depth',      l: 'Snow depth',     unit: 'cm'   },
+  ];
+
+  const OPS = [
+    { v: '>',                l: '> greater than'      },
+    { v: '<',                l: '< less than'          },
+    { v: '>=',               l: '≥ at least'           },
+    { v: '<=',               l: '≤ at most'            },
+    { v: '=',                l: '= equals'             },
+    { v: 'between',          l: 'between A and B'      },
+    { v: 'not_between',      l: 'not between A and B'  },
+    { v: 'in_direction_range', l: 'in direction A–B°' },
+  ];
+
+  const TWO_VALUE_OPS = new Set(['between', 'not_between', 'in_direction_range']);
+
+  // ── Load stations ──────────────────────────────────────────────────────
+  async function loadStations() {
+    const res = await fetch('/api/stations', { headers: authHeader() });
+    if (!res.ok) return;
+    const data = await res.json();
+    allStations = data.map(s => ({
+      station_id: s.station_id,
+      name: s.name,
+      network: s.network,
+      canton: s.canton || '',
+    })).sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  // ── Condition row ──────────────────────────────────────────────────────
+  function makeCondRow(data = {}) {
+    const id = ++condSeq;
+    const el = document.createElement('div');
+    el.className = 'condition-row';
+    el.dataset.condId = id;
+
+    const fieldOpts = FIELDS.map(f => `<option value="${f.v}"${data.field === f.v ? ' selected' : ''}>${f.l}</option>`).join('');
+    const opOpts    = OPS.map(o => `<option value="${o.v}"${data.operator === o.v ? ' selected' : ''}>${o.l}</option>`).join('');
+
+    el.innerHTML = `
+      <div class="station-search">
+        <input type="text" class="station-input" placeholder="Search station…"
+          data-selected-id="${data.station_id || ''}"
+          value="${data.station_id ? (allStations.find(s => s.station_id === data.station_id)?.name || data.station_id) : ''}" />
+        <div class="station-dropdown"></div>
+      </div>
+      <select class="cond-select field-select">${fieldOpts}</select>
+      <select class="cond-select op-select">${opOpts}</select>
+      <input type="number" class="cond-input val-a" step="any" value="${data.value_a ?? ''}" placeholder="0" />
+      <input type="number" class="cond-input val-b" step="any" value="${data.value_b ?? ''}" placeholder="0" />
+      <select class="cond-select colour-select">
+        <option value="green"  ${data.result_colour === 'green'  ? 'selected' : ''} class="colour-green">🟢 Green</option>
+        <option value="orange" ${data.result_colour === 'orange' ? 'selected' : ''} class="colour-orange">🟠 Orange</option>
+        <option value="red"    ${(!data.result_colour || data.result_colour === 'red') ? 'selected' : ''} class="colour-red">🔴 Red</option>
+      </select>
+      <button class="btn-remove" title="Remove condition">✕</button>`;
+
+    const list = document.getElementById('conditionList');
+    list.appendChild(el);
+
+    // Wire up station search
+    const input = el.querySelector('.station-input');
+    const drop  = el.querySelector('.station-dropdown');
+
+    input.addEventListener('input', () => {
+      const q = input.value.toLowerCase();
+      const matches = allStations.filter(s =>
+        s.name.toLowerCase().includes(q) || s.station_id.toLowerCase().includes(q) || s.canton.toLowerCase().includes(q)
+      ).slice(0, 20);
+      drop.innerHTML = matches.map(s => `
+        <div class="station-option" data-id="${s.station_id}">
+          ${esc(s.name)} <span class="sid">${s.network} · ${s.station_id}</span>
+        </div>`).join('') || '<div class="station-option" style="color:#718096">No matches</div>';
+      drop.classList.add('open');
+    });
+
+    input.addEventListener('focus', () => { if (input.value) input.dispatchEvent(new Event('input')); });
+
+    drop.addEventListener('mousedown', (e) => {
+      const opt = e.target.closest('.station-option[data-id]');
+      if (!opt) return;
+      input.dataset.selectedId = opt.dataset.id;
+      const st = allStations.find(s => s.station_id === opt.dataset.id);
+      input.value = st ? st.name : opt.dataset.id;
+      drop.classList.remove('open');
+      e.preventDefault();
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!el.contains(e.target)) drop.classList.remove('open');
+    }, { passive: true });
+
+    // Show/hide value B based on operator
+    const opSel = el.querySelector('.op-select');
+    const valB  = el.querySelector('.val-b');
+
+    function updateValB() {
+      valB.style.opacity = TWO_VALUE_OPS.has(opSel.value) ? '1' : '0.2';
+      valB.disabled = !TWO_VALUE_OPS.has(opSel.value);
+    }
+    opSel.addEventListener('change', updateValB);
+    updateValB();
+
+    // Remove button
+    el.querySelector('.btn-remove').addEventListener('click', () => el.remove());
+  }
+
+  // ── Read conditions from DOM ───────────────────────────────────────────
+  function readConditions() {
+    const rows = document.querySelectorAll('.condition-row');
+    const result = [];
+    let valid = true;
+    rows.forEach((row, i) => {
+      const stationId = row.querySelector('.station-input').dataset.selectedId;
+      if (!stationId) { valid = false; return; }
+      const op = row.querySelector('.op-select').value;
+      const valA = parseFloat(row.querySelector('.val-a').value);
+      const valBEl = row.querySelector('.val-b');
+      const valB = TWO_VALUE_OPS.has(op) && valBEl.value !== '' ? parseFloat(valBEl.value) : null;
+      result.push({
+        station_id: stationId,
+        field: row.querySelector('.field-select').value,
+        operator: op,
+        value_a: isNaN(valA) ? 0 : valA,
+        value_b: valB,
+        result_colour: row.querySelector('.colour-select').value,
+        sort_order: i,
+      });
+    });
+    return valid ? result : null;
+  }
+
+  // ── Load existing rule set for editing ────────────────────────────────
+  async function loadEdit(id) {
+    const res = await fetch(`/api/rulesets/${id}`, { headers: authHeader() });
+    if (!res.ok) { showError('Could not load rule set.'); return; }
+    const rs = await res.json();
+
+    document.getElementById('pageTitle').textContent = 'Edit Rule Set';
+    document.getElementById('rsName').value    = rs.name || '';
+    document.getElementById('rsDesc').value    = rs.description || '';
+    document.getElementById('rsLat').value     = rs.lat ?? '';
+    document.getElementById('rsLon').value     = rs.lon ?? '';
+    document.getElementById('rsAlt').value     = rs.altitude_m ?? '';
+    document.getElementById('rsLogic').value   = rs.combination_logic || 'worst_wins';
+    document.getElementById('rsPublic').checked = rs.is_public || false;
+    updatePublicLabel();
+
+    for (const c of rs.conditions) makeCondRow(c);
+  }
+
+  // ── Save ──────────────────────────────────────────────────────────────
+  document.getElementById('saveBtn').addEventListener('click', async () => {
+    clearMessages();
+    const name = document.getElementById('rsName').value.trim();
+    if (!name) { showError('Name is required.'); return; }
+
+    const conditions = readConditions();
+    if (conditions === null) { showError('Please select a station for every condition row.'); return; }
+
+    const btn = document.getElementById('saveBtn');
+    btn.disabled = true; btn.textContent = 'Saving…';
+
+    const meta = {
+      name,
+      description: document.getElementById('rsDesc').value.trim() || null,
+      lat:         parseFloatOrNull(document.getElementById('rsLat').value),
+      lon:         parseFloatOrNull(document.getElementById('rsLon').value),
+      altitude_m:  parseIntOrNull(document.getElementById('rsAlt').value),
+      combination_logic: document.getElementById('rsLogic').value,
+      is_public:   document.getElementById('rsPublic').checked,
+    };
+
+    try {
+      let rsId = editId;
+
+      if (editId) {
+        // Update metadata
+        const r = await fetch(`/api/rulesets/${editId}`, {
+          method: 'PUT',
+          headers: { ...authHeader(), 'Content-Type': 'application/json' },
+          body: JSON.stringify(meta),
+        });
+        if (!r.ok) throw new Error(await extractError(r));
+      } else {
+        // Create
+        const r = await fetch('/api/rulesets', {
+          method: 'POST',
+          headers: { ...authHeader(), 'Content-Type': 'application/json' },
+          body: JSON.stringify(meta),
+        });
+        if (!r.ok) throw new Error(await extractError(r));
+        const created = await r.json();
+        rsId = created.id;
+        // Update URL without reload so a second save becomes an edit
+        history.replaceState(null, '', `/ruleset-editor?id=${rsId}`);
+      }
+
+      // Replace conditions
+      const cr = await fetch(`/api/rulesets/${rsId}/conditions`, {
+        method: 'PUT',
+        headers: { ...authHeader(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conditions }),
+      });
+      if (!cr.ok) throw new Error(await extractError(cr));
+
+      showSuccess('Saved successfully.');
+    } catch (e) {
+      showError(e.message);
+    } finally {
+      btn.disabled = false; btn.textContent = 'Save rule set';
+    }
+  });
+
+  // ── Helpers ───────────────────────────────────────────────────────────
+  function parseFloatOrNull(v) { const n = parseFloat(v); return isNaN(n) ? null : n; }
+  function parseIntOrNull(v)   { const n = parseInt(v);   return isNaN(n) ? null : n; }
+
+  async function extractError(res) {
+    try { const j = await res.json(); return j.detail || JSON.stringify(j); }
+    catch { return `HTTP ${res.status}`; }
+  }
+
+  function showError(msg) {
+    const el = document.getElementById('errorMsg');
+    el.textContent = msg; el.classList.add('visible');
+    el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+  function showSuccess(msg) {
+    const el = document.getElementById('successMsg');
+    el.textContent = msg; el.classList.add('visible');
+  }
+  function clearMessages() {
+    document.getElementById('errorMsg').classList.remove('visible');
+    document.getElementById('successMsg').classList.remove('visible');
+  }
+
+  function updatePublicLabel() {
+    const isPublic = document.getElementById('rsPublic').checked;
+    document.getElementById('publicLabel').textContent = isPublic ? 'Public (gallery)' : 'Private (only you)';
+  }
+
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, c =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  // ── Init ──────────────────────────────────────────────────────────────
+  document.getElementById('rsPublic').addEventListener('change', updatePublicLabel);
+  document.getElementById('addCondBtn').addEventListener('click', () => makeCondRow());
+
+  await loadStations();
+  if (editId) await loadEdit(editId);
+</script>
+</body>
+</html>

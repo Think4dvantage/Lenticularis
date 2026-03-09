@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lenticularis — My Rule Sets</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: #0f1117; color: #e2e8f0; min-height: 100vh; display: flex; flex-direction: column;
+    }
+
+    /* ── Nav ── */
+    .top-nav { background: #1a1f2e; border-bottom: 1px solid #2d3748; padding: 0 24px; display: flex; align-items: center; flex-shrink: 0; height: 48px; }
+    .nav-brand { font-size: 1.1rem; font-weight: 600; color: #90cdf4; margin-right: 24px; white-space: nowrap; }
+    .nav-links { display: flex; gap: 2px; flex: 1; }
+    .nav-link { color: #718096; text-decoration: none; font-size: 0.85rem; padding: 6px 14px; border-radius: 6px; transition: background 0.15s, color 0.15s; }
+    .nav-link:hover { background: #2d3748; color: #e2e8f0; }
+    .nav-link.active { background: #2d4a6e; color: #90cdf4; font-weight: 500; }
+    .nav-user { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+    .nav-user-name { font-size: 0.85rem; color: #90cdf4; }
+    .nav-btn { background: transparent; border: 1px solid #4a5568; color: #a0aec0; font-size: 0.8rem; padding: 4px 10px; border-radius: 5px; cursor: pointer; transition: background 0.15s; }
+    .nav-btn:hover { background: #2d3748; color: #e2e8f0; }
+
+    /* ── Page ── */
+    .page { max-width: 900px; margin: 0 auto; padding: 32px 20px; width: 100%; }
+
+    .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 28px; }
+    .page-header h1 { font-size: 1.4rem; font-weight: 600; }
+    .page-header p { color: #718096; font-size: 0.85rem; margin-top: 4px; }
+
+    .btn { display: inline-flex; align-items: center; gap: 7px; padding: 9px 18px; border-radius: 7px; font-size: 0.88rem; font-weight: 500; cursor: pointer; border: none; transition: background 0.15s; text-decoration: none; }
+    .btn-primary { background: #2b6cb0; color: #fff; }
+    .btn-primary:hover { background: #3182ce; }
+    .btn-danger  { background: transparent; border: 1px solid #7b2020; color: #fc8181; }
+    .btn-danger:hover { background: #2d1515; }
+    .btn-ghost   { background: transparent; border: 1px solid #2d3748; color: #a0aec0; }
+    .btn-ghost:hover { background: #2d3748; color: #e2e8f0; }
+
+    /* ── Cards ── */
+    .cards { display: flex; flex-direction: column; gap: 14px; }
+
+    .card {
+      background: #1a1f2e; border: 1px solid #2d3748; border-radius: 10px;
+      padding: 20px 24px; display: flex; align-items: flex-start; gap: 16px;
+    }
+    .card-icon { font-size: 1.5rem; flex-shrink: 0; margin-top: 2px; }
+    .card-body { flex: 1; min-width: 0; }
+    .card-title { font-size: 1rem; font-weight: 600; color: #e2e8f0; }
+    .card-meta { margin-top: 5px; font-size: 0.78rem; color: #718096; display: flex; gap: 14px; flex-wrap: wrap; }
+    .card-meta span { display: flex; align-items: center; gap: 5px; }
+    .card-actions { display: flex; gap: 8px; flex-shrink: 0; align-items: center; }
+
+    .badge { display: inline-block; font-size: 0.7rem; padding: 2px 8px; border-radius: 9999px; font-weight: 500; }
+    .badge-public  { background: #1a3a2e; color: #68d391; border: 1px solid #276749; }
+    .badge-private { background: #2d2d1a; color: #d69e2e; border: 1px solid #744210; }
+
+    .empty-state { text-align: center; padding: 60px 20px; color: #4a5568; }
+    .empty-state .big { font-size: 2.5rem; margin-bottom: 14px; }
+    .empty-state p { margin-bottom: 20px; }
+
+    /* ── Auth gate ── */
+    .auth-gate { display: none; text-align: center; padding: 60px 20px; }
+    .auth-gate.visible { display: block; }
+    .auth-gate p { color: #718096; margin-bottom: 16px; }
+  </style>
+</head>
+<body>
+
+<nav class="top-nav">
+  <span class="nav-brand">🪁 Lenticularis</span>
+  <div class="nav-links">
+    <a href="/" class="nav-link">Map</a>
+    <a href="/stations" class="nav-link">Stations</a>
+    <a href="/rulesets" class="nav-link active">Rule Sets</a>
+  </div>
+  <div class="nav-user" id="navUser"></div>
+</nav>
+
+<div class="page">
+  <!-- Auth gate -->
+  <div class="auth-gate" id="authGate">
+    <p>Sign in to create and manage your rule sets.</p>
+    <a href="/login?next=/rulesets" class="btn btn-primary">Sign in</a>
+  </div>
+
+  <!-- Main content (hidden until authenticated) -->
+  <div id="mainContent" style="display:none">
+    <div class="page-header">
+      <div>
+        <h1>My Rule Sets</h1>
+        <p>Each rule set defines conditions for one launch site or flying area.</p>
+      </div>
+      <a href="/ruleset-editor" class="btn btn-primary">＋ New rule set</a>
+    </div>
+
+    <div class="cards" id="cardList">
+      <!-- filled by JS -->
+    </div>
+
+    <div class="empty-state" id="emptyState" style="display:none">
+      <div class="big">🏔️</div>
+      <p>No rule sets yet. Create your first one to start getting flyability decisions.</p>
+      <a href="/ruleset-editor" class="btn btn-primary">＋ Create rule set</a>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+  import { getUser, authHeader, renderNavAuth, isLoggedIn } from '/static/auth.js';
+
+  renderNavAuth('rulesets');
+
+  const user = getUser();
+  if (!user) {
+    document.getElementById('authGate').classList.add('visible');
+  } else {
+    document.getElementById('mainContent').style.display = '';
+    loadRuleSets();
+  }
+
+  async function loadRuleSets() {
+    const res = await fetch('/api/rulesets', { headers: authHeader() });
+    if (!res.ok) return;
+    const sets = await res.json();
+    render(sets);
+  }
+
+  function render(sets) {
+    const list = document.getElementById('cardList');
+    const empty = document.getElementById('emptyState');
+    if (sets.length === 0) { empty.style.display = ''; return; }
+    list.innerHTML = sets.map(rs => `
+      <div class="card" id="card-${rs.id}">
+        <div class="card-icon">🏔️</div>
+        <div class="card-body">
+          <div style="display:flex;align-items:center;gap:10px">
+            <span class="card-title">${esc(rs.name)}</span>
+            <span class="badge ${rs.is_public ? 'badge-public' : 'badge-private'}">${rs.is_public ? 'Public' : 'Private'}</span>
+          </div>
+          <div class="card-meta">
+            ${rs.lat != null ? `<span>📍 ${rs.lat.toFixed(4)}, ${rs.lon.toFixed(4)}</span>` : ''}
+            ${rs.altitude_m != null ? `<span>⛰️ ${rs.altitude_m} m</span>` : ''}
+            <span>⚙️ ${rs.combination_logic === 'worst_wins' ? 'Worst wins' : 'Majority vote'}</span>
+            ${rs.clone_count > 0 ? `<span>📋 Cloned ${rs.clone_count}×</span>` : ''}
+            <span>${new Date(rs.created_at).toLocaleDateString()}</span>
+          </div>
+          ${rs.description ? `<div style="margin-top:7px;font-size:0.82rem;color:#a0aec0">${esc(rs.description)}</div>` : ''}
+        </div>
+        <div class="card-actions">
+          <a href="/ruleset-editor?id=${rs.id}" class="btn btn-ghost">Edit</a>
+          <button class="btn btn-danger" onclick="deleteSet('${rs.id}')">Delete</button>
+        </div>
+      </div>`
+    ).join('');
+  }
+
+  window.deleteSet = async (id) => {
+    if (!confirm('Delete this rule set and all its conditions?')) return;
+    const res = await fetch(`/api/rulesets/${id}`, { method: 'DELETE', headers: authHeader() });
+    if (res.ok) {
+      document.getElementById(`card-${id}`)?.remove();
+      if (!document.querySelector('.card')) document.getElementById('emptyState').style.display = '';
+    }
+  };
+
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, c =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+</script>
+</body>
+</html>

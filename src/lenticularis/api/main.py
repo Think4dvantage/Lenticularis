@@ -30,6 +30,7 @@ from lenticularis.scheduler import CollectorScheduler
 from lenticularis.collectors.meteoswiss import MeteoSwissCollector
 from lenticularis.api.routers import stations as stations_router
 from lenticularis.api.routers import auth as auth_router
+from lenticularis.api.routers import rulesets as rulesets_router
 from lenticularis.database.db import init_db
 
 
@@ -144,6 +145,7 @@ def create_app() -> FastAPI:
     # API routers
     app.include_router(stations_router.router)
     app.include_router(auth_router.router)
+    app.include_router(rulesets_router.router)
 
     # Static files (frontend)
     static_dir = Path(__file__).parent.parent.parent.parent / "static"
@@ -181,6 +183,14 @@ def create_app() -> FastAPI:
         @app.get("/register", include_in_schema=False)
         async def serve_register():
             return FileResponse(str(static_dir / "register.html"))
+
+        @app.get("/rulesets", include_in_schema=False)
+        async def serve_rulesets():
+            return FileResponse(str(static_dir / "rulesets.html"))
+
+        @app.get("/ruleset-editor", include_in_schema=False)
+        async def serve_ruleset_editor():
+            return FileResponse(str(static_dir / "ruleset-editor.html"))
     else:
         @app.get("/", include_in_schema=False)
         async def root():

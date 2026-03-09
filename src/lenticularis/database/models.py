@@ -5,6 +5,8 @@ Tables
 ------
 users            — pilot and admin accounts (local + social login)
 oauth_identities — one row per linked social provider per user
+rulesets         — pilot's rule set (includes site name + coordinates)
+rule_conditions  — individual condition rows within a rule set
 """
 from __future__ import annotations
 
@@ -12,7 +14,7 @@ import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import (
-    Boolean, Column, DateTime, ForeignKey, String, UniqueConstraint,
+    Boolean, Column, DateTime, Float, ForeignKey, Integer, String, UniqueConstraint,
 )
 from sqlalchemy.orm import DeclarativeBase, relationship
 
@@ -69,3 +71,74 @@ class OAuthIdentity(Base):
     )
 
     user = relationship("User", back_populates="oauth_identities")
+
+
+class RuleSet(Base):
+    """One rule set = one pilot's decision profile for a launch site."""
+
+    __tablename__ = "rulesets"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    owner_id = Column(
+        String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+
+    # Site identity (embedded — no separate launch_sites table)
+    name = Column(String, nullable=False)
+    description = Column(String, nullable=True)
+    lat = Column(Float, nullable=True)
+    lon = Column(Float, nullable=True)
+    altitude_m = Column(Integer, nullable=True)
+
+    # Evaluation
+    combination_logic = Column(String, nullable=False, default="worst_wins")  # worst_wins | majority_vote
+
+    # Gallery
+    is_public = Column(Boolean, nullable=False, default=False)
+    clone_count = Column(Integer, nullable=False, default=0)
+    cloned_from_id = Column(String, ForeignKey("rulesets.id", ondelete="SET NULL"), nullable=True)
+
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        nullable=True,
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    conditions = relationship(
+        "RuleCondition", back_populates="ruleset", cascade="all, delete-orphan",
+        order_by="RuleCondition.sort_order",
+    )
+
+
+class RuleCondition(Base):
+    """One condition row in a rule set's condition builder."""
+
+    __tablename__ = "rule_conditions"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    ruleset_id = Column(
+        String, ForeignKey("rulesets.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+
+    # Grouping (NULL = top-level flat list; future: group_id references a condition_groups table)
+    group_id = Column(String, nullable=True)
+
+    # Station reference (per-condition — this is the key design)
+    station_id = Column(String, nullable=False)
+    station_b_id = Column(String, nullable=True)   # only for pressure_delta field
+
+    # Condition definition
+    field = Column(String, nullable=False)          # wind_speed | wind_gust | wind_direction | temperature | humidity | pressure | pressure_delta | precipitation | snow_depth
+    operator = Column(String, nullable=False)       # > | < | >= | <= | = | between | not_between | in_direction_range
+    value_a = Column(Float, nullable=False)
+    value_b = Column(Float, nullable=True)          # upper bound for between / direction range
+
+    result_colour = Column(String, nullable=False, default="red")   # green | orange | red
+    sort_order = Column(Integer, nullable=False, default=0)
+
+    ruleset = relationship("RuleSet", back_populates="conditions")
