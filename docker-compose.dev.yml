@@ -25,7 +25,6 @@ services:
       - "traefik.http.routers.lenticularis-dev.rule=Host(`lenti-dev.lg4.ch`)"
       - "traefik.http.routers.lenticularis-dev.entrypoints=websecure"
       - "traefik.http.routers.lenticularis-dev.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.lenticularis-dev.middlewares=pocket-id-auth@file"
       - "traefik.http.services.lenticularis-dev.loadbalancer.server.port=8000"
     networks:
       - default

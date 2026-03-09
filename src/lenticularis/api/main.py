@@ -145,8 +145,24 @@ def create_app() -> FastAPI:
         app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
         @app.get("/", include_in_schema=False)
-        async def serve_index():
-            return FileResponse(str(static_dir / "index.html"))
+        async def serve_root():
+            return FileResponse(str(static_dir / "stations.html"))
+
+        @app.get("/stations", include_in_schema=False)
+        async def serve_stations():
+            return FileResponse(str(static_dir / "stations.html"))
+
+        @app.get("/stations.html", include_in_schema=False)
+        async def serve_stations_html():
+            return FileResponse(str(static_dir / "stations.html"))
+
+        @app.get("/station-detail", include_in_schema=False)
+        async def serve_station_detail():
+            return FileResponse(str(static_dir / "station-detail.html"))
+
+        @app.get("/station-detail.html", include_in_schema=False)
+        async def serve_station_detail_html():
+            return FileResponse(str(static_dir / "station-detail.html"))
     else:
         @app.get("/", include_in_schema=False)
         async def root():

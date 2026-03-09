@@ -239,6 +239,277 @@ All time-range endpoints accept `?from=&to=` parameters. Best-windows also accep
 
 ---
 
+## Release Milestones
+
+### v0.1 — Station Detail Page (historical data)
+**Goal:** MeteoSwiss data is collected into InfluxDB and a station detail page lets users browse historical charts per station directly by URL — no map required yet.
+
+#### Backend
+- MeteoSwiss collector running on schedule, writing to InfluxDB `weather_data`
+- `GET /api/stations` — list all active stations
+- `GET /api/stations/{station_id}` — station metadata
+- `GET /api/stations/{station_id}/latest` — most recent measurement
+- `GET /api/stations/{station_id}/history?from=&to=&fields=` — time-series query; default window last 24 h; presets 6 h / 24 h / 48 h / 7 days / 30 days
+- Response shape: `{ station: WeatherStation, series: { field: str, unit: str, values: [{timestamp, value}] }[] }`
+- InfluxDB write + latest-query + history-query helpers in `database/influx.py`
+- Docker Compose stack running on homelab
+
+#### Frontend — `static/station-detail.html` + `static/station-detail.js`
+- Page opened as `station-detail.html?station_id={id}`
+- Header: station name, network badge, elevation, canton
+- Time-range selector (6 h / 24 h / 48 h / 7 days / 30 days) → re-fetches and re-renders all charts
+- One Chart.js line/bar chart per available field:
+  - **Wind speed** (km/h line) + **wind gust** (shaded area overlay)
+  - **Wind direction** (scatter plot with direction as 0–360° Y-axis)
+  - **Temperature** (°C line)
+  - **Humidity** (% line)
+  - **Pressure** (hPa line)
+  - **Precipitation** (mm bar chart)
+  - **Snow depth** (cm line, only shown if station reports it)
+- Charts that have no data for the selected window are hidden (not shown as blank)
+- Station list page (`static/stations.html`) — sortable table of all stations with a link to each detail page; persists across all versions
+- `static/index.html` is a placeholder redirect to the map (added in v0.2); v0.1 entry point is `stations.html`
+
+#### Implementation steps for v0.1
+1. Complete MeteoSwiss collector (`collectors/meteoswiss.py`) — all fields normalised, scheduler wired
+2. Implement `GET /api/stations`, `GET /api/stations/{station_id}`, `GET /api/stations/{station_id}/latest` endpoints
+3. Add `query_station_history()` helper to `database/influx.py` and `GET /api/stations/{station_id}/history` endpoint
+4. Create `static/station-detail.html` + `static/station-detail.js` (Chart.js charts, time-range selector)
+5. Create `static/stations.html` — station table with name, network, canton, elevation, and "View history →" link per row
+6. Verify Docker Compose stack deploys cleanly on homelab with Traefik labels
+
+---
+
+### v0.2 — Live Map
+**Goal:** add a Leaflet.js map as the primary landing page (`index.html`); the station table (`stations.html`) and detail pages remain available as secondary views.
+
+- `static/index.html` — Leaflet.js map showing all active weather stations as markers (replaces placeholder)
+- `static/app.js` — fetch `/api/stations`, place markers, bind popup with latest measurement and **"View history →"** link to `station-detail.html?station_id={id}`
+- Navigation header links: **Map** | **Stations** | *(future: Rules / Stats)*
+- No new backend endpoints needed (reuses v0.1 API)
+
+#### Implementation steps for v0.2
+1. Create `static/index.html` Leaflet.js map shell with navigation header
+2. Create `static/app.js` — fetch `/api/stations`, place markers, bind popup with latest measurement and "View history →" link
+3. Add navigation header to `static/stations.html` and `static/station-detail.html` for consistent navigation
+
+---
+
+### v0.3 — Auth & User Management
+**Goal:** secure the application with JWT authentication so only registered pilots can manage their own data.
+
+- SQLite schema + Alembic migrations for all 7 tables (`database/models.py`)
+- Pydantic models: `models/auth.py`, `models/sites.py`, `models/rules.py`, `models/decisions.py`, `models/stats.py`
+- `POST /auth/register`, `POST /auth/login`, `POST /auth/refresh`
+- `get_current_user` FastAPI dependency (JWT bearer)
+- `require_admin` FastAPI dependency
+- All existing station endpoints remain public (read-only); future pilot endpoints require auth
+- `GET /api/admin/users`, `PUT /api/admin/users/{id}` (admin only)
+
+#### Implementation steps for v0.3
+1. Add `python-jose`, `passlib`, `alembic` to `pyproject.toml`
+2. Write SQLAlchemy models for all 7 tables in `database/models.py`
+3. Create Alembic migration for initial schema
+4. Implement `api/routers/auth.py` with register/login/refresh
+5. Add `get_current_user` + `require_admin` dependencies to `api/main.py`
+6. Add `api/routers/admin.py` for user management endpoints
+7. Protect appropriate existing endpoints with the auth dependency
+
+---
+
+### v0.4 — Launch Sites
+**Goal:** pilots can create and manage their own launch sites, visible on the map.
+
+- `GET/POST /api/launch-sites`, `GET/PUT/DELETE /api/launch-sites/{id}`
+- Launch sites owned by the authenticated pilot (`owner_id == current_user.id`)
+- Site markers shown on the Leaflet map (distinct icon from weather station markers)
+- `models/sites.py` fully wired
+
+#### Implementation steps for v0.4
+1. Implement `api/routers/launch_sites.py` with all CRUD endpoints
+2. Register router in `api/main.py`
+3. Add launch site markers to `static/app.js` with a separate layer/icon
+
+---
+
+### v0.5 — SLF Collector + Full Scheduler
+**Goal:** add the SLF (snow depth / temperature) data source and harden the scheduler so both active collectors run reliably.
+
+- Complete `collectors/base.py` (abstract `BaseCollector`)
+- Implement `collectors/slf.py` — snow depth + temperature from SLF open data
+- `scheduler.py` wires MeteoSwiss (10 min) and SLF (30 min) at their configured intervals
+- `GET /api/admin/collectors`, `PUT /api/admin/collectors/{name}` let admin enable/disable and adjust intervals at runtime
+- Unit tests: `normalize_data()` fixture tests for both collectors
+
+#### Implementation steps for v0.5
+1. Finalise `collectors/base.py` abstract interface
+2. Implement `collectors/slf.py` (consult winds-mobi reference repo)
+3. Harden `scheduler.py` — both enabled collectors, error handling per job
+4. Add admin collector endpoints in `api/routers/admin.py`
+5. Write `normalize_data()` unit tests for MeteoSwiss and SLF
+
+---
+
+### v0.6 — Rule Editor (condition builder UI)
+**Goal:** pilots can build per-site rule sets with AND/OR condition trees through a graphical editor.
+
+- SQLite `rulesets` + `rule_conditions` + `condition_groups` tables (from v0.3 schema) fully used
+- `GET/POST /api/rulesets`, `GET/PUT/DELETE /api/rulesets/{id}`
+- `static/editor.js` — condition builder:
+  - Per-row station picker (search/filter all active stations)
+  - Field, operator, value A / value B inputs with inferred units
+  - Station B picker shown only when field = `pressure_delta`
+  - Direction range shows compass graphic
+  - AND/OR group nesting (1 level min)
+  - Combination logic selector (`worst_wins` / `majority_vote`)
+  - Save button posts full condition tree JSON to API
+
+#### Implementation steps for v0.6
+1. Implement `api/routers/rulesets.py` CRUD endpoints
+2. Create `static/editor.html` page shell
+3. Create `static/editor.js` condition builder (station picker, field/op/value rows, AND/OR nesting)
+4. Wire save to `PUT /api/rulesets/{id}`
+
+---
+
+### v0.7 — Rules Evaluator + Traffic Lights on Map
+**Goal:** rule sets are evaluated against live station data; the map shows GREEN/ORANGE/RED badges per launch site.
+
+- `rules/evaluator.py` walks condition tree, fetches latest InfluxDB measurement per station per condition, applies operator logic, resolves combination logic, returns `TrafficLightDecision` with full `condition_results`
+- Writes decision + `condition_results` JSON to `rule_decisions` InfluxDB measurement
+- `POST /api/rulesets/{id}/evaluate` endpoint (on-demand evaluation)
+- Scheduler runs periodic evaluation of all active rulesets (from v0.5 scheduler)
+- `GET /api/decisions?launch_site_id=&from=&to=` endpoint
+- Map (`static/app.js`) shows traffic light badges on launch site markers; clicking shows which conditions triggered
+
+#### Implementation steps for v0.7
+1. Implement `rules/evaluator.py` (condition tree walk, per-condition InfluxDB fetch, operator logic, combination logic)
+2. Add `write_decision()` + `query_decisions()` helpers to `database/influx.py`
+3. Add evaluate endpoint to `api/routers/rulesets.py`
+4. Add `api/routers/decisions.py` for decisions history endpoint
+5. Add evaluation scheduler job in `scheduler.py`
+6. Update `static/app.js` to fetch and display traffic light badges
+
+---
+
+### v0.8 — Statistics Dashboard
+**Goal:** pilots can view historical flyability patterns for their sites.
+
+- `services/stats.py` — Flux queries for all 7 metrics; best-windows algorithm server-side
+- All 7 `GET /api/stats/…` endpoints
+- `static/stats.html` + `static/stats.js`:
+  - Flyable days card
+  - Hourly heatmap (Chart.js)
+  - Monthly bar chart
+  - Seasonal breakdown
+  - Condition trigger leaderboard (with station attribution)
+  - Site comparison chart
+  - Best windows list
+- Time-range filter (`?from=&to=`) on all charts
+
+#### Implementation steps for v0.8
+1. Implement `services/stats.py` with all 7 Flux queries and best-windows algorithm
+2. Add `api/routers/stats.py` with all 7 endpoints
+3. Create `static/stats.html` page shell
+4. Create `static/stats.js` with Chart.js charts for all 7 metrics
+
+---
+
+### v0.9 — Notifications
+**Goal:** pilots receive alerts when a launch site changes traffic light status.
+
+- `services/notifications.py` — status-transition detection; dispatch via email (`aiosmtplib`) and Pushover
+- `notification_configs` SQLite table (from v0.3 schema) fully used
+- `GET/POST/PUT/DELETE /api/notifications` endpoints
+- Notification config UI on the launch site detail page (channel + transition filter)
+- `aiosmtplib` + Pushover HTTP API integration
+
+#### Implementation steps for v0.9
+1. Add `aiosmtplib` to `pyproject.toml`
+2. Implement `services/notifications.py` (transition detection, email + Pushover dispatch)
+3. Call notification service from evaluator after each decision write
+4. Implement `api/routers/notifications.py`
+5. Add notification config UI to launch site detail popup/page
+
+---
+
+### v1.0 — Full MVP Release
+**Goal:** stable, tested, fully deployable release of all core features.
+
+- All endpoints from the API contracts section are implemented and tested
+- Integration test suite: user → site → ruleset → evaluations → stats → notifications
+- Unit tests for all condition operators, pressure delta, AND/OR logic, both combination modes, all 7 stat functions
+- Docker multi-stage `Dockerfile`, `docker-compose.yml` with health checks and `restart: unless-stopped`
+- `docker-compose.dev.yml` with live volume mounts and Traefik labels
+- `README.md` updated with full setup and deployment instructions
+- Mobile-responsive CSS pass on all pages
+
+#### Implementation steps for v1.0
+1. Write pytest unit tests for all collectors, operators, evaluator, stats
+2. Write integration test (full user journey)
+3. Final Docker / docker-compose polish (multi-stage build, health checks)
+4. CSS mobile-responsive pass across all static pages
+5. Update `README.md` with deployment guide
+
+---
+
+### v1.1 — Community Rule Gallery
+**Goal:** pilots can publish their rule sets for others to discover and clone.
+
+- `is_public`, `clone_count`, `cloned_from_id` fields on rulesets fully enforced
+- `GET /api/gallery`, `GET /api/gallery/{id}`, `POST /api/gallery/{id}/clone`
+- Gallery page in the frontend: searchable list of public rule sets, clone button, shows `clone_count`
+- Clone creates an independent copy under the cloning pilot's account
+
+#### Implementation steps for v1.1
+1. Implement `api/routers/gallery.py`
+2. `POST /api/rulesets/{id}/publish` + `unpublish` endpoints
+3. Create `static/gallery.html` + gallery UI in `static/app.js`
+
+---
+
+### v1.2 — Additional Collectors (Holfuy, Windline, Ecovitt)
+**Goal:** add the three API-key-based personal-station networks for pilots who own or use those devices.
+
+> These collectors involve third-party API keys, non-trivial authentication flows, and proprietary data shapes. Deferred until the core product is stable.
+
+- `collectors/holfuy.py` — wind speed / gust / direction (Holfuy API key)
+- `collectors/windline.py` — wind speed / direction (Windline API key)
+- `collectors/ecovitt.py` — full personal weather station sensor set (Ecovitt API key)
+- All three wired into `scheduler.py` and admin collector endpoints
+- Unit tests: `normalize_data()` for each new collector
+
+#### Implementation steps for v1.2
+1. Implement `collectors/holfuy.py` (consult winds-mobi reference repo)
+2. Implement `collectors/windline.py`
+3. Implement `collectors/ecovitt.py`
+4. Add config blocks for each new network in `config.yml.example`
+5. Wire into scheduler and admin endpoints
+6. Write `normalize_data()` unit tests with fixture JSON for each
+
+---
+
+### v2.0 — Polish, Performance & Admin Panel
+**Goal:** production-grade release suitable for a wider pilot community.
+
+- Full admin panel UI: user management (enable/disable accounts, change role), collector status overview with interval controls
+- Wind rose chart on station detail page (replaces direction scatter plot)
+- Offline/stale data indicator — popup badge when latest measurement is older than 2× collection interval
+- Rate-limit on auth endpoints (prevent brute-force)
+- OpenAPI docs reviewed and finalised (`/docs`)
+- Collector reliability: retry logic, exponential back-off, dead-letter log per network
+- Performance: InfluxDB Flux queries reviewed for efficiency; add downsampling task for data older than 90 days
+- Accessibility pass (WCAG AA) on all frontend pages
+- `CHANGELOG.md` maintained from this version onward
+
+---
+
+## Backlog (post-v2.0, unprioritised)
+
+- **Multi-language support** — i18n for all frontend strings (DE/FR/IT/EN); language picker in header; all hardcoded labels extracted to locale files
+
+---
+
 ## Verification
 
 - Unit tests (`pytest`): config loading, each collector's `normalize_data()`, all condition operators, pressure delta, AND/OR group logic, both combination modes, all 7 statistics metric functions with fixture data
@@ -258,4 +529,4 @@ All time-range endpoints accept `?from=&to=` parameters. Best-windows also accep
 - Best-windows metric computed server-side (not Flux) for simplicity
 - Rule sharing is clone-only (no co-editing); private by default, opt-in publish
 - Chart.js for all charts (lightweight, no framework required)
-- All 5 data sources in scope from v1 
+- MeteoSwiss and SLF are the primary collectors (open data, no API keys); Holfuy, Windline, and Ecovitt are deferred to v1.2

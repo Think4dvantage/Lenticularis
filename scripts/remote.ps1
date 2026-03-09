@@ -8,8 +8,8 @@
     Requires only the built-in Windows SSH client (OpenSSH, shipped with
     Windows 10 1803+ and Windows 11).
 
-    Remote host : 172.18.10.50
-    SSH user    : raphael
+    SSH alias   : xpsex  (defined in ~/.ssh/config — hostname, user and
+                          identity file are all resolved from there)
     Remote path : ~/lenticularis
 
 .EXAMPLE
@@ -56,11 +56,10 @@ $ErrorActionPreference = "Stop"
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-$REMOTE_HOST = "172.18.10.50"
-$REMOTE_USER = "raphael"
+# SSH alias defined in ~/.ssh/config — hostname, user and identity file are
+# all resolved from there, so no -i flag or user@host is needed here.
+$SSH_TARGET  = "xpsex"
 $REMOTE_DIR  = "~/lenticularis"
-$SSH_TARGET  = "${REMOTE_USER}@${REMOTE_HOST}"
-$SSH_KEY     = "$HOME\.ssh\id_lg4"         # identity file used for all SSH operations
 
 # Docker Compose command — always layered: base + dev overlay
 $COMPOSE_CMD = "docker compose -f docker-compose.yml -f docker-compose.dev.yml"
@@ -92,9 +91,9 @@ function Write-Header([string]$msg) {
 
 function Invoke-SSH([string]$remoteCmd, [switch]$Interactive) {
     if ($Interactive) {
-        ssh -i "$SSH_KEY" -t "$SSH_TARGET" $remoteCmd
+        ssh -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -t "$SSH_TARGET" $remoteCmd
     } else {
-        ssh -i "$SSH_KEY" "$SSH_TARGET" $remoteCmd
+        ssh -o ServerAliveInterval=15 -o ServerAliveCountMax=4 "$SSH_TARGET" $remoteCmd
     }
     if ($LASTEXITCODE -ne 0) {
         Write-Error "SSH command failed (exit $LASTEXITCODE): $remoteCmd"
@@ -102,7 +101,7 @@ function Invoke-SSH([string]$remoteCmd, [switch]$Interactive) {
 }
 
 function Sync-Files {
-    Write-Header "Syncing project files to ${SSH_TARGET}:${REMOTE_DIR}"
+    Write-Header "Syncing project files → ${SSH_TARGET}:${REMOTE_DIR}"
 
     $localDir = (Get-Location).Path
     Write-Host "  Source : $localDir" -ForegroundColor Gray
@@ -111,10 +110,9 @@ function Sync-Files {
     # Build tar exclude arguments
     $excludeArgs = ($SYNC_EXCLUDES | ForEach-Object { "--exclude=./$_" })
 
-    # Write tar to a temp file so Windows binary pipeline issues are avoided
+    # Create local archive
     $tmpTar = [System.IO.Path]::GetTempFileName() -replace '\.tmp$', '.tar.gz'
     try {
-        # Use tar.exe (ships with Windows 10 1803+)
         $tarArgs = @("-czf", $tmpTar) + $excludeArgs + @("-C", $localDir, ".")
         & tar @tarArgs
         if ($LASTEXITCODE -ne 0) { Write-Error "tar failed creating archive" }
@@ -122,11 +120,25 @@ function Sync-Files {
         $tmpSize = [math]::Round((Get-Item $tmpTar).Length / 1MB, 1)
         Write-Host "  Archive: $tmpSize MB" -ForegroundColor Gray
 
-        # Copy archive to remote and extract
-        scp -i "$SSH_KEY" -q "$tmpTar" "${SSH_TARGET}:/tmp/lenti-sync.tar.gz"
-        if ($LASTEXITCODE -ne 0) { Write-Error "scp failed" }
+        # Stream archive directly through a single SSH connection.
+        # Using Start-Process with -RedirectStandardInput avoids the two-connection
+        # problem (scp upload + separate ssh extract) that fails on flaky WiFi.
+        # /usr/bin/tar is used explicitly because the interactive PATH on the
+        # remote host has a broken 'tar' alias (resolves to 'ar').
+        Write-Host "  Uploading and extracting…" -ForegroundColor Gray
+        $proc = Start-Process -FilePath "ssh" `
+            -ArgumentList @(
+                "-o", "ServerAliveInterval=15",
+                "-o", "ServerAliveCountMax=4",
+                "$SSH_TARGET",
+                "mkdir -p $REMOTE_DIR && /usr/bin/tar xzf - -C $REMOTE_DIR"
+            ) `
+            -RedirectStandardInput $tmpTar `
+            -NoNewWindow -Wait -PassThru
 
-        Invoke-SSH "mkdir -p $REMOTE_DIR && tar xzf /tmp/lenti-sync.tar.gz -C $REMOTE_DIR && rm /tmp/lenti-sync.tar.gz"
+        if ($proc.ExitCode -ne 0) {
+            Write-Error "SSH stream-extract failed (exit $($proc.ExitCode))"
+        }
     } finally {
         Remove-Item $tmpTar -ErrorAction SilentlyContinue
     }
@@ -135,13 +147,13 @@ function Sync-Files {
 }
 
 function Test-SSHConnectivity {
-    Write-Header "Testing SSH connectivity to $SSH_TARGET (key: $SSH_KEY)"
-    $result = ssh -i "$SSH_KEY" -o ConnectTimeout=5 -o BatchMode=yes "$SSH_TARGET" "echo ok" 2>&1
+    Write-Header "Testing SSH connectivity to $SSH_TARGET"
+    $result = ssh -o ConnectTimeout=10 -o ServerAliveInterval=15 -o BatchMode=yes "$SSH_TARGET" "echo ok" 2>&1
     if ($LASTEXITCODE -ne 0) {
         Write-Host "  Cannot connect. Check:" -ForegroundColor Yellow
-        Write-Host "    1. Key file exists  : $SSH_KEY" -ForegroundColor Yellow
-        Write-Host "    2. Key is authorised: ssh-copy-id -i '$SSH_KEY.pub' $SSH_TARGET" -ForegroundColor Yellow
-        Write-Host "    3. Host is reachable: ping $REMOTE_HOST" -ForegroundColor Yellow
+        Write-Host "    1. SSH alias exists : entry 'Host xpsex' in ~/.ssh/config" -ForegroundColor Yellow
+        Write-Host "    2. Key is authorised: ssh-copy-id -i <pub key> <user@host>" -ForegroundColor Yellow
+        Write-Host "    3. Host is reachable from this network" -ForegroundColor Yellow
         return $false
     }
     Write-Host "  SSH OK" -ForegroundColor Green
@@ -155,36 +167,10 @@ function Test-SSHConnectivity {
 function Invoke-Setup {
     Write-Header "First-time setup"
 
-    # Verify the configured key exists
-    if (-not (Test-Path $SSH_KEY)) {
-        Write-Error "SSH key not found: $SSH_KEY`nUpdate `$SSH_KEY in this script to point to your private key."
-        exit 1
-    }
-    $pubKeyFile = "${SSH_KEY}.pub"
-    if (-not (Test-Path $pubKeyFile)) {
-        Write-Error "SSH public key not found: $pubKeyFile"
-        exit 1
-    }
-
-    $pubKey = Get-Content $pubKeyFile
-    Write-Host "  Using key: $SSH_KEY" -ForegroundColor Gray
+    Write-Host "  SSH alias : $SSH_TARGET" -ForegroundColor Gray
+    Write-Host "  Ensure 'Host $SSH_TARGET' is defined in ~/.ssh/config with" -ForegroundColor Gray
+    Write-Host "  HostName, User, and IdentityFile set correctly." -ForegroundColor Gray
     Write-Host ""
-
-    # Attempt key-based auth first — if it already works, skip the manual step
-    $already = ssh -i "$SSH_KEY" -o ConnectTimeout=5 -o BatchMode=yes "$SSH_TARGET" "echo ok" 2>&1
-    if ($LASTEXITCODE -eq 0) {
-        Write-Host "  Key already authorised on $REMOTE_HOST — skipping key copy step." -ForegroundColor Green
-    } else {
-        Write-Host "  Copying public key to $SSH_TARGET (password required once)..." -ForegroundColor Cyan
-        # Push key via password-authenticated SSH (last time password is needed)
-        ssh -i "$SSH_KEY" "$SSH_TARGET" "mkdir -p ~/.ssh && chmod 700 ~/.ssh && echo '$pubKey' >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys && echo 'Key added'"
-        if ($LASTEXITCODE -ne 0) {
-            Write-Error "Failed to copy key. Authorise it manually:`n  ssh-copy-id -i '$pubKeyFile' $SSH_TARGET"
-            exit 1
-        }
-    }
-
-    $ready = "" # no prompt needed — auto-continue
 
     if (-not (Test-SSHConnectivity)) {
         exit 1
@@ -204,12 +190,12 @@ function Invoke-Deploy {
     if (-not (Test-SSHConnectivity)) { exit 1 }
     Sync-Files
 
-    Write-Header "Building and starting DEV services on $REMOTE_HOST"
+    Write-Header "Building and starting DEV services on $SSH_TARGET"
     Invoke-SSH "cd $REMOTE_DIR && $COMPOSE_CMD up --build -d"
     Write-Host ""
-    Write-Host "Services started. Dashboard : http://${REMOTE_HOST}:8000" -ForegroundColor Green
-    Write-Host "API docs    : http://${REMOTE_HOST}:8000/docs" -ForegroundColor Green
-    Write-Host "InfluxDB UI : http://${REMOTE_HOST}:8086  (shared homelab instance)" -ForegroundColor Gray
+    Write-Host "Services started. Dashboard : http://${SSH_TARGET}:8000" -ForegroundColor Green
+    Write-Host "API docs    : http://${SSH_TARGET}:8000/docs" -ForegroundColor Green
+    Write-Host "InfluxDB UI : http://${SSH_TARGET}:8086  (shared homelab instance)" -ForegroundColor Gray
     Write-Host ""
     Write-Host "Tail logs with: .\scripts\remote.ps1 logs" -ForegroundColor Gray
 }
@@ -225,7 +211,7 @@ function Invoke-Up {
     if (-not (Test-SSHConnectivity)) { exit 1 }
     Write-Header "Starting services"
     Invoke-SSH "cd $REMOTE_DIR && $COMPOSE_CMD up -d"
-    Write-Host "  Dashboard: http://${REMOTE_HOST}:8000" -ForegroundColor Green
+    Write-Host "  Dashboard: http://${SSH_TARGET}:8000" -ForegroundColor Green
 }
 
 function Invoke-Down {
@@ -238,7 +224,7 @@ function Invoke-Restart {
     if (-not (Test-SSHConnectivity)) { exit 1 }
     Write-Header "Restarting services"
     Invoke-SSH "cd $REMOTE_DIR && $COMPOSE_CMD restart"
-    Write-Host "  Dashboard: http://${REMOTE_HOST}:8000" -ForegroundColor Green
+    Write-Host "  Dashboard: http://${SSH_TARGET}:8000" -ForegroundColor Green
 }
 
 function Invoke-Logs([string]$service = "") {
@@ -257,7 +243,7 @@ function Invoke-Status {
 function Invoke-Shell {
     if (-not (Test-SSHConnectivity)) { exit 1 }
     Write-Header "Opening shell on $SSH_TARGET"
-    ssh -i "$SSH_KEY" -t "$SSH_TARGET" "bash -l"
+    ssh -t "$SSH_TARGET" "bash -l"
 }
 
 function Invoke-Exec {
@@ -270,10 +256,11 @@ function Show-Help {
     Write-Host @"
 
 Lenticularis Remote Management
-  Target: ${SSH_TARGET}:${REMOTE_DIR}
+  SSH alias : $SSH_TARGET  (resolved via ~/.ssh/config)
+  Remote dir: $REMOTE_DIR
 
 Commands:
-  setup     First-time: generate SSH key instructions, verify connectivity
+  setup     Verify SSH connectivity and prepare remote directory
   sync      Push code to remote (no service restart)
   deploy    sync + docker compose up --build  (full redeploy)
   up        Start services (no rebuild)
@@ -284,10 +271,8 @@ Commands:
   shell     SSH into the remote host
   exec      Open bash inside lenticularis-app container
 
-URLs after deploy:
-  Dashboard  http://${REMOTE_HOST}:8000
-  API docs   http://${REMOTE_HOST}:8000/docs
-  InfluxDB   http://${REMOTE_HOST}:8086
+Note: hostname, user and identity file are all defined in ~/.ssh/config
+under 'Host $SSH_TARGET'. The script passes no -i flag or user@host.
 "@ -ForegroundColor White
 }
 

@@ -114,7 +114,7 @@ function renderRow(s) {
   const netBadge = `<span class="network-badge network-${s.network || 'unknown'}">${s.network || '?'}</span>`;
 
   return `<tr>
-    <td title="${s.station_id}">${_esc(s.name)}</td>
+    <td title="${s.station_id}"><a class="station-link" href="station-detail.html?station_id=${encodeURIComponent(s.station_id)}">${_esc(s.name)}</a></td>
     <td>${netBadge}</td>
     <td>${s.canton || '<span class="value-missing">—</span>'}</td>
     <td>${s.elevation != null ? s.elevation : '<span class="value-missing">—</span>'}</td>

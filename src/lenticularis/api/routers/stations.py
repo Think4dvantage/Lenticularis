@@ -144,7 +144,7 @@ async def get_latest(station_id: str, request: Request):
 async def get_history(
     station_id: str,
     request: Request,
-    hours: int = Query(default=24, ge=1, le=168, description="Number of hours of history to return"),
+    hours: int = Query(default=24, ge=1, le=720, description="Number of hours of history to return (max 720 = 30 days)"),
 ):
     """Return time-series data for the last N hours (default 24, max 168)."""
     influx = _get_influx(request)

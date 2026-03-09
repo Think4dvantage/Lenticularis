@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lenticularis — Station Detail</title>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+  <!-- date-fns adapter for Chart.js time axis -->
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: #0f1117;
+      color: #e2e8f0;
+      min-height: 100vh;
+    }
+
+    header {
+      background: #1a1f2e;
+      border-bottom: 1px solid #2d3748;
+      padding: 14px 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .back-link {
+      color: #718096;
+      text-decoration: none;
+      font-size: 0.85rem;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .back-link:hover { color: #a0aec0; }
+
+    .header-title {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .header-title h1 {
+      font-size: 1.2rem;
+      font-weight: 600;
+      color: #90cdf4;
+    }
+
+    .header-meta {
+      display: flex;
+      gap: 12px;
+      font-size: 0.78rem;
+      color: #718096;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .network-badge {
+      display: inline-block;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .network-meteoswiss { background: #2a4365; color: #90cdf4; }
+    .network-holfuy     { background: #22543d; color: #9ae6b4; }
+    .network-slf        { background: #44337a; color: #d6bcfa; }
+    .network-ecovitt    { background: #7b341e; color: #fbd38d; }
+    .network-unknown    { background: #2d3748; color: #a0aec0; }
+
+    .status-bar {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.78rem;
+      color: #718096;
+    }
+    .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+    .dot.green { background: #48bb78; }
+    .dot.grey  { background: #4a5568; }
+
+    .time-range-bar {
+      background: #1a1f2e;
+      padding: 10px 24px;
+      border-bottom: 1px solid #2d3748;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .time-range-bar span {
+      font-size: 0.8rem;
+      color: #718096;
+      margin-right: 4px;
+    }
+
+    .range-btn {
+      background: #2d3748;
+      border: 1px solid #4a5568;
+      border-radius: 6px;
+      color: #a0aec0;
+      padding: 5px 12px;
+      font-size: 0.82rem;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    .range-btn:hover { background: #3a4a5e; color: #e2e8f0; }
+    .range-btn.active { background: #2b6cb0; border-color: #3182ce; color: #fff; }
+
+    .charts-grid {
+      padding: 20px 24px;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(560px, 1fr));
+      gap: 20px;
+    }
+
+    .chart-card {
+      background: #1a1f2e;
+      border: 1px solid #2d3748;
+      border-radius: 8px;
+      padding: 16px;
+    }
+
+    .chart-card h2 {
+      font-size: 0.88rem;
+      font-weight: 600;
+      color: #a0aec0;
+      margin-bottom: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .chart-wrapper {
+      position: relative;
+      height: 200px;
+    }
+
+    .chart-wrapper-rose {
+      position: relative;
+      height: 300px;
+    }
+
+    .loading-overlay {
+      text-align: center;
+      padding: 60px 0;
+      color: #4a5568;
+    }
+
+    .spinner {
+      border: 2px solid #2d3748;
+      border-top: 2px solid #63b3ed;
+      border-radius: 50%;
+      width: 24px;
+      height: 24px;
+      animation: spin 0.8s linear infinite;
+      display: inline-block;
+      margin-bottom: 12px;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .error-banner {
+      background: #742a2a;
+      color: #feb2b2;
+      padding: 12px 24px;
+      font-size: 0.85rem;
+      display: none;
+    }
+
+    .no-data-note {
+      text-align: center;
+      padding: 30px 0;
+      color: #4a5568;
+      font-size: 0.82rem;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <a class="back-link" href="/">← Back to stations</a>
+  <div class="header-title">
+    <h1 id="stationName">Loading…</h1>
+    <div class="header-meta">
+      <span id="networkBadge"></span>
+      <span id="stationCanton"></span>
+      <span id="stationElevation"></span>
+      <span id="stationId" style="font-family:monospace;font-size:0.72rem;color:#718096"></span>
+    </div>
+  </div>
+  <div class="status-bar">
+    <span class="dot grey" id="dbDot"></span>
+    <span id="lastRefresh"></span>
+  </div>
+</header>
+
+<div class="error-banner" id="errorBanner"></div>
+
+<div class="time-range-bar">
+  <span>Show:</span>
+  <button class="range-btn" data-hours="6"   onclick="setRange(6)">6 h</button>
+  <button class="range-btn active" data-hours="24"  onclick="setRange(24)">24 h</button>
+  <button class="range-btn" data-hours="48"  onclick="setRange(48)">48 h</button>
+  <button class="range-btn" data-hours="168" onclick="setRange(168)">7 days</button>
+  <button class="range-btn" data-hours="720" onclick="setRange(720)">30 days</button>
+</div>
+
+<div id="loadingOverlay" class="loading-overlay">
+  <div class="spinner"></div>
+  <p>Loading history…</p>
+</div>
+
+<div class="charts-grid" id="chartsGrid" style="display:none">
+  <!-- Wind speed + gust -->
+  <div class="chart-card" id="card-wind" style="display:none">
+    <h2>Wind speed &amp; gust (km/h)</h2>
+    <div class="chart-wrapper"><canvas id="chart-wind"></canvas></div>
+  </div>
+
+  <!-- Wind direction rose (heatmap) -->
+  <div class="chart-card" id="card-wind_direction" style="display:none">
+    <h2>Wind Direction — Heatmap</h2>
+    <div class="chart-wrapper-rose"><canvas id="chart-wind_direction"></canvas></div>
+  </div>
+
+  <!-- Wind direction line chart -->
+  <div class="chart-card" id="card-wind_direction_line" style="display:none">
+    <h2>Wind Direction — History</h2>
+    <div class="chart-wrapper"><canvas id="chart-wind_direction_line"></canvas></div>
+  </div>
+
+  <!-- Temperature -->
+  <div class="chart-card" id="card-temperature" style="display:none">
+    <h2>Temperature (°C)</h2>
+    <div class="chart-wrapper"><canvas id="chart-temperature"></canvas></div>
+  </div>
+
+  <!-- Humidity -->
+  <div class="chart-card" id="card-humidity" style="display:none">
+    <h2>Humidity (%)</h2>
+    <div class="chart-wrapper"><canvas id="chart-humidity"></canvas></div>
+  </div>
+
+  <!-- Pressure -->
+  <div class="chart-card" id="card-pressure" style="display:none">
+    <h2>Pressure QNH (hPa)</h2>
+    <div class="chart-wrapper"><canvas id="chart-pressure"></canvas></div>
+  </div>
+
+  <!-- Precipitation -->
+  <div class="chart-card" id="card-precipitation" style="display:none">
+    <h2>Precipitation (mm)</h2>
+    <div class="chart-wrapper"><canvas id="chart-precipitation"></canvas></div>
+  </div>
+
+  <!-- Snow depth -->
+  <div class="chart-card" id="card-snow_depth" style="display:none">
+    <h2>Snow depth (cm)</h2>
+    <div class="chart-wrapper"><canvas id="chart-snow_depth"></canvas></div>
+  </div>
+</div>
+
+<div id="noDataNote" class="no-data-note" style="display:none">
+  No data available for the selected time range.
+</div>
+
+<script src="/static/station-detail.js"></script>
+</body>
+</html>
