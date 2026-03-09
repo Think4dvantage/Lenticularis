@@ -146,7 +146,11 @@ def create_app() -> FastAPI:
 
         @app.get("/", include_in_schema=False)
         async def serve_root():
-            return FileResponse(str(static_dir / "stations.html"))
+            return FileResponse(str(static_dir / "index.html"))
+
+        @app.get("/map", include_in_schema=False)
+        async def serve_map():
+            return FileResponse(str(static_dir / "index.html"))
 
         @app.get("/stations", include_in_schema=False)
         async def serve_stations():

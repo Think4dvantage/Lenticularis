@@ -14,27 +14,6 @@
       min-height: 100vh;
     }
 
-    header {
-      background: #1a1f2e;
-      border-bottom: 1px solid #2d3748;
-      padding: 14px 24px;
-      display: flex;
-      align-items: center;
-      gap: 16px;
-    }
-
-    header h1 {
-      font-size: 1.25rem;
-      font-weight: 600;
-      letter-spacing: 0.02em;
-      color: #90cdf4;
-    }
-
-    header .subtitle {
-      font-size: 0.8rem;
-      color: #718096;
-    }
-
     .status-bar {
       display: flex;
       gap: 24px;
@@ -201,18 +180,59 @@
     @keyframes spin { to { transform: rotate(360deg); } }
 
     .value-missing { color: #4a5568; }
+
+    /* ── Shared nav ───────────────────────────── */
+    .top-nav {
+      background: #1a1f2e;
+      border-bottom: 1px solid #2d3748;
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      height: 48px;
+      flex-shrink: 0;
+    }
+    .nav-brand {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: #90cdf4;
+      margin-right: 24px;
+      white-space: nowrap;
+    }
+    .nav-links { display: flex; gap: 2px; flex: 1; }
+    .nav-link {
+      color: #718096;
+      text-decoration: none;
+      font-size: 0.85rem;
+      padding: 6px 14px;
+      border-radius: 6px;
+      transition: background 0.15s, color 0.15s;
+    }
+    .nav-link:hover { background: #2d3748; color: #e2e8f0; }
+    .nav-link.active { background: #2d4a6e; color: #90cdf4; font-weight: 500; }
+    .nav-status {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.78rem;
+      color: #718096;
+      margin-left: auto;
+    }
   </style>
 </head>
 <body>
 
-<header>
-  <h1>🪁 Lenticularis</h1>
-  <span class="subtitle">Swiss Weather — Stations</span>
-  <div class="status-bar" id="statusBar">
-    <span><span class="dot grey" id="dbDot"></span><span id="dbLabel">Connecting…</span></span>
+<nav class="top-nav">
+  <span class="nav-brand">🪁 Lenticularis</span>
+  <div class="nav-links">
+    <a href="/" class="nav-link">Map</a>
+    <a href="/stations" class="nav-link active">Stations</a>
+  </div>
+  <div class="nav-status">
+    <span class="dot grey" id="dbDot"></span>
+    <span id="dbLabel">Connecting…</span>
     <span id="lastRefresh"></span>
   </div>
-</header>
+</nav>
 
 <div class="toolbar">
   <input type="text" id="searchInput" placeholder="Search station or canton…" />

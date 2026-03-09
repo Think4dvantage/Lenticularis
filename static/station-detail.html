@@ -18,25 +18,15 @@
       min-height: 100vh;
     }
 
-    header {
+    .station-header {
       background: #1a1f2e;
       border-bottom: 1px solid #2d3748;
-      padding: 14px 24px;
+      padding: 12px 24px;
       display: flex;
       align-items: center;
       gap: 16px;
       flex-wrap: wrap;
     }
-
-    .back-link {
-      color: #718096;
-      text-decoration: none;
-      font-size: 0.85rem;
-      display: flex;
-      align-items: center;
-      gap: 4px;
-    }
-    .back-link:hover { color: #a0aec0; }
 
     .header-title {
       display: flex;
@@ -180,12 +170,49 @@
       color: #4a5568;
       font-size: 0.82rem;
     }
+
+    /* ── Shared nav ───────────────────────────── */
+    .top-nav {
+      background: #1a1f2e;
+      border-bottom: 1px solid #2d3748;
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      height: 48px;
+      flex-shrink: 0;
+    }
+    .nav-brand {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: #90cdf4;
+      margin-right: 24px;
+      white-space: nowrap;
+      text-decoration: none;
+    }
+    .nav-links { display: flex; gap: 2px; flex: 1; }
+    .nav-link {
+      color: #718096;
+      text-decoration: none;
+      font-size: 0.85rem;
+      padding: 6px 14px;
+      border-radius: 6px;
+      transition: background 0.15s, color 0.15s;
+    }
+    .nav-link:hover { background: #2d3748; color: #e2e8f0; }
+    .nav-link.active { background: #2d4a6e; color: #90cdf4; font-weight: 500; }
   </style>
 </head>
 <body>
 
-<header>
-  <a class="back-link" href="/">← Back to stations</a>
+<nav class="top-nav">
+  <span class="nav-brand">🪁 Lenticularis</span>
+  <div class="nav-links">
+    <a href="/" class="nav-link">Map</a>
+    <a href="/stations" class="nav-link">Stations</a>
+  </div>
+</nav>
+
+<header class="station-header">
   <div class="header-title">
     <h1 id="stationName">Loading…</h1>
     <div class="header-meta">
