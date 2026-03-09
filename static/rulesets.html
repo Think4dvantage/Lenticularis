@@ -108,7 +108,7 @@
 </div>
 
 <script type="module">
-  import { getUser, authHeader, renderNavAuth, isLoggedIn } from '/static/auth.js';
+  import { getUser, authHeader, renderNavAuth, isLoggedIn, fetchAuth } from '/static/auth.js';
 
   renderNavAuth('rulesets');
 
@@ -121,7 +121,7 @@
   }
 
   async function loadRuleSets() {
-    const res = await fetch('/api/rulesets', { headers: authHeader() });
+    const res = await fetchAuth('/api/rulesets');
     if (!res.ok) return;
     const sets = await res.json();
     render(sets);
@@ -158,7 +158,7 @@
 
   window.deleteSet = async (id) => {
     if (!confirm('Delete this rule set and all its conditions?')) return;
-    const res = await fetch(`/api/rulesets/${id}`, { method: 'DELETE', headers: authHeader() });
+    const res = await fetchAuth(`/api/rulesets/${id}`, { method: 'DELETE' });
     if (res.ok) {
       document.getElementById(`card-${id}`)?.remove();
       if (!document.querySelector('.card')) document.getElementById('emptyState').style.display = '';

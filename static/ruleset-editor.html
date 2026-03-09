@@ -254,7 +254,7 @@
 </div>
 
 <script type="module">
-  import { authHeader, renderNavAuth, isLoggedIn, getUser } from '/static/auth.js';
+  import { authHeader, renderNavAuth, isLoggedIn, getUser, fetchAuth } from '/static/auth.js';
 
   if (!isLoggedIn()) { window.location.href = '/login?next=' + encodeURIComponent(location.pathname + location.search); }
   renderNavAuth('rulesets');
@@ -292,7 +292,7 @@
 
   // ── Load stations ──────────────────────────────────────────────────────
   async function loadStations() {
-    const res = await fetch('/api/stations', { headers: authHeader() });
+    const res = await fetchAuth('/api/stations');
     if (!res.ok) return;
     const data = await res.json();
     allStations = data.map(s => ({
@@ -408,7 +408,7 @@
 
   // ── Load existing rule set for editing ────────────────────────────────
   async function loadEdit(id) {
-    const res = await fetch(`/api/rulesets/${id}`, { headers: authHeader() });
+    const res = await fetchAuth(`/api/rulesets/${id}`);
     if (!res.ok) { showError('Could not load rule set.'); return; }
     const rs = await res.json();
 
@@ -452,17 +452,17 @@
 
       if (editId) {
         // Update metadata
-        const r = await fetch(`/api/rulesets/${editId}`, {
+        const r = await fetchAuth(`/api/rulesets/${editId}`, {
           method: 'PUT',
-          headers: { ...authHeader(), 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(meta),
         });
         if (!r.ok) throw new Error(await extractError(r));
       } else {
         // Create
-        const r = await fetch('/api/rulesets', {
+        const r = await fetchAuth('/api/rulesets', {
           method: 'POST',
-          headers: { ...authHeader(), 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(meta),
         });
         if (!r.ok) throw new Error(await extractError(r));
@@ -473,9 +473,9 @@
       }
 
       // Replace conditions
-      const cr = await fetch(`/api/rulesets/${rsId}/conditions`, {
+      const cr = await fetchAuth(`/api/rulesets/${rsId}/conditions`, {
         method: 'PUT',
-        headers: { ...authHeader(), 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ conditions }),
       });
       if (!cr.ok) throw new Error(await extractError(cr));

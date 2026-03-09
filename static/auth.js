@@ -73,6 +73,28 @@ export async function refreshTokens() {
   return true;
 }
 
+/**
+ * Drop-in replacement for fetch() that automatically refreshes the access
+ * token on a 401 and retries once. Redirects to /login if the refresh also
+ * fails (session truly expired).
+ */
+export async function fetchAuth(url, options = {}) {
+  const headers = { ...authHeader(), ...(options.headers || {}) };
+  const res = await fetch(url, { ...options, headers });
+  if (res.status !== 401) return res;
+
+  // Try to refresh
+  const ok = await refreshTokens();
+  if (!ok) {
+    window.location.href = '/login?next=' + encodeURIComponent(location.pathname + location.search);
+    return res;
+  }
+
+  // Retry with fresh token
+  const retryHeaders = { ...authHeader(), ...(options.headers || {}) };
+  return fetch(url, { ...options, headers: retryHeaders });
+}
+
 // Call this on every page to inject the auth nav items.
 // Pass `activePage` as 'map', 'stations', or null for auth pages.
 export function renderNavAuth(activePage) {
