@@ -70,7 +70,8 @@
       gap: 8px; align-items: start;
     }
     .condition-row.grouped {
-      border-left: 3px solid #805ad5;
+      border-left: 4px solid var(--grp-colour, #805ad5);
+      background: color-mix(in srgb, var(--grp-colour, #805ad5) 6%, #0f1117);
     }
 
     .condition-row .station-search {
@@ -132,11 +133,11 @@
     .group-input {
       width: 100%;
       background: #1a1f2e; border: 1px solid #2d3748; border-radius: 6px;
-      padding: 7px 8px; color: #a78bfa; font-size: 0.78rem; outline: none;
-      text-align: center;
+      padding: 7px 8px; color: var(--grp-colour, #a78bfa); font-size: 0.78rem; outline: none;
+      text-align: center; font-weight: 600;
     }
-    .group-input:focus { border-color: #805ad5; }
-    .group-input::placeholder { color: #4a5568; }
+    .group-input:focus { border-color: var(--grp-colour, #805ad5); }
+    .group-input::placeholder { color: #4a5568; font-weight: 400; }
 
     /* station-b sub-search */
     .station-b-wrap { display: none; margin-top: 6px; }
@@ -268,7 +269,13 @@
 
     <div id="conditionList"></div>
 
-    <button class="btn btn-add" id="addCondBtn">＋ Add condition</button>
+    <div class="conditions-header">
+      <span></span>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-ghost" id="sortGroupsBtn" title="Sort rows so AND group members are adjacent">Sort by AND group</button>
+        <button class="btn btn-add" id="addCondBtn">＋ Add condition</button>
+      </div>
+    </div>
 
     <p style="margin-top:14px;font-size:0.78rem;color:#4a5568">
       Each condition targets an independent station. &ldquo;Value B&rdquo; is only used for <em>between</em> and <em>in direction range</em> operators.<br>
@@ -425,6 +432,55 @@
     })).sort((a, b) => a.name.localeCompare(b.name));
   }
 
+  // ── AND group colour palette ──────────────────────────────────────────
+  // A set of visually distinct hues that work on dark backgrounds.
+  const GROUP_PALETTE = [
+    '#f56565', // red
+    '#4299e1', // blue
+    '#48bb78', // green
+    '#ed8936', // orange
+    '#9f7aea', // purple
+    '#38b2ac', // teal
+    '#f6e05e', // yellow
+    '#fc8181', // light red
+    '#76e4f7', // cyan
+    '#fbb6ce', // pink
+  ];
+  const groupColourMap = new Map();   // groupTag → hex colour
+  let groupColourIdx = 0;
+
+  function groupColour(tag) {
+    if (!tag) return null;
+    if (!groupColourMap.has(tag)) {
+      groupColourMap.set(tag, GROUP_PALETTE[groupColourIdx % GROUP_PALETTE.length]);
+      groupColourIdx++;
+    }
+    return groupColourMap.get(tag);
+  }
+
+  function refreshAllGroupColours() {
+    // Walk every condition row and reapply colours based on current input values
+    document.querySelectorAll('.condition-row').forEach(row => {
+      const tag = row.querySelector('.group-input')?.value.trim() || '';
+      applyGroupColour(row, tag);
+    });
+  }
+
+  function applyGroupColour(rowEl, tag) {
+    if (tag) {
+      const colour = groupColour(tag);
+      rowEl.style.setProperty('--grp-colour', colour);
+      rowEl.classList.add('grouped');
+      const gi = rowEl.querySelector('.group-input');
+      if (gi) gi.style.color = colour;
+    } else {
+      rowEl.style.removeProperty('--grp-colour');
+      rowEl.classList.remove('grouped');
+      const gi = rowEl.querySelector('.group-input');
+      if (gi) gi.style.color = '';
+    }
+  }
+
   // ── Condition row ──────────────────────────────────────────────────────
   function makeStationSearch(containerEl, inputClass, hiddenClass, selectedId, placeholder) {
     /** Wire up autocomplete on a station-search input inside containerEl. */
@@ -543,9 +599,14 @@
     // ── AND group visual ──
     const groupInput = el.querySelector('.group-input');
     function updateGroupVisual() {
-      el.classList.toggle('grouped', groupInput.value.trim() !== '');
+      applyGroupColour(el, groupInput.value.trim());
     }
-    groupInput.addEventListener('input', updateGroupVisual);
+    groupInput.addEventListener('input', () => {
+      updateGroupVisual();
+      // When a user removes a group tag, garbage-collect the colour only if
+      // no other row uses that tag any more.
+      refreshAllGroupColours();
+    });
     updateGroupVisual();
 
     // ── Remove button ──
@@ -706,6 +767,23 @@
     return String(s).replace(/[&<>"']/g, c =>
       ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
+
+  // ── Sort conditions by AND group ──────────────────────────────────────
+  document.getElementById('sortGroupsBtn').addEventListener('click', () => {
+    const list = document.getElementById('conditionList');
+    const rows = [...list.querySelectorAll('.condition-row')];
+    // Stable sort: grouped rows cluster together (preserving original insertion
+    // order within a group), ungrouped rows stay at the back.
+    rows.sort((a, b) => {
+      const ga = a.querySelector('.group-input')?.value.trim() || '';
+      const gb = b.querySelector('.group-input')?.value.trim() || '';
+      if (ga === gb) return 0;
+      if (!ga) return 1;   // ungrouped → end
+      if (!gb) return -1;
+      return ga.localeCompare(gb);
+    });
+    rows.forEach(r => list.appendChild(r));  // re-insert in sorted order
+  });
 
   // ── Init ──────────────────────────────────────────────────────────────
   document.getElementById('rsPublic').addEventListener('change', updatePublicLabel);
