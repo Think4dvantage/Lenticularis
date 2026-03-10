@@ -158,7 +158,16 @@
     .error-msg.visible { display: block; }
     .success-msg { background: #1a3a2e; border: 1px solid #276749; border-radius: 7px; color: #68d391; font-size: 0.82rem; padding: 9px 12px; margin-bottom: 16px; display: none; }
     .success-msg.visible { display: block; }
+
+    /* ── Location map picker ── */
+    #locationMap {
+      width: 100%; height: 280px; border-radius: 8px;
+      border: 1px solid #2d3748; margin-bottom: 14px;
+      background: #0f1117; z-index: 0;
+    }
+    .map-hint { font-size: 0.73rem; color: #4a5568; margin-top: -10px; margin-bottom: 14px; }
   </style>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
 </head>
 <body>
 
@@ -190,6 +199,11 @@
         <input type="text" id="rsName" placeholder="e.g. Beatenberg Südstart" maxlength="120" required />
       </div>
     </div>
+
+    <!-- map picker -->
+    <div id="locationMap"></div>
+    <p class="map-hint">📍 Click anywhere on the map to place the launch site pin &mdash; or type coordinates directly below.</p>
+
     <div class="form-row three" style="margin-bottom:14px">
       <div class="form-group">
         <label for="rsLat">Latitude</label>
@@ -290,11 +304,82 @@
   <option value="337.5">NNW</option>
 </datalist>
 
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV/XN/WLs=" crossorigin=""></script>
 <script type="module">
   import { authHeader, renderNavAuth, isLoggedIn, getUser, fetchAuth } from '/static/auth.js';
 
   if (!isLoggedIn()) { window.location.href = '/login?next=' + encodeURIComponent(location.pathname + location.search); }
   renderNavAuth('rulesets');
+
+  // ── Location map picker ────────────────────────────────────────────────────
+  // Switzerland centre, zoom 8
+  const MAP_DEFAULT = { lat: 46.8, lon: 8.2, zoom: 8 };
+
+  const locationMap = L.map('locationMap', {
+    center: [MAP_DEFAULT.lat, MAP_DEFAULT.lon],
+    zoom: MAP_DEFAULT.zoom,
+    zoomControl: true,
+  });
+
+  L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+    attribution: '\u00a9 OpenTopoMap contributors',
+    maxZoom: 17,
+  }).addTo(locationMap);
+
+  // Custom small marker so it looks crisp on dark bg
+  const pinIcon = L.divIcon({
+    className: '',
+    html: '<div style="width:20px;height:20px;background:#4299e1;border:3px solid #fff;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,.5)"></div>',
+    iconSize: [20, 20],
+    iconAnchor: [10, 10],
+  });
+
+  let locationMarker = null;
+
+  function setPin(lat, lon, panTo = true) {
+    if (locationMarker) {
+      locationMarker.setLatLng([lat, lon]);
+    } else {
+      locationMarker = L.marker([lat, lon], { icon: pinIcon, draggable: true }).addTo(locationMap);
+      locationMarker.on('dragend', () => {
+        const { lat: la, lng: lo } = locationMarker.getLatLng();
+        syncInputsFromPin(la, lo);
+      });
+    }
+    if (panTo) locationMap.panTo([lat, lon]);
+  }
+
+  function syncInputsFromPin(lat, lon) {
+    document.getElementById('rsLat').value = lat.toFixed(5);
+    document.getElementById('rsLon').value = lon.toFixed(5);
+  }
+
+  // Click on map → drop/move pin
+  locationMap.on('click', (e) => {
+    setPin(e.latlng.lat, e.latlng.lng);
+    syncInputsFromPin(e.latlng.lat, e.latlng.lng);
+  });
+
+  // Typing in lat/lon inputs → move pin
+  function onCoordInput() {
+    const lat = parseFloat(document.getElementById('rsLat').value);
+    const lon = parseFloat(document.getElementById('rsLon').value);
+    if (!isNaN(lat) && !isNaN(lon) && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180) {
+      setPin(lat, lon, true);
+    }
+  }
+  document.getElementById('rsLat').addEventListener('input', onCoordInput);
+  document.getElementById('rsLon').addEventListener('input', onCoordInput);
+
+  // Expose function for loadEdit to call after populating the fields
+  function initPinFromInputs() {
+    const lat = parseFloat(document.getElementById('rsLat').value);
+    const lon = parseFloat(document.getElementById('rsLon').value);
+    if (!isNaN(lat) && !isNaN(lon)) {
+      setPin(lat, lon, true);
+      locationMap.setView([lat, lon], 13);
+    }
+  }
 
   // ── State ──────────────────────────────────────────────────────────────
   const params = new URLSearchParams(location.search);
@@ -518,6 +603,9 @@
     document.getElementById('rsLogic').value   = rs.combination_logic || 'worst_wins';
     document.getElementById('rsPublic').checked = rs.is_public || false;
     updatePublicLabel();
+
+    // Place pin on map after filling in coordinates
+    initPinFromInputs();
 
     for (const c of rs.conditions) makeCondRow(c);
   }
