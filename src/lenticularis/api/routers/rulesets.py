@@ -18,7 +18,7 @@ import uuid
 import logging
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -27,6 +27,7 @@ from lenticularis.database.db import get_db
 from lenticularis.database.models import RuleCondition, RuleSet, User
 from lenticularis.models.rules import (
     ConditionsReplaceRequest,
+    EvaluationResult,
     RuleSetCreate,
     RuleSetDetail,
     RuleSetOut,
@@ -100,6 +101,40 @@ def create_ruleset(
     db.refresh(rs)
     logger.info("RuleSet created: %s by %s", rs.id, current_user.id)
     return rs
+
+
+# ---------------------------------------------------------------------------
+# Evaluate — compute current GREEN/ORANGE/RED decision from live station data
+# ---------------------------------------------------------------------------
+
+@router.get("/{ruleset_id}/evaluate", response_model=EvaluationResult)
+def evaluate_ruleset(
+    ruleset_id: str,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    rs = db.get(RuleSet, ruleset_id)
+    if rs is None:
+        raise HTTPException(status_code=404, detail="Rule set not found")
+    if rs.owner_id != current_user.id and not rs.is_public:
+        raise HTTPException(status_code=403, detail="Not your rule set")
+
+    if not rs.conditions:
+        return EvaluationResult(
+            decision="green",
+            evaluated_at=datetime.now(timezone.utc).isoformat(),
+            condition_results=[],
+            no_data_stations=[],
+        )
+
+    from lenticularis.rules.evaluator import run_evaluation, write_decision
+
+    influx = request.app.state.influx
+    result = run_evaluation(rs, influx)
+    write_decision(rs, result, influx)
+    logger.info("Evaluated ruleset %s → %s (no-data: %s)", rs.id, result["decision"], result["no_data_stations"])
+    return result
 
 
 # ---------------------------------------------------------------------------

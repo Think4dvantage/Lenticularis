@@ -66,11 +66,11 @@
       background: #0f1117; border: 1px solid #2d3748; border-radius: 8px;
       padding: 14px 16px; margin-bottom: 10px;
       display: grid;
-      grid-template-columns: 1fr 140px 110px 90px 90px 90px 36px;
-      gap: 8px; align-items: center;
+      grid-template-columns: 1fr 140px 110px 90px 90px 90px 60px 36px;
+      gap: 8px; align-items: start;
     }
-    .condition-row.has-value-b {
-      grid-template-columns: 1fr 140px 110px 90px 90px 90px 36px;
+    .condition-row.grouped {
+      border-left: 3px solid #805ad5;
     }
 
     .condition-row .station-search {
@@ -124,9 +124,23 @@
 
     .conditions-labels {
       display: grid;
-      grid-template-columns: 1fr 140px 110px 90px 90px 90px 36px;
+      grid-template-columns: 1fr 140px 110px 90px 90px 90px 60px 36px;
       gap: 8px; padding: 0 16px; margin-bottom: 4px;
     }
+
+    /* AND group input */
+    .group-input {
+      width: 100%;
+      background: #1a1f2e; border: 1px solid #2d3748; border-radius: 6px;
+      padding: 7px 8px; color: #a78bfa; font-size: 0.78rem; outline: none;
+      text-align: center;
+    }
+    .group-input:focus { border-color: #805ad5; }
+    .group-input::placeholder { color: #4a5568; }
+
+    /* station-b sub-search */
+    .station-b-wrap { display: none; margin-top: 6px; }
+    .station-b-label { font-size: 0.65rem; color: #718096; margin-bottom: 3px; }
 
     /* ── Buttons ── */
     .btn { display: inline-flex; align-items: center; gap: 7px; padding: 9px 18px; border-radius: 7px; font-size: 0.88rem; font-weight: 500; cursor: pointer; border: none; transition: background 0.15s; }
@@ -234,6 +248,7 @@
       <span class="col-label">Value A</span>
       <span class="col-label">Value B</span>
       <span class="col-label">If met →</span>
+      <span class="col-label" title="Conditions sharing the same AND group tag are ALL required (ANDed)">AND grp</span>
       <span></span>
     </div>
 
@@ -242,7 +257,10 @@
     <button class="btn btn-add" id="addCondBtn">＋ Add condition</button>
 
     <p style="margin-top:14px;font-size:0.78rem;color:#4a5568">
-      Each condition targets an independent station. "Value B" is only used for <em>between</em> and <em>in direction range</em> operators.
+      Each condition targets an independent station. &ldquo;Value B&rdquo; is only used for <em>between</em> and <em>in direction range</em> operators.<br>
+      Use <strong>AND grp</strong> to group conditions with AND logic (e.g. type <code>1</code> on two rows to AND them).<br>
+      Direction compass: N=0° &nbsp;NE=45° &nbsp;E=90° &nbsp;SE=135° &nbsp;S=180° &nbsp;SW=225° &nbsp;W=270° &nbsp;NW=315°<br>
+      <span style="color:#f6ad55">⚠ Use <em>between A and B</em> for middle ranges to avoid overlapping triggers. E.g. &ldquo;gusts &lt; 35 = orange&rdquo; also fires at 20 km/h unless you write &ldquo;between 25 and 35 = orange&rdquo;.</span>
     </p>
   </div>
 
@@ -253,6 +271,25 @@
   </div>
 </div>
 
+<datalist id="compassDirs">
+  <option value="0">N</option>
+  <option value="22.5">NNE</option>
+  <option value="45">NE</option>
+  <option value="67.5">ENE</option>
+  <option value="90">E</option>
+  <option value="112.5">ESE</option>
+  <option value="135">SE</option>
+  <option value="157.5">SSE</option>
+  <option value="180">S</option>
+  <option value="202.5">SSW</option>
+  <option value="225">SW</option>
+  <option value="247.5">WSW</option>
+  <option value="270">W</option>
+  <option value="292.5">WNW</option>
+  <option value="315">NW</option>
+  <option value="337.5">NNW</option>
+</datalist>
+
 <script type="module">
   import { authHeader, renderNavAuth, isLoggedIn, getUser, fetchAuth } from '/static/auth.js';
 
@@ -261,7 +298,7 @@
 
   // ── State ──────────────────────────────────────────────────────────────
   const params = new URLSearchParams(location.search);
-  const editId = params.get('id');
+  let editId = params.get('id');  // mutable: updated after first create
   let allStations = [];   // [{station_id, name, network, canton}]
   let condSeq = 0;
 
@@ -304,44 +341,21 @@
   }
 
   // ── Condition row ──────────────────────────────────────────────────────
-  function makeCondRow(data = {}) {
-    const id = ++condSeq;
-    const el = document.createElement('div');
-    el.className = 'condition-row';
-    el.dataset.condId = id;
+  function makeStationSearch(containerEl, inputClass, hiddenClass, selectedId, placeholder) {
+    /** Wire up autocomplete on a station-search input inside containerEl. */
+    const input = containerEl.querySelector('.' + inputClass);
+    const drop  = containerEl.querySelector('.' + hiddenClass);
 
-    const fieldOpts = FIELDS.map(f => `<option value="${f.v}"${data.field === f.v ? ' selected' : ''}>${f.l}</option>`).join('');
-    const opOpts    = OPS.map(o => `<option value="${o.v}"${data.operator === o.v ? ' selected' : ''}>${o.l}</option>`).join('');
-
-    el.innerHTML = `
-      <div class="station-search">
-        <input type="text" class="station-input" placeholder="Search station…"
-          data-selected-id="${data.station_id || ''}"
-          value="${data.station_id ? (allStations.find(s => s.station_id === data.station_id)?.name || data.station_id) : ''}" />
-        <div class="station-dropdown"></div>
-      </div>
-      <select class="cond-select field-select">${fieldOpts}</select>
-      <select class="cond-select op-select">${opOpts}</select>
-      <input type="number" class="cond-input val-a" step="any" value="${data.value_a ?? ''}" placeholder="0" />
-      <input type="number" class="cond-input val-b" step="any" value="${data.value_b ?? ''}" placeholder="0" />
-      <select class="cond-select colour-select">
-        <option value="green"  ${data.result_colour === 'green'  ? 'selected' : ''} class="colour-green">🟢 Green</option>
-        <option value="orange" ${data.result_colour === 'orange' ? 'selected' : ''} class="colour-orange">🟠 Orange</option>
-        <option value="red"    ${(!data.result_colour || data.result_colour === 'red') ? 'selected' : ''} class="colour-red">🔴 Red</option>
-      </select>
-      <button class="btn-remove" title="Remove condition">✕</button>`;
-
-    const list = document.getElementById('conditionList');
-    list.appendChild(el);
-
-    // Wire up station search
-    const input = el.querySelector('.station-input');
-    const drop  = el.querySelector('.station-dropdown');
+    // Pre-fill display name from already-loaded stations
+    if (selectedId && !input.value) {
+      const st = allStations.find(s => s.station_id === selectedId);
+      if (st) input.value = st.name;
+    }
 
     input.addEventListener('input', () => {
       const q = input.value.toLowerCase();
       const matches = allStations.filter(s =>
-        s.name.toLowerCase().includes(q) || s.station_id.toLowerCase().includes(q) || s.canton.toLowerCase().includes(q)
+        s.name.toLowerCase().includes(q) || s.station_id.toLowerCase().includes(q) || (s.canton || '').toLowerCase().includes(q)
       ).slice(0, 20);
       drop.innerHTML = matches.map(s => `
         <div class="station-option" data-id="${s.station_id}">
@@ -363,21 +377,93 @@
     });
 
     document.addEventListener('click', (e) => {
-      if (!el.contains(e.target)) drop.classList.remove('open');
+      if (!containerEl.contains(e.target)) drop.classList.remove('open');
     }, { passive: true });
+  }
 
-    // Show/hide value B based on operator
-    const opSel = el.querySelector('.op-select');
-    const valB  = el.querySelector('.val-b');
+  function makeCondRow(data = {}) {
+    const id = ++condSeq;
+    const el = document.createElement('div');
+    el.className = 'condition-row';
+    el.dataset.condId = id;
 
-    function updateValB() {
-      valB.style.opacity = TWO_VALUE_OPS.has(opSel.value) ? '1' : '0.2';
-      valB.disabled = !TWO_VALUE_OPS.has(opSel.value);
+    const fieldOpts = FIELDS.map(f => `<option value="${f.v}"${data.field === f.v ? ' selected' : ''}>${f.l}</option>`).join('');
+    const opOpts    = OPS.map(o => `<option value="${o.v}"${data.operator === o.v ? ' selected' : ''}>${o.l}</option>`).join('');
+    const groupVal  = esc(data.group_id || '');
+    const staBName  = data.station_b_id ? (allStations.find(s => s.station_id === data.station_b_id)?.name || data.station_b_id) : '';
+
+    el.innerHTML = `
+      <div class="station-search">
+        <input type="text" class="station-input" placeholder="Search station…"
+          data-selected-id="${esc(data.station_id || '')}"
+          value="${data.station_id ? esc(allStations.find(s => s.station_id === data.station_id)?.name || data.station_id) : ''}" />
+        <div class="station-dropdown"></div>
+        <div class="station-b-wrap">
+          <div class="station-b-label">Compare with station (B):</div>
+          <input type="text" class="station-input station-b-input" placeholder="Search station B…"
+            data-selected-id="${esc(data.station_b_id || '')}"
+            value="${staBName ? esc(staBName) : ''}" />
+          <div class="station-b-dropdown station-dropdown"></div>
+        </div>
+      </div>
+      <select class="cond-select field-select">${fieldOpts}</select>
+      <select class="cond-select op-select">${opOpts}</select>
+      <input type="number" class="cond-input val-a" step="any" value="${data.value_a ?? ''}" placeholder="0" />
+      <input type="number" class="cond-input val-b" step="any" value="${data.value_b ?? ''}" placeholder="0" />
+      <select class="cond-select colour-select">
+        <option value="green"  ${data.result_colour === 'green'  ? 'selected' : ''} class="colour-green">🟢 Green</option>
+        <option value="orange" ${data.result_colour === 'orange' ? 'selected' : ''} class="colour-orange">🟠 Orange</option>
+        <option value="red"    ${(!data.result_colour || data.result_colour === 'red') ? 'selected' : ''} class="colour-red">🔴 Red</option>
+      </select>
+      <input type="text" class="group-input" placeholder="—" maxlength="20"
+        value="${groupVal}" title="AND group: rows with the same tag are ANDed together" />
+      <button class="btn-remove" title="Remove condition">✕</button>`;
+
+    const list = document.getElementById('conditionList');
+    list.appendChild(el);
+
+    // ── Station A autocomplete ──
+    makeStationSearch(el.querySelector('.station-search'), 'station-input', 'station-dropdown', data.station_id || '', 'Search station…');
+
+    // ── Station B autocomplete (for pressure_delta) ──
+    const staBWrap = el.querySelector('.station-b-wrap');
+    makeStationSearch(staBWrap, 'station-b-input', 'station-b-dropdown', data.station_b_id || '', 'Search station B…');
+
+    // ── Show/hide value B and station B based on field/operator ──
+    const fieldSel = el.querySelector('.field-select');
+    const opSel    = el.querySelector('.op-select');
+    const valA     = el.querySelector('.val-a');
+    const valB     = el.querySelector('.val-b');
+
+    function updateDynamic() {
+      const isPressureDelta = fieldSel.value === 'pressure_delta';
+      const isDirection     = fieldSel.value === 'wind_direction';
+      const needsB          = TWO_VALUE_OPS.has(opSel.value);
+
+      // Station B visibility
+      staBWrap.style.display = isPressureDelta ? 'block' : 'none';
+
+      // Value B
+      valB.style.opacity = needsB ? '1' : '0.2';
+      valB.disabled = !needsB;
+
+      // Compass datalist helper on direction fields
+      valA.setAttribute('list', isDirection ? 'compassDirs' : '');
+      valB.setAttribute('list', isDirection ? 'compassDirs' : '');
     }
-    opSel.addEventListener('change', updateValB);
-    updateValB();
+    fieldSel.addEventListener('change', updateDynamic);
+    opSel.addEventListener('change', updateDynamic);
+    updateDynamic();
 
-    // Remove button
+    // ── AND group visual ──
+    const groupInput = el.querySelector('.group-input');
+    function updateGroupVisual() {
+      el.classList.toggle('grouped', groupInput.value.trim() !== '');
+    }
+    groupInput.addEventListener('input', updateGroupVisual);
+    updateGroupVisual();
+
+    // ── Remove button ──
     el.querySelector('.btn-remove').addEventListener('click', () => el.remove());
   }
 
@@ -389,18 +475,29 @@
     rows.forEach((row, i) => {
       const stationId = row.querySelector('.station-input').dataset.selectedId;
       if (!stationId) { valid = false; return; }
-      const op = row.querySelector('.op-select').value;
-      const valA = parseFloat(row.querySelector('.val-a').value);
+      const field  = row.querySelector('.field-select').value;
+      const op     = row.querySelector('.op-select').value;
+      const valA   = parseFloat(row.querySelector('.val-a').value);
       const valBEl = row.querySelector('.val-b');
-      const valB = TWO_VALUE_OPS.has(op) && valBEl.value !== '' ? parseFloat(valBEl.value) : null;
+      const valB   = TWO_VALUE_OPS.has(op) && valBEl.value !== '' ? parseFloat(valBEl.value) : null;
+      const groupRaw = row.querySelector('.group-input')?.value.trim() || '';
+
+      // Station B: only relevant for pressure_delta
+      const staBInput = row.querySelector('.station-b-input');
+      const staBId    = (field === 'pressure_delta' && staBInput?.dataset.selectedId)
+                          ? staBInput.dataset.selectedId
+                          : null;
+
       result.push({
-        station_id: stationId,
-        field: row.querySelector('.field-select').value,
-        operator: op,
-        value_a: isNaN(valA) ? 0 : valA,
-        value_b: valB,
+        station_id:    stationId,
+        station_b_id:  staBId,
+        field,
+        operator:      op,
+        value_a:       isNaN(valA) ? 0 : valA,
+        value_b:       valB,
         result_colour: row.querySelector('.colour-select').value,
-        sort_order: i,
+        sort_order:    i,
+        group_id:      groupRaw || null,
       });
     });
     return valid ? result : null;
@@ -468,6 +565,7 @@
         if (!r.ok) throw new Error(await extractError(r));
         const created = await r.json();
         rsId = created.id;
+        editId = rsId;  // make subsequent saves update instead of create
         // Update URL without reload so a second save becomes an edit
         history.replaceState(null, '', `/ruleset-editor?id=${rsId}`);
       }

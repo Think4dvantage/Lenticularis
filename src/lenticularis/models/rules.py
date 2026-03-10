@@ -99,3 +99,28 @@ class RuleSetDetail(RuleSetOut):
 class ConditionsReplaceRequest(BaseModel):
     """Replace the full condition list for a rule set in one call."""
     conditions: list[RuleConditionCreate]
+
+
+# ---------------------------------------------------------------------------
+# Evaluation results
+# ---------------------------------------------------------------------------
+
+class ConditionResult(BaseModel):
+    """Result of evaluating one condition (or one member of an AND group)."""
+    condition_id: str
+    station_id: str
+    station_b_id: Optional[str] = None
+    field: str
+    actual_value: Optional[float] = None
+    matched: bool
+    result_colour: ResultColour
+    group_id: Optional[str] = None
+    group_all_matched: Optional[bool] = None
+
+
+class EvaluationResult(BaseModel):
+    """Full evaluation result for a rule set."""
+    decision: ResultColour
+    evaluated_at: str
+    condition_results: list[ConditionResult] = []
+    no_data_stations: list[str] = []

@@ -56,6 +56,13 @@
     .badge-public  { background: #1a3a2e; color: #68d391; border: 1px solid #276749; }
     .badge-private { background: #2d2d1a; color: #d69e2e; border: 1px solid #744210; }
 
+    /* decision badges */
+    .decision-badge { font-size: 0.78rem; font-weight: 700; padding: 3px 10px; border-radius: 6px; letter-spacing: 0.05em; flex-shrink: 0; }
+    .badge-green  { background: #1a3a2e; color: #68d391; border: 1px solid #276749; }
+    .badge-orange { background: #3a2a1a; color: #f6ad55; border: 1px solid #c05621; }
+    .badge-red    { background: #3a1a1a; color: #fc8181; border: 1px solid #7b2020; }
+    .badge-loading { background: #1a1f2e; color: #4a5568; border: 1px solid #2d3748; font-weight: 400; font-size: 0.72rem; }
+
     .empty-state { text-align: center; padding: 60px 20px; color: #4a5568; }
     .empty-state .big { font-size: 2.5rem; margin-bottom: 14px; }
     .empty-state p { margin-bottom: 20px; }
@@ -135,9 +142,10 @@
       <div class="card" id="card-${rs.id}">
         <div class="card-icon">🏔️</div>
         <div class="card-body">
-          <div style="display:flex;align-items:center;gap:10px">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
             <span class="card-title">${esc(rs.name)}</span>
             <span class="badge ${rs.is_public ? 'badge-public' : 'badge-private'}">${rs.is_public ? 'Public' : 'Private'}</span>
+            <span class="decision-badge badge-loading" id="decision-${rs.id}">⏳ …</span>
           </div>
           <div class="card-meta">
             ${rs.lat != null ? `<span>📍 ${rs.lat.toFixed(4)}, ${rs.lon.toFixed(4)}</span>` : ''}
@@ -154,6 +162,28 @@
         </div>
       </div>`
     ).join('');
+
+    // Fire evaluation calls in parallel — update badges as results arrive
+    sets.forEach(rs => evaluateCard(rs.id));
+  }
+
+  async function evaluateCard(id) {
+    const badge = document.getElementById(`decision-${id}`);
+    if (!badge) return;
+    try {
+      const res = await fetchAuth(`/api/rulesets/${id}/evaluate`);
+      if (!res.ok) { badge.remove(); return; }
+      const { decision, condition_results, no_data_stations } = await res.json();
+      if (!condition_results || condition_results.length === 0) { badge.remove(); return; }
+      const labels = { green: '🟢 GREEN', orange: '🟠 ORANGE', red: '🔴 RED' };
+      badge.textContent = labels[decision] || decision.toUpperCase();
+      badge.className = `decision-badge badge-${decision}`;
+      if (no_data_stations && no_data_stations.length) {
+        badge.title = `No data: ${no_data_stations.join(', ')}`;
+      }
+    } catch {
+      badge.remove();
+    }
   }
 
   window.deleteSet = async (id) => {
