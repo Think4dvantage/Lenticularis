@@ -11,7 +11,7 @@
 // ---------------------------------------------------------------------------
 const map = L.map('map', {
   center: [46.6863, 7.8632],
-  zoom: 10,
+  zoom: 11,
   zoomControl: true,
 });
 
@@ -160,22 +160,28 @@ function buildPopup(s) {
 // ---------------------------------------------------------------------------
 // Load stations and place markers
 // ---------------------------------------------------------------------------
+const markerLayer = L.layerGroup().addTo(map);
+
 async function loadStations() {
   try {
-    const res = await fetch('/api/stations');
+    // Cache-buster ensures the browser never serves a stale response
+    const res = await fetch(`/api/stations?_t=${Date.now()}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const stations = await res.json();
+
+    markerLayer.clearLayers();
 
     let placed = 0;
     for (const s of stations) {
       if (s.latitude == null || s.longitude == null) continue;
       L.marker([s.latitude, s.longitude], { icon: markerIcon(s) })
-        .addTo(map)
+        .addTo(markerLayer)
         .bindPopup(buildPopup(s), { maxWidth: 260 });
       placed++;
     }
 
-    setStatus(true, `${placed} station${placed !== 1 ? 's' : ''}`);
+    const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    setStatus(true, `${placed} station${placed !== 1 ? 's' : ''} · ${now}`);
   } catch (err) {
     console.error('Failed to load stations:', err);
     setStatus(false, 'Error');
@@ -188,3 +194,4 @@ function setStatus(ok, label) {
 }
 
 loadStations();
+setInterval(loadStations, 60_000); // refresh arrows + popups every 60 s

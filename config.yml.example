@@ -70,10 +70,48 @@ collectors:
   - name: "windline"
     enabled: false
     interval_minutes: 10
+    config:
+      data_url: "https://m.windline.ch/sensorAjaxData.php"
+      # Windline payload values are treated as m/s and converted to km/h.
+      # Set to "kmh" if Windline account/view is configured in km/h already.
+      speed_unit: "mps"
+      concurrency: 8
+      stations:
+        - id: "6200"
+          name: "Amisbuehl"
+        - id: "4104"
+          name: "Grindelwald First"
+        - id: "6679"
+          name: "Hohwald"
+        - id: "6116"
+          name: "Lehn"
+        - id: "4109"
+          name: "Niederhorn"
+        - id: "4096"
+          name: "Niederhuenigen"
 
-  - name: "ecovitt"
+  - name: "ecowitt"
     enabled: false
-    interval_minutes: 15
+    interval_minutes: 5
+    config:
+      # Each station entry has its own Ecowitt credentials (keys are per-account).
+      # Get application_key and api_key from https://www.ecowitt.net/user/index → API
+      stations:
+        - application_key: "your-ecowitt-application-key"
+          api_key: "your-ecowitt-device-api-key"
+          mac: "AA:BB:CC:DD:EE:FF"  # gateway MAC address (from device settings)
+          station_name: "My Weather Station"
+          latitude: 46.6863
+          longitude: 7.8632
+          elevation: 600
+        # Additional community stations:
+        # - application_key: "..."
+        #   api_key: "..."
+        #   mac: "..."
+        #   station_name: "Pilot Name / Site"
+        #   latitude: ...
+        #   longitude: ...
+        #   elevation: ...
 
 # SQLite Database (rule sets, launch sites, future user data)
 database:

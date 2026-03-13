@@ -11,15 +11,17 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
-from datetime import timedelta
-from typing import TYPE_CHECKING
+from datetime import datetime, timedelta, timezone
+from typing import TYPE_CHECKING, Any
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
+from lenticularis.collectors.ecowitt import EcowittCollector
 from lenticularis.collectors.metar import MetarCollector
 from lenticularis.collectors.meteoswiss import MeteoSwissCollector
 from lenticularis.collectors.slf import SlfCollector
+from lenticularis.collectors.windline import WindlineCollector
 from lenticularis.config import MainConfig
 
 if TYPE_CHECKING:
@@ -32,7 +34,8 @@ _COLLECTOR_REGISTRY = {
     "meteoswiss": MeteoSwissCollector,
     "slf": SlfCollector,
     "metar": MetarCollector,
-    # Future: "holfuy": HolfuyCollector, etc.
+    "windline": WindlineCollector,
+    "ecowitt": EcowittCollector,
 }
 
 # Jitter range in seconds applied to each job's first run
@@ -61,10 +64,25 @@ class CollectorScheduler:
         self._influx = influx
         self._scheduler = AsyncIOScheduler()
         self._collectors: list = []
+        self._collector_health: dict[str, dict[str, Any]] = {}
 
     async def start(self) -> None:
         """Instantiate collectors, register interval jobs, and start the scheduler."""
         for collector_cfg in self._cfg.collectors:
+            self._collector_health[collector_cfg.name] = {
+                "collector": collector_cfg.name,
+                "enabled": collector_cfg.enabled,
+                "interval_minutes": collector_cfg.interval_minutes,
+                "status": "disabled" if not collector_cfg.enabled else "pending",
+                "last_started_at": None,
+                "last_finished_at": None,
+                "last_success_at": None,
+                "last_error_at": None,
+                "last_error": None,
+                "last_measurement_count": None,
+                "consecutive_failures": 0,
+            }
+
             if not collector_cfg.enabled:
                 logger.info("Collector '%s' is disabled — skipping", collector_cfg.name)
                 continue
@@ -72,6 +90,7 @@ class CollectorScheduler:
             cls = _COLLECTOR_REGISTRY.get(collector_cfg.name)
             if cls is None:
                 logger.warning("Unknown collector '%s' — no implementation found", collector_cfg.name)
+                self._collector_health[collector_cfg.name]["status"] = "unknown_collector"
                 continue
 
             collector = cls(config=collector_cfg.config)
@@ -91,6 +110,7 @@ class CollectorScheduler:
                 max_instances=1,
                 next_run_time=None,  # will be set after scheduler starts + jitter
             )
+            self._collector_health[collector_cfg.name]["status"] = "scheduled"
             logger.info(
                 "Registered collector '%s' with %d-minute interval (jitter +%ds)",
                 collector_cfg.name,
@@ -124,16 +144,65 @@ class CollectorScheduler:
     async def _run_collector(self, collector) -> None:
         """Execute a single collector run and write results to InfluxDB."""
         name = collector.__class__.__name__
+        collector_name = getattr(collector, "NETWORK", name.lower())
+        health = self._collector_health.setdefault(
+            collector_name,
+            {
+                "collector": collector_name,
+                "enabled": True,
+                "interval_minutes": None,
+                "status": "pending",
+                "last_started_at": None,
+                "last_finished_at": None,
+                "last_success_at": None,
+                "last_error_at": None,
+                "last_error": None,
+                "last_measurement_count": None,
+                "consecutive_failures": 0,
+            },
+        )
+        started_at = datetime.now(timezone.utc)
+        health["status"] = "running"
+        health["last_started_at"] = started_at
+
         logger.info("Running collector: %s", name)
         try:
             measurements = await collector.collect()
             if measurements:
                 self._influx.write_measurements(measurements)
                 logger.info("%s: wrote %d measurements", name, len(measurements))
+                health["status"] = "ok"
             else:
                 logger.info("%s: no measurements returned", name)
+                health["status"] = "ok_no_data"
+
+            finished_at = datetime.now(timezone.utc)
+            health["last_finished_at"] = finished_at
+            health["last_success_at"] = finished_at
+            health["last_error_at"] = None
+            health["last_error"] = None
+            health["last_measurement_count"] = len(measurements)
+            health["consecutive_failures"] = 0
         except Exception as exc:
+            finished_at = datetime.now(timezone.utc)
+            health["status"] = "error"
+            health["last_finished_at"] = finished_at
+            health["last_error_at"] = finished_at
+            health["last_error"] = str(exc)
+            health["consecutive_failures"] = int(health.get("consecutive_failures", 0)) + 1
             logger.error("Collector %s failed: %s", name, exc, exc_info=True)
+
+    def get_collector_health(self) -> list[dict[str, Any]]:
+        """Return a health snapshot for all configured collectors."""
+        snapshot: list[dict[str, Any]] = []
+        for collector_name, health in self._collector_health.items():
+            row = dict(health)
+            job = self._scheduler.get_job(f"collector_{collector_name}")
+            row["next_run_time"] = job.next_run_time if job else None
+            snapshot.append(row)
+
+        snapshot.sort(key=lambda r: str(r.get("collector", "")))
+        return snapshot
 
     async def stop(self) -> None:
         """Shut down the scheduler and close all collector HTTP clients."""

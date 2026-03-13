@@ -19,6 +19,54 @@ const CHART_COLORS = {
   snow_depth:      '#bee3f8',
 };
 
+const cursorGuidePlugin = {
+  id: 'cursorGuide',
+  afterDraw(chart) {
+    const xScale = chart.scales?.x;
+    const yScale = chart.scales?.y;
+    const tooltip = chart.tooltip;
+    const active = tooltip?.getActiveElements?.() || [];
+
+    if (!xScale || !yScale || active.length === 0) return;
+
+    const x = active[0].element?.x;
+    if (typeof x !== 'number') return;
+
+    const { ctx } = chart;
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(x, yScale.top);
+    ctx.lineTo(x, yScale.bottom);
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(226, 232, 240, 0.45)';
+    ctx.setLineDash([4, 4]);
+    ctx.stroke();
+    ctx.restore();
+  },
+};
+
+Chart.register(cursorGuidePlugin);
+
+if (Chart.Tooltip?.positioners) {
+  Chart.Tooltip.positioners.topCursor = function topCursor(items) {
+    if (!items || items.length === 0) {
+      return false;
+    }
+
+    // Keep tooltip aligned to hovered timestamp (x) but pinned near chart top.
+    let x = 0;
+    for (const item of items) {
+      x += item.element.x;
+    }
+    x /= items.length;
+
+    return {
+      x,
+      y: this.chart.chartArea.top + 8,
+    };
+  };
+}
+
 const CHART_DEFAULTS = {
   responsive: true,
   maintainAspectRatio: false,
@@ -28,11 +76,15 @@ const CHART_DEFAULTS = {
     tooltip: {
       mode: 'index',
       intersect: false,
+      position: 'topCursor',
       backgroundColor: '#1a1f2e',
       borderColor: '#2d3748',
       borderWidth: 1,
       titleColor: '#a0aec0',
       bodyColor: '#e2e8f0',
+    },
+    cursorGuide: {
+      enabled: true,
     },
   },
   scales: {

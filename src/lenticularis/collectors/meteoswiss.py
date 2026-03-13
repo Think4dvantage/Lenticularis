@@ -45,6 +45,9 @@ def _is_lv95(x: float, y: float) -> bool:
 # ---------------------------------------------------------------------------
 _BASE = "https://data.geo.admin.ch"
 
+# MeteoSwiss uses 99999 (and variants) as a sentinel for missing data.
+_SENTINEL = 9999.0
+
 # Note: wind_direction is not a separate endpoint — it is embedded as
 # properties["wind_direction"] in every wind_speed feature (confirmed from
 # winds-mobi/winds-mobi-providers meteoswiss.py).
@@ -179,7 +182,9 @@ class MeteoSwissCollector(BaseCollector):
                         if sid not in raw:
                             raw[sid] = {}
                         try:
-                            raw[sid]["wind_direction"] = int(float(str(raw_dir)))
+                            dir_val = float(str(raw_dir))
+                            if dir_val < _SENTINEL:
+                                raw[sid]["wind_direction"] = int(dir_val)
                         except (ValueError, TypeError):
                             pass
 
@@ -190,6 +195,8 @@ class MeteoSwissCollector(BaseCollector):
                 try:
                     parsed_value = float(value)
                 except (ValueError, TypeError):
+                    continue
+                if parsed_value >= _SENTINEL:
                     continue
 
                 # Parse timestamp — winds-mobi uses reference_ts (ISO) as the canonical field

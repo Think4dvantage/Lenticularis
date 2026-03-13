@@ -30,6 +30,7 @@ from lenticularis.scheduler import CollectorScheduler, get_collector_class
 from lenticularis.api.routers import stations as stations_router
 from lenticularis.api.routers import auth as auth_router
 from lenticularis.api.routers import rulesets as rulesets_router
+from lenticularis.api.routers import health as health_router
 from lenticularis.database.db import init_db
 
 
@@ -150,6 +151,7 @@ def create_app() -> FastAPI:
     app.include_router(stations_router.router)
     app.include_router(auth_router.router)
     app.include_router(rulesets_router.router)
+    app.include_router(health_router.router)
 
     # Static files (frontend)
     static_dir = Path(__file__).parent.parent.parent.parent / "static"
