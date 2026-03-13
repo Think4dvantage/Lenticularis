@@ -17,7 +17,9 @@ from typing import TYPE_CHECKING
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
+from lenticularis.collectors.metar import MetarCollector
 from lenticularis.collectors.meteoswiss import MeteoSwissCollector
+from lenticularis.collectors.slf import SlfCollector
 from lenticularis.config import MainConfig
 
 if TYPE_CHECKING:
@@ -28,11 +30,18 @@ logger = logging.getLogger(__name__)
 # Registry: collector name → class
 _COLLECTOR_REGISTRY = {
     "meteoswiss": MeteoSwissCollector,
+    "slf": SlfCollector,
+    "metar": MetarCollector,
     # Future: "holfuy": HolfuyCollector, etc.
 }
 
 # Jitter range in seconds applied to each job's first run
 _JITTER_SECONDS = 60
+
+
+def get_collector_class(name: str):
+    """Return a collector class by configured name, or ``None`` if unknown."""
+    return _COLLECTOR_REGISTRY.get(name)
 
 
 class CollectorScheduler:

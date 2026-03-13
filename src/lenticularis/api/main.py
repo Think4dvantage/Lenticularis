@@ -26,8 +26,7 @@ from fastapi.responses import FileResponse
 
 from lenticularis.config import get_config
 from lenticularis.database.influx import InfluxClient
-from lenticularis.scheduler import CollectorScheduler
-from lenticularis.collectors.meteoswiss import MeteoSwissCollector
+from lenticularis.scheduler import CollectorScheduler, get_collector_class
 from lenticularis.api.routers import stations as stations_router
 from lenticularis.api.routers import auth as auth_router
 from lenticularis.api.routers import rulesets as rulesets_router
@@ -80,17 +79,22 @@ async def lifespan(app: FastAPI):
     for collector_cfg in cfg.collectors:
         if not collector_cfg.enabled:
             continue
-        if collector_cfg.name == "meteoswiss":
-            tmp = MeteoSwissCollector(config=collector_cfg.config)
-            try:
-                stations = await tmp.get_stations()
-                for s in stations:
-                    app.state.station_registry[s.station_id] = s
-                logger.info("Station registry primed with %d MeteoSwiss stations", len(stations))
-            except Exception as exc:
-                logger.warning("Could not prime station registry: %s", exc)
-            finally:
-                await tmp.close()
+
+        collector_cls = get_collector_class(collector_cfg.name)
+        if collector_cls is None:
+            logger.warning("Could not prime station registry for unknown collector '%s'", collector_cfg.name)
+            continue
+
+        tmp = collector_cls(config=collector_cfg.config)
+        try:
+            stations = await tmp.get_stations()
+            for s in stations:
+                app.state.station_registry[s.station_id] = s
+            logger.info("Station registry primed with %d %s stations", len(stations), collector_cfg.name)
+        except Exception as exc:
+            logger.warning("Could not prime station registry for '%s': %s", collector_cfg.name, exc)
+        finally:
+            await tmp.close()
 
     # Scheduler
     scheduler = CollectorScheduler(cfg, influx)

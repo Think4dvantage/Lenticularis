@@ -236,7 +236,7 @@ function Invoke-Logs([string]$service = "") {
 
 function Invoke-Status {
     if (-not (Test-SSHConnectivity)) { exit 1 }
-    Write-Header "Container status on $REMOTE_HOST"
+    Write-Header "Container status on $SSH_TARGET"
     Invoke-SSH "cd $REMOTE_DIR && $COMPOSE_CMD ps"
 }
 

@@ -2,7 +2,7 @@
 
 ## Overview
 
-Lenticularis is a weather aggregation and paragliding decision-support system for Switzerland. It collects data from 5 weather networks, normalises and stores it in InfluxDB, and lets each pilot build graphical per-site rule sets using a condition builder. Each condition targets a specific station — a single rule set can freely combine data from multiple stations. The system produces GREEN/ORANGE/RED decisions, stores full per-condition decision history, and exposes a statistics dashboard showing flyability patterns over time.
+Lenticularis is a weather aggregation and paragliding decision-support system for Switzerland. It collects data from multiple weather networks, normalises and stores it in InfluxDB, and lets each pilot build graphical per-site rule sets using a condition builder. Each condition targets a specific station — a single rule set can freely combine data from multiple stations. The system produces GREEN/ORANGE/RED decisions, stores full per-condition decision history, and exposes a statistics dashboard showing flyability patterns over time.
 
 Core differentiator: **rules are fully pilot-owned and self-served** through a graphical editor. No admin-imposed logic.
 
@@ -86,8 +86,9 @@ A condition with field `pressure_delta` shows two station pickers. The runtime e
 | Source | Auth | Key measurements | Interval |
 |---|---|---|---|
 | MeteoSwiss | None (open data) | wind speed/gust, temp, humidity, pressure | 10 min |
+| METAR (AviationWeather) | None (open data) | wind speed/direction/gust, temperature, altimeter (QNH) | 15 min |
 | Holfuy | API key | wind speed/gust/direction | 5 min |
-| SLF | None (open data) | snow depth, temp | 30 min |
+| SLF | None (open data) | wind speed/direction/gust, snow depth, temp | 30 min |
 | Windline | API key | wind speed/direction | 10 min |
 | Ecovitt | API key (personal weather station) | all sensor data | 15 min |
 
@@ -348,6 +349,14 @@ All time-range endpoints accept `?from=&to=` parameters. Best-windows also accep
 4. Add admin collector endpoints in `api/routers/admin.py`
 5. Write `normalize_data()` unit tests for MeteoSwiss and SLF
 
+### v0.5.1 — METAR Collector (No-auth)
+**Goal:** add AviationWeather METAR as an independent no-auth observed-wind source for Swiss airport stations.
+
+- Implemented `collectors/metar.py`
+- Scheduler supports METAR interval configuration (dev currently 15 min)
+- Station registry priming includes METAR stations from `stationinfo`
+- Measurement mapping: `wspd/wgst` (kt→km/h), `wdir`, `temp`, `altim`→`pressure_qnh`
+
 ---
 
 ### v0.6 — Rule Editor (condition builder UI)
@@ -529,4 +538,4 @@ All time-range endpoints accept `?from=&to=` parameters. Best-windows also accep
 - Best-windows metric computed server-side (not Flux) for simplicity
 - Rule sharing is clone-only (no co-editing); private by default, opt-in publish
 - Chart.js for all charts (lightweight, no framework required)
-- MeteoSwiss and SLF are the primary collectors (open data, no API keys); Holfuy, Windline, and Ecovitt are deferred to v1.2
+- MeteoSwiss, SLF, and METAR are the primary no-auth collectors; Holfuy, Windline, and Ecovitt are deferred to v1.2

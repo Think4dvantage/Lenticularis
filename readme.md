@@ -5,12 +5,12 @@ Weather data tracking and analysis system for paragliding decision support.
 
 ## Overview
 
-Lenticularis collects weather data from multiple Swiss weather networks (MeteoSwiss, Holfuy, SLF, Windline, Ecovitt), normalizes the data, stores it in InfluxDB, and applies customizable rule-based analysis to create traffic light decisions (GREEN/ORANGE/RED) for paragliding launch sites.
+Lenticularis collects weather data from multiple weather networks (MeteoSwiss, SLF, METAR, Holfuy, Windline, Ecovitt), normalizes the data, stores it in InfluxDB, and applies customizable rule-based analysis to create traffic light decisions (GREEN/ORANGE/RED) for paragliding launch sites.
 
 ## Features
 
 - **Multi-source data collection**: Fetch weather data from multiple Swiss weather networks
-- **Automated scheduling**: Periodic data collection (e.g., MeteoSwiss every 10 minutes)
+- **Automated scheduling**: Periodic data collection (currently MeteoSwiss 10 min, SLF 30 min, METAR 15 min in dev)
 - **Time-series storage**: InfluxDB integration for historical weather data
 - **Rule-based analysis**: Customizable rules for wind speed, direction, pressure deltas, etc.
 - **Traffic light decisions**: GREEN (go), ORANGE (caution), RED (no-go) for launch sites
@@ -40,7 +40,7 @@ lenticularis/
 │   ├── rules/           # Rule engine
 │   └── api/             # FastAPI routes
 ├── static/              # Web frontend
-├── config.yaml.example  # Configuration template
+├── config.yml.example   # Configuration template
 └── pyproject.toml       # Dependencies
 ```
 
@@ -67,8 +67,8 @@ lenticularis/
 
 3. **Configure the application**
    ```bash
-   cp config.yaml.example config.yaml
-   # Edit config.yaml with your settings
+   cp config.yml.example config.yml
+   # Edit config.yml with your settings
    ```
 
 4. **Run with Docker (recommended)**
@@ -87,11 +87,11 @@ lenticularis/
 
 ## Configuration
 
-See [config.yaml.example](config.yaml.example) for all configuration options.
+See [config.yml.example](config.yml.example) for all configuration options.
 
 ### Bring Your Own Database
 
-To use an existing InfluxDB instance, update `config.yaml`:
+To use an existing InfluxDB instance, update `config.yml`:
 
 ```yaml
 influxdb:
@@ -123,7 +123,8 @@ And comment out the InfluxDB service in `docker-compose.yml`.
 
 ### 0.2 — In Progress
 - [ ] Holfuy collector (free REST API — wind + temperature + pressure)
-- [ ] SLF collector (free JSON API — alpine stations)
+- [x] SLF collector (free JSON API — alpine stations, 30 min)
+- [x] METAR collector (AviationWeather no-auth API, Swiss ICAOs, 15 min)
 - [ ] Ecovitt collector (personal weather stations)
 - [ ] Leaflet.js map view with station pins (color = data freshness)
 - [ ] Click-to-popup with sparkline (Chart.js last 24 h)

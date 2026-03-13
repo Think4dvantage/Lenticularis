@@ -41,6 +41,31 @@ collectors:
   - name: "slf"
     enabled: false
     interval_minutes: 30
+    config:
+      # Public SLF endpoints.
+      stations_url: "https://public-meas-data.slf.ch/public/station-data/timepoint/WIND_MEAN/current/geojson"
+      timeseries_url: "https://public-meas-data.slf.ch/public/station-data/timeseries/week/current/{network}/{code}"
+      # Number of latest points kept per station per run.
+      max_points: 6
+      # Max concurrent station timeseries requests.
+      concurrency: 20
+
+  - name: "metar"
+    enabled: false
+    interval_minutes: 15
+    config:
+      metar_url: "https://aviationweather.gov/api/data/metar"
+      stationinfo_url: "https://aviationweather.gov/api/data/stationinfo"
+      icao_codes:
+        - "LSZH"
+        - "LSGG"
+        - "LSZB"
+        - "LSZR"
+        - "LSMP"
+        - "LSZA"
+        - "LSGS"
+        - "LSGL"
+        - "LSGC"
 
   - name: "windline"
     enabled: false
