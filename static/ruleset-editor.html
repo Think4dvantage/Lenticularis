@@ -388,6 +388,106 @@
     }
   }
 
+  // ── Station markers + wind-direction sectors on editor map ─────────────────
+  const stationMarkerLayer = L.layerGroup().addTo(locationMap);
+  const sectorLayer        = L.layerGroup().addTo(locationMap);
+
+  const SECTOR_COLORS = {
+    green:  { color: '#276749', fillColor: '#48bb78', fillOpacity: 0.40, weight: 2, opacity: 1.0 },
+    orange: { color: '#c05621', fillColor: '#ed8936', fillOpacity: 0.40, weight: 2, opacity: 1.0 },
+    red:    { color: '#c53030', fillColor: '#fc8181', fillOpacity: 0.40, weight: 2, opacity: 1.0 },
+  };
+  const STYLE_DEFAULT  = { radius: 4, color: '#4a5568', fillColor: '#4a5568', fillOpacity: 0.70, weight: 1 };
+  const STYLE_SELECTED = { radius: 7, color: '#fff',    fillColor: '#68d391', fillOpacity: 1.00, weight: 2 };
+
+  // station_id → L.circleMarker (populated by drawStationMarkersOnEditorMap)
+  const stationMarkerById = new Map();
+
+  /** Returns geo-radius in km equal to ~20 px at the current zoom level. */
+  function sectorRadiusKm() {
+    const zoom   = locationMap.getZoom();
+    const center = locationMap.getCenter();
+    const px     = locationMap.project(center, zoom);
+    const eastLL = locationMap.unproject(L.point(px.x + 10, px.y), zoom);
+    return Math.max(center.distanceTo(eastLL) / 1000, 0.05);
+  }
+
+  /** Great-circle destination point: bearing in degrees CW from N, dist in km. */
+  function destPoint(lat, lon, bearingDeg, distKm) {
+    const R = 6371, d = distKm / R;
+    const b  = bearingDeg * Math.PI / 180;
+    const f1 = lat * Math.PI / 180, l1 = lon * Math.PI / 180;
+    const f2 = Math.asin(Math.sin(f1)*Math.cos(d) + Math.cos(f1)*Math.sin(d)*Math.cos(b));
+    const l2 = l1 + Math.atan2(Math.sin(b)*Math.sin(d)*Math.cos(f1), Math.cos(d) - Math.sin(f1)*Math.sin(f2));
+    return new L.LatLng(f2 * 180/Math.PI, l2 * 180/Math.PI);
+  }
+
+  /** Polygon latlngs for a pie-sector CW from startDeg to endDeg. */
+  function sectorLatLngs(lat, lon, startDeg, endDeg, radiusKm) {
+    const origin = new L.LatLng(lat, lon);
+    const pts = [origin];
+    const s = ((startDeg % 360) + 360) % 360;
+    const e = ((endDeg   % 360) + 360) % 360;
+    let span = e - s;
+    if (span <= 0) span += 360;
+    for (let a = 0; a <= span; a += 3)
+      pts.push(destPoint(lat, lon, (s + a) % 360, radiusKm));
+    pts.push(destPoint(lat, lon, e, radiusKm));
+    pts.push(origin);
+    return pts;
+  }
+
+  function drawStationMarkersOnEditorMap() {
+    stationMarkerLayer.clearLayers();
+    stationMarkerById.clear();
+    for (const s of allStations) {
+      if (s.lat == null || s.lon == null) continue;
+      const m = L.circleMarker([s.lat, s.lon], { ...STYLE_DEFAULT })
+        .bindTooltip(s.name, { direction: 'top', offset: [0, -4] })
+        .on('click', ev => L.DomEvent.stopPropagation(ev))
+        .addTo(stationMarkerLayer);
+      stationMarkerById.set(s.station_id, m);
+    }
+  }
+
+  function redrawMapOverlays() {
+    // ─ Collect selected station IDs ─
+    const selectedIds = new Set();
+    document.querySelectorAll('.condition-row').forEach(row => {
+      const sid = row.querySelector('.station-input')?.dataset.selectedId;
+      if (sid) selectedIds.add(sid);
+    });
+
+    // ─ Highlight selected station markers ─
+    stationMarkerById.forEach((marker, sid) => {
+      marker.setStyle(selectedIds.has(sid) ? STYLE_SELECTED : STYLE_DEFAULT);
+      if (selectedIds.has(sid)) marker.bringToFront();
+    });
+
+    // ─ Redraw direction sectors ─
+    sectorLayer.clearLayers();
+    const radius = sectorRadiusKm();
+    document.querySelectorAll('.condition-row').forEach(row => {
+      const sid = row.querySelector('.station-input')?.dataset.selectedId;
+      if (!sid) return;
+      if (row.querySelector('.field-select')?.value !== 'wind_direction') return;
+      if (row.querySelector('.op-select')?.value !== 'in_direction_range') return;
+      const valA = parseFloat(row.querySelector('.val-a')?.value);
+      const valB = parseFloat(row.querySelector('.val-b')?.value);
+      if (isNaN(valA) || isNaN(valB)) return;
+      const colour = row.querySelector('.colour-select')?.value || 'red';
+      const st = allStations.find(s => s.station_id === sid);
+      if (!st || st.lat == null || st.lon == null) return;
+      L.polygon(
+        sectorLatLngs(st.lat, st.lon, valA, valB, radius),
+        { ...(SECTOR_COLORS[colour] ?? SECTOR_COLORS.red), interactive: false }
+      ).addTo(sectorLayer);
+    });
+  }
+
+  // Redraw when user zooms so the radius stays ~50 px
+  locationMap.on('zoomend', redrawMapOverlays);
+
   // ── State ──────────────────────────────────────────────────────────────
   const params = new URLSearchParams(location.search);
   let editId = params.get('id');  // mutable: updated after first create
@@ -401,7 +501,7 @@
     { v: 'temperature',     l: 'Temperature',    unit: '°C'   },
     { v: 'humidity',        l: 'Humidity',       unit: '%'    },
     { v: 'pressure',        l: 'Pressure',       unit: 'hPa'  },
-    { v: 'pressure_delta',  l: 'Pressure delta', unit: 'hPa'  },
+    { v: 'pressure_delta',  l: 'Pressure delta (hPa between two stations)', unit: 'hPa'  },
     { v: 'precipitation',   l: 'Precipitation',  unit: 'mm'   },
     { v: 'snow_depth',      l: 'Snow depth',     unit: 'cm'   },
   ];
@@ -429,6 +529,8 @@
       name: s.name,
       network: s.network,
       canton: s.canton || '',
+      lat: s.latitude  ?? null,
+      lon: s.longitude ?? null,
     })).sort((a, b) => a.name.localeCompare(b.name));
   }
 
@@ -482,8 +584,9 @@
   }
 
   // ── Condition row ──────────────────────────────────────────────────────
-  function makeStationSearch(containerEl, inputClass, hiddenClass, selectedId, placeholder) {
-    /** Wire up autocomplete on a station-search input inside containerEl. */
+  function makeStationSearch(containerEl, inputClass, hiddenClass, selectedId, placeholder, onChange) {
+    /** Wire up autocomplete on a station-search input inside containerEl.
+     *  onChange(stationId) is called whenever the user picks a station. */
     const input = containerEl.querySelector('.' + inputClass);
     const drop  = containerEl.querySelector('.' + hiddenClass);
 
@@ -514,6 +617,7 @@
       const st = allStations.find(s => s.station_id === opt.dataset.id);
       input.value = st ? st.name : opt.dataset.id;
       drop.classList.remove('open');
+      if (onChange) onChange(opt.dataset.id);
       e.preventDefault();
     });
 
@@ -528,8 +632,12 @@
     el.className = 'condition-row';
     el.dataset.condId = id;
 
+    const isDir = (data.field || 'wind_speed') === 'wind_direction';
     const fieldOpts = FIELDS.map(f => `<option value="${f.v}"${data.field === f.v ? ' selected' : ''}>${f.l}</option>`).join('');
-    const opOpts    = OPS.map(o => `<option value="${o.v}"${data.operator === o.v ? ' selected' : ''}>${o.l}</option>`).join('');
+    // Operators filtered by field at row creation time; updateDynamic keeps them in sync.
+    const opOpts = OPS
+      .filter(o => isDir ? o.v === 'in_direction_range' : o.v !== 'in_direction_range')
+      .map(o => `<option value="${o.v}"${data.operator === o.v ? ' selected' : ''}>${o.l}</option>`).join('');
     const groupVal  = esc(data.group_id || '');
     const staBName  = data.station_b_id ? (allStations.find(s => s.station_id === data.station_b_id)?.name || data.station_b_id) : '';
 
@@ -564,7 +672,7 @@
     list.appendChild(el);
 
     // ── Station A autocomplete ──
-    makeStationSearch(el.querySelector('.station-search'), 'station-input', 'station-dropdown', data.station_id || '', 'Search station…');
+    makeStationSearch(el.querySelector('.station-search'), 'station-input', 'station-dropdown', data.station_id || '', 'Search station…', () => redrawMapOverlays());
 
     // ── Station B autocomplete (for pressure_delta) ──
     const staBWrap = el.querySelector('.station-b-wrap');
@@ -581,19 +689,33 @@
       const isDirection     = fieldSel.value === 'wind_direction';
       const needsB          = TWO_VALUE_OPS.has(opSel.value);
 
+      // Rebuild operator options based on selected field
+      const currentOp = opSel.value;
+      opSel.innerHTML = OPS
+        .filter(o => isDirection ? o.v === 'in_direction_range' : o.v !== 'in_direction_range')
+        .map(o => `<option value="${o.v}">${o.l}</option>`).join('');
+      // Restore selection if still valid, otherwise pick first available
+      opSel.value = [...opSel.options].some(o => o.value === currentOp) ? currentOp : opSel.options[0]?.value;
+
       // Station B visibility
       staBWrap.style.display = isPressureDelta ? 'block' : 'none';
 
       // Value B
-      valB.style.opacity = needsB ? '1' : '0.2';
-      valB.disabled = !needsB;
+      const needsBNow = TWO_VALUE_OPS.has(opSel.value);
+      valB.style.opacity = needsBNow ? '1' : '0.2';
+      valB.disabled = !needsBNow;
 
       // Compass datalist helper on direction fields
       valA.setAttribute('list', isDirection ? 'compassDirs' : '');
       valB.setAttribute('list', isDirection ? 'compassDirs' : '');
+
+      redrawMapOverlays();
     }
     fieldSel.addEventListener('change', updateDynamic);
     opSel.addEventListener('change', updateDynamic);
+    valA.addEventListener('input', redrawMapOverlays);
+    valB.addEventListener('input', redrawMapOverlays);
+    el.querySelector('.colour-select').addEventListener('change', redrawMapOverlays);
     updateDynamic();
 
     // ── AND group visual ──
@@ -610,7 +732,7 @@
     updateGroupVisual();
 
     // ── Remove button ──
-    el.querySelector('.btn-remove').addEventListener('click', () => el.remove());
+    el.querySelector('.btn-remove').addEventListener('click', () => { el.remove(); redrawMapOverlays(); });
   }
 
   // ── Read conditions from DOM ───────────────────────────────────────────
@@ -669,6 +791,7 @@
     initPinFromInputs();
 
     for (const c of rs.conditions) makeCondRow(c);
+    redrawMapOverlays(); // ensure all sectors + highlights are applied after full list loads
   }
 
   // ── Save ──────────────────────────────────────────────────────────────
@@ -790,6 +913,7 @@
   document.getElementById('addCondBtn').addEventListener('click', () => makeCondRow());
 
   await loadStations();
+  drawStationMarkersOnEditorMap();
   if (editId) await loadEdit(editId);
 </script>
 </body>

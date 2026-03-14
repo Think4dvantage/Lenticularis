@@ -84,6 +84,9 @@ class EcowittCollector(BaseCollector):
         super().__init__(config=config)
         cfg = config or {}
         self._stations_cfg: list[_StationCfg] = cfg.get("stations", [])
+        # Track last seen rain_daily per station MAC to compute per-interval delta.
+        # Key: upper-case MAC without colons; value: last rain_daily float (mm).
+        self._last_daily_rain: dict[str, float] = {}
         if not self._stations_cfg:
             logger.warning(
                 "EcowittCollector: no stations configured. "
@@ -197,7 +200,24 @@ class EcowittCollector(BaseCollector):
         pressure_qnh = _to_float(_field_value(data, "pressure", "relative"))
         pressure_qfe = _to_float(_field_value(data, "pressure", "absolute"))
 
-        precipitation = _to_float(_field_value(data, "rainfall", "rain_rate"))
+        # Use rain_daily delta so stored values are mm-per-interval (same semantics
+        # as MeteoSwiss 10-min precipitation) rather than the instantaneous rate.
+        mac_key = mac.replace(":", "").upper()
+        raw_daily = _to_float(_field_value(data, "rainfall", "rain_daily"))
+        precipitation: Optional[float] = None
+        if raw_daily is not None:
+            if mac_key in self._last_daily_rain:
+                last = self._last_daily_rain[mac_key]
+                if raw_daily >= last:
+                    # Normal accumulation during the day
+                    precipitation = round(raw_daily - last, 2)
+                else:
+                    # Midnight reset: new day just started, raw_daily is the new total
+                    precipitation = round(raw_daily, 2)
+            else:
+                # First reading for this station — no delta available yet; emit 0
+                precipitation = 0.0
+            self._last_daily_rain[mac_key] = raw_daily
 
         logger.info(
             "EcowittCollector: %s — wind=%.1f km/h dir=%s°  temp=%.1f°C  pressure=%.1f hPa",

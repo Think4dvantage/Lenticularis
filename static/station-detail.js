@@ -240,13 +240,8 @@ function renderCharts(rows) {
   // Pressure
   renderSimpleChart('pressure', fields.pressure_qnh, rangeOpts);
 
-  // Precipitation (bar)
-  renderSimpleChart('precipitation', fields.precipitation, {
-    ...rangeOpts,
-    type: 'bar',
-    yMin: 0,
-    barThickness: 'flex',
-  });
+  // Precipitation (bar + cumulative line)
+  renderPrecipitationChart(fields.precipitation, rangeOpts);
 
   // Snow depth
   renderSimpleChart('snow_depth', fields.snow_depth, { ...rangeOpts, yMin: 0 });
@@ -419,6 +414,86 @@ function renderWindChart(speedPts, gustPts, opts = {}) {
       scales: {
         x: { ...CHART_DEFAULTS.scales.x, ...(opts.xMin !== undefined ? { min: opts.xMin, max: opts.xMax } : {}) },
         y: { ...CHART_DEFAULTS.scales.y, min: 0 },
+      },
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Precipitation — bars for individual readings + right-axis cumulative line
+// ---------------------------------------------------------------------------
+function renderPrecipitationChart(points, opts = {}) {
+  const canvasId = 'chart-precipitation';
+  showCard('precipitation', points.length > 0);
+  if (points.length === 0) return;
+
+  destroyChart(canvasId);
+
+  const barColor = CHART_COLORS.precipitation;
+  const cumColor = '#90cdf4'; // lighter blue for cumulative line
+
+  // Cumulative sum — API returns points in chronological order
+  let cumSum = 0;
+  const cumPoints = points.map(pt => {
+    cumSum += pt.y ?? 0;
+    return { x: pt.x, y: Math.round(cumSum * 10) / 10 };
+  });
+
+  const ctx = document.getElementById(canvasId).getContext('2d');
+  _charts[canvasId] = new Chart(ctx, {
+    data: {
+      datasets: [
+        {
+          type: 'bar',
+          label: 'Precipitation (mm)',
+          data: points,
+          borderColor: barColor,
+          backgroundColor: hexToRgba(barColor, 0.5),
+          borderWidth: 0,
+          barThickness: 'flex',
+          yAxisID: 'y',
+          order: 2,
+        },
+        {
+          type: 'line',
+          label: 'Cumulative (mm)',
+          data: cumPoints,
+          borderColor: cumColor,
+          backgroundColor: 'transparent',
+          borderWidth: 2,
+          pointRadius: 0,
+          tension: 0.2,
+          yAxisID: 'y1',
+          order: 1,
+        },
+      ],
+    },
+    options: {
+      ...CHART_DEFAULTS,
+      plugins: {
+        ...CHART_DEFAULTS.plugins,
+        legend: { display: true, labels: { color: '#a0aec0', boxWidth: 12, font: { size: 11 } } },
+        tooltip: CHART_DEFAULTS.plugins.tooltip,
+      },
+      scales: {
+        x: {
+          ...CHART_DEFAULTS.scales.x,
+          ...(opts.xMin !== undefined ? { min: opts.xMin, max: opts.xMax } : {}),
+        },
+        y: {
+          type: 'linear',
+          position: 'left',
+          min: 0,
+          ticks: { color: '#718096' },
+          grid: { color: '#1e2533' },
+        },
+        y1: {
+          type: 'linear',
+          position: 'right',
+          min: 0,
+          ticks: { color: cumColor },
+          grid: { drawOnChartArea: false },
+        },
       },
     },
   });
