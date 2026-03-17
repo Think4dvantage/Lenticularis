@@ -60,18 +60,35 @@
     .toggle-label { font-size: 0.85rem; color: #a0aec0; }
 
     /* ── Condition builder ── */
-    .conditions-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+    .conditions-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; margin-top: 12px; }
+
+    /* ── Condition group frame ── */
+    .condition-group { border: 1px solid #2d3748; border-radius: 10px; margin-bottom: 12px; overflow: hidden; }
+    .condition-group-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 7px 14px; background: #1a1f2e; border-bottom: 1px solid #2d3748;
+    }
+    .condition-group-label { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: #718096; }
+    .condition-group-body { padding: 10px 12px 4px; background: #0a0d14; }
+    .condition-group-footer { padding: 6px 12px 10px; background: #0a0d14; display: flex; justify-content: flex-end; }
+    .btn-remove-group {
+      background: transparent; border: 1px solid #4a5568; color: #718096;
+      padding: 3px 9px; border-radius: 5px; cursor: pointer; font-size: 0.72rem;
+      transition: background 0.15s, color 0.15s;
+    }
+    .btn-remove-group:hover { background: #2d1515; border-color: #7b2020; color: #fc8181; }
+    /* AND badge between rows inside a group */
+    .cond-wrapper:not(:last-child)::after {
+      content: "AND"; display: block; text-align: center;
+      font-size: 0.65rem; font-weight: 700; letter-spacing: 0.1em; color: #4a5568; padding: 4px 0;
+    }
 
     .condition-row {
       background: #0f1117; border: 1px solid #2d3748; border-radius: 8px;
-      padding: 14px 16px; margin-bottom: 10px;
+      padding: 12px 14px;
       display: grid;
-      grid-template-columns: 1fr 140px 110px 90px 90px 90px 60px 36px;
+      grid-template-columns: 1fr 140px 110px 90px 90px 36px;
       gap: 8px; align-items: start;
-    }
-    .condition-row.grouped {
-      border-left: 4px solid var(--grp-colour, #805ad5);
-      background: color-mix(in srgb, var(--grp-colour, #805ad5) 6%, #0f1117);
     }
 
     .condition-row .station-search {
@@ -121,23 +138,12 @@
     }
     .btn-remove:hover { background: #2d1515; border-color: #7b2020; color: #fc8181; }
 
-    .col-label { font-size: 0.7rem; color: #4a5568; text-align: center; margin-bottom: -4px; }
-
-    .conditions-labels {
-      display: grid;
-      grid-template-columns: 1fr 140px 110px 90px 90px 90px 60px 36px;
-      gap: 8px; padding: 0 16px; margin-bottom: 4px;
+    /* ── Colour select in group header ── */
+    .group-colour-select {
+      background: #0f1117; border: 1px solid #2d3748; border-radius: 6px;
+      padding: 4px 8px; color: #e2e8f0; font-size: 0.82rem; outline: none; cursor: pointer;
     }
-
-    /* AND group input */
-    .group-input {
-      width: 100%;
-      background: #1a1f2e; border: 1px solid #2d3748; border-radius: 6px;
-      padding: 7px 8px; color: var(--grp-colour, #a78bfa); font-size: 0.78rem; outline: none;
-      text-align: center; font-weight: 600;
-    }
-    .group-input:focus { border-color: var(--grp-colour, #805ad5); }
-    .group-input::placeholder { color: #4a5568; font-weight: 400; }
+    .group-colour-select:focus { border-color: #4299e1; }
 
     /* station-b sub-search */
     .station-b-wrap { display: none; margin-top: 6px; }
@@ -160,13 +166,40 @@
     .success-msg { background: #1a3a2e; border: 1px solid #276749; border-radius: 7px; color: #68d391; font-size: 0.82rem; padding: 9px 12px; margin-bottom: 16px; display: none; }
     .success-msg.visible { display: block; }
 
+    /* ── Site type toggle ── */
+    .site-type-toggle { display: flex; gap: 0; border: 1px solid #2d3748; border-radius: 8px; overflow: hidden; margin-bottom: 16px; }
+    .site-type-btn { flex: 1; padding: 9px 0; text-align: center; font-size: 0.85rem; font-weight: 500; cursor: pointer; background: #0f1117; color: #718096; border: none; transition: background 0.15s, color 0.15s; }
+    .site-type-btn.active { background: #2b6cb0; color: #fff; }
+    .site-type-btn:first-child { border-right: 1px solid #2d3748; }
+
+    /* ── Landing picker ── */
+    .landing-picker { margin-top: 16px; padding-top: 16px; border-top: 1px solid #2d3748; }
+    .landing-picker-title { font-size: 0.78rem; color: #a0aec0; font-weight: 500; margin-bottom: 8px; }
+    .landing-picker-hint { font-size: 0.73rem; color: #4a5568; margin-bottom: 8px; }
+    .landing-picker-list { display: flex; flex-direction: column; gap: 6px; }
+    .landing-picker-item { display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: #0f1117; border: 1px solid #2d3748; border-radius: 7px; }
+    .landing-picker-item:has(input:checked) { border-color: #4299e1; }
+    .landing-picker-item input[type=checkbox] { accent-color: #4299e1; width: 15px; height: 15px; cursor: pointer; flex-shrink: 0; }
+    .landing-picker-item label { font-size: 0.85rem; color: #e2e8f0; cursor: pointer; flex: 1; }
+    .landing-picker-item .lp-coord { font-size: 0.72rem; color: #4a5568; }
+
     /* ── Location map picker ── */
     #locationMap {
       width: 100%; height: 280px; border-radius: 8px;
       border: 1px solid #2d3748; margin-bottom: 14px;
       background: #0f1117; z-index: 0;
     }
-    .map-hint { font-size: 0.73rem; color: #4a5568; margin-top: -10px; margin-bottom: 14px; }
+    .map-hint { font-size: 0.73rem; color: #4a5568; margin-bottom: 14px; }
+
+    /* ── Name hero ── */
+    .name-hero { margin-bottom: 16px; }
+    .name-hero input {
+      width: 100%; background: #1a1f2e; border: 1px solid #2d3748; border-radius: 9px;
+      padding: 14px 18px; color: #e2e8f0; font-size: 1.1rem; font-weight: 500; outline: none;
+      transition: border-color 0.15s;
+    }
+    .name-hero input:focus { border-color: #4299e1; }
+    .name-hero input::placeholder { color: #4a5568; font-weight: 400; }
   </style>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 </head>
@@ -191,98 +224,67 @@
   <div class="error-msg" id="errorMsg"></div>
   <div class="success-msg" id="successMsg"></div>
 
-  <!-- ── Site info ── -->
-  <div class="section">
-    <div class="section-title">Launch Site</div>
-    <div class="form-row full" style="margin-bottom:14px">
-      <div class="form-group">
-        <label for="rsName">Name *</label>
-        <input type="text" id="rsName" placeholder="e.g. Beatenberg Südstart" maxlength="120" required />
-      </div>
-    </div>
-
-    <!-- map picker -->
-    <div id="locationMap"></div>
-    <p class="map-hint">📍 Click anywhere on the map to place the launch site pin &mdash; or type coordinates directly below.</p>
-
-    <div class="form-row three" style="margin-bottom:14px">
-      <div class="form-group">
-        <label for="rsLat">Latitude</label>
-        <input type="number" id="rsLat" step="0.0001" placeholder="46.6863" />
-        <span class="form-hint">Decimal degrees (WGS84)</span>
-      </div>
-      <div class="form-group">
-        <label for="rsLon">Longitude</label>
-        <input type="number" id="rsLon" step="0.0001" placeholder="7.8632" />
-      </div>
-      <div class="form-group">
-        <label for="rsAlt">Altitude (m)</label>
-        <input type="number" id="rsAlt" step="1" placeholder="1250" />
-      </div>
-    </div>
-    <div class="form-row full">
-      <div class="form-group">
-        <label for="rsDesc">Description</label>
-        <textarea id="rsDesc" placeholder="Optional notes about this site or rule set…"></textarea>
-      </div>
-    </div>
+  <!-- ── Name ── -->
+  <div class="name-hero">
+    <input type="text" id="rsName" placeholder="Rule set name, e.g. Beatenberg Südstart" maxlength="120" required />
   </div>
 
-  <!-- ── Evaluation ── -->
-  <div class="section">
-    <div class="section-title">Evaluation</div>
-    <div class="form-row">
-      <div class="form-group">
-        <label for="rsLogic">Combination logic</label>
-        <select id="rsLogic">
-          <option value="worst_wins">Worst wins — any RED → RED, any ORANGE → ORANGE</option>
-          <option value="majority_vote">Majority vote — most common colour wins</option>
-        </select>
-      </div>
-      <div class="form-group" style="justify-content:flex-end;padding-bottom:4px">
-        <label>Visibility</label>
-        <div class="toggle-row">
-          <label class="toggle">
-            <input type="checkbox" id="rsPublic" />
-            <span class="slider"></span>
-          </label>
-          <span class="toggle-label" id="publicLabel">Private (only you)</span>
-        </div>
-      </div>
-    </div>
-  </div>
+  <!-- ── Map ── -->
+  <div id="locationMap"></div>
+  <p class="map-hint">📍 Click the map to set the site location.</p>
+  <input type="hidden" id="rsLat" />
+  <input type="hidden" id="rsLon" />
+  <input type="hidden" id="rsAlt" />
 
-  <!-- ── Conditions ── -->
+  <!-- ── Rule Engine ── -->
   <div class="section">
-    <div class="section-title">Conditions</div>
-
-    <div class="conditions-labels">
-      <span class="col-label" style="text-align:left">Station</span>
-      <span class="col-label">Field</span>
-      <span class="col-label">Operator</span>
-      <span class="col-label">Value A</span>
-      <span class="col-label">Value B</span>
-      <span class="col-label">If met →</span>
-      <span class="col-label" title="Conditions sharing the same AND group tag are ALL required (ANDed)">AND grp</span>
-      <span></span>
-    </div>
+    <div class="section-title">Rule Engine</div>
 
     <div id="conditionList"></div>
 
     <div class="conditions-header">
       <span></span>
-      <div style="display:flex;gap:8px">
-        <button class="btn btn-ghost" id="sortGroupsBtn" title="Sort rows so AND group members are adjacent">Sort by AND group</button>
-        <button class="btn btn-add" id="addCondBtn">＋ Add condition</button>
-      </div>
+      <button class="btn btn-add" id="addGroupBtn">＋ Add Condition Group</button>
     </div>
 
     <p style="margin-top:14px;font-size:0.78rem;color:#4a5568">
       Each condition targets an independent station. &ldquo;Value B&rdquo; is only used for <em>between</em> and <em>in direction range</em> operators.<br>
-      Use <strong>AND grp</strong> to group conditions with AND logic (e.g. type <code>1</code> on two rows to AND them).<br>
+      Conditions within the same group are <strong>AND</strong>-linked — all must match for the group to trigger.<br>
       Direction compass: N=0° &nbsp;NE=45° &nbsp;E=90° &nbsp;SE=135° &nbsp;S=180° &nbsp;SW=225° &nbsp;W=270° &nbsp;NW=315°<br>
-      <span style="color:#f6ad55">⚠ Use <em>between A and B</em> for middle ranges to avoid overlapping triggers. E.g. &ldquo;gusts &lt; 35 = orange&rdquo; also fires at 20 km/h unless you write &ldquo;between 25 and 35 = orange&rdquo;.</span>
+      <span style="color:#f6ad55">⚠ Use <em>between A and B</em> for middle ranges to avoid overlapping triggers.</span>
     </p>
+  </div>
+
+  <!-- ── Evaluation ── -->
+  <div class="section">
+    <div class="section-title">Evaluation</div>
+
+    <div class="form-group" style="margin-bottom:16px">
+      <label>Site type</label>
+      <div class="site-type-toggle">
+        <button type="button" class="site-type-btn active" id="btnTypeLaunch">▲ Launch site</button>
+        <button type="button" class="site-type-btn"        id="btnTypeLanding">⚑ Landing zone</button>
+      </div>
+      <input type="hidden" id="rsSiteType" value="launch" />
+    </div>
+
+    <p style="font-size:0.82rem;color:#718096;margin-bottom:16px">Combination logic: <strong style="color:#e2e8f0">worst wins</strong> — if any condition triggers RED the site is RED; any ORANGE and it’s ORANGE.</p>
+    <div class="toggle-row">
+      <label class="toggle">
+        <input type="checkbox" id="rsPublic" />
+        <span class="slider"></span>
+      </label>
+      <span class="toggle-label" id="publicLabel">Private (only you)</span>
+    </div>
+
+    <!-- Landing zone links — only shown for launch type -->
+    <div id="landingPickerSection" class="landing-picker">
+      <div class="landing-picker-title">Linked landing zones</div>
+      <p class="landing-picker-hint">Select the landing zones pilots would use after launching here. The map will show a halo coloured by the best landing decision.</p>
+      <div class="landing-picker-list" id="landingPickerList">
+        <!-- filled by JS -->
+      </div>
+    </div>
   </div>
 
   <!-- ── Save bar ── -->
@@ -375,8 +377,7 @@
       setPin(lat, lon, true);
     }
   }
-  document.getElementById('rsLat').addEventListener('input', onCoordInput);
-  document.getElementById('rsLon').addEventListener('input', onCoordInput);
+  // lat/lon are now hidden inputs — map click is the only way to set them
 
   // Expose function for loadEdit to call after populating the fields
   function initPinFromInputs() {
@@ -475,7 +476,7 @@
       const valA = parseFloat(row.querySelector('.val-a')?.value);
       const valB = parseFloat(row.querySelector('.val-b')?.value);
       if (isNaN(valA) || isNaN(valB)) return;
-      const colour = row.querySelector('.colour-select')?.value || 'red';
+      const colour = row.closest('.condition-group')?.querySelector('.group-colour-select')?.value || 'red';
       const st = allStations.find(s => s.station_id === sid);
       if (!st || st.lat == null || st.lon == null) return;
       L.polygon(
@@ -534,53 +535,46 @@
     })).sort((a, b) => a.name.localeCompare(b.name));
   }
 
-  // ── AND group colour palette ──────────────────────────────────────────
-  // A set of visually distinct hues that work on dark backgrounds.
-  const GROUP_PALETTE = [
-    '#f56565', // red
-    '#4299e1', // blue
-    '#48bb78', // green
-    '#ed8936', // orange
-    '#9f7aea', // purple
-    '#38b2ac', // teal
-    '#f6e05e', // yellow
-    '#fc8181', // light red
-    '#76e4f7', // cyan
-    '#fbb6ce', // pink
-  ];
-  const groupColourMap = new Map();   // groupTag → hex colour
-  let groupColourIdx = 0;
+  let groupSeq = 0;
 
-  function groupColour(tag) {
-    if (!tag) return null;
-    if (!groupColourMap.has(tag)) {
-      groupColourMap.set(tag, GROUP_PALETTE[groupColourIdx % GROUP_PALETTE.length]);
-      groupColourIdx++;
-    }
-    return groupColourMap.get(tag);
-  }
-
-  function refreshAllGroupColours() {
-    // Walk every condition row and reapply colours based on current input values
-    document.querySelectorAll('.condition-row').forEach(row => {
-      const tag = row.querySelector('.group-input')?.value.trim() || '';
-      applyGroupColour(row, tag);
-    });
-  }
-
-  function applyGroupColour(rowEl, tag) {
-    if (tag) {
-      const colour = groupColour(tag);
-      rowEl.style.setProperty('--grp-colour', colour);
-      rowEl.classList.add('grouped');
-      const gi = rowEl.querySelector('.group-input');
-      if (gi) gi.style.color = colour;
+  function makeCondGroup(conditions = []) {
+    const gid = 'g' + (++groupSeq);
+    // Colour is shared across all conditions in the group; read from first condition if restoring
+    const initialColour = conditions[0]?.result_colour || 'red';
+    const groupEl = document.createElement('div');
+    groupEl.className = 'condition-group';
+    groupEl.dataset.groupId = gid;
+    groupEl.innerHTML = `
+      <div class="condition-group-header">
+        <span class="condition-group-label">Condition Group</span>
+        <div style="display:flex;align-items:center;gap:10px">
+          <select class="group-colour-select">
+            <option value="green"  ${initialColour === 'green'  ? 'selected' : ''}>🟢 Green</option>
+            <option value="orange" ${initialColour === 'orange' ? 'selected' : ''}>🟠 Orange</option>
+            <option value="red"    ${initialColour === 'red'    ? 'selected' : ''}>🔴 Red</option>
+          </select>
+          <button class="btn-remove-group">✕ Remove group</button>
+        </div>
+      </div>
+      <div class="condition-group-body"></div>
+      <div class="condition-group-footer">
+        <button class="btn btn-add btn-add-cond">＋ Add condition</button>
+      </div>`;
+    document.getElementById('conditionList').appendChild(groupEl);
+    const body = groupEl.querySelector('.condition-group-body');
+    if (conditions.length === 0) {
+      makeCondRow({}, body);
     } else {
-      rowEl.style.removeProperty('--grp-colour');
-      rowEl.classList.remove('grouped');
-      const gi = rowEl.querySelector('.group-input');
-      if (gi) gi.style.color = '';
+      for (const c of conditions) makeCondRow(c, body);
     }
+    groupEl.querySelector('.group-colour-select').addEventListener('change', redrawMapOverlays);
+    groupEl.querySelector('.btn-remove-group').addEventListener('click', () => {
+      groupEl.remove();
+      redrawMapOverlays();
+    });
+    groupEl.querySelector('.btn-add-cond').addEventListener('click', () => {
+      makeCondRow({}, body);
+    });
   }
 
   // ── Condition row ──────────────────────────────────────────────────────
@@ -626,20 +620,22 @@
     }, { passive: true });
   }
 
-  function makeCondRow(data = {}) {
+  function makeCondRow(data = {}, container) {
     const id = ++condSeq;
+    const wrapper = document.createElement('div');
+    wrapper.className = 'cond-wrapper';
     const el = document.createElement('div');
     el.className = 'condition-row';
     el.dataset.condId = id;
+    wrapper.appendChild(el);
+    container.appendChild(wrapper);
 
     const isDir = (data.field || 'wind_speed') === 'wind_direction';
     const fieldOpts = FIELDS.map(f => `<option value="${f.v}"${data.field === f.v ? ' selected' : ''}>${f.l}</option>`).join('');
-    // Operators filtered by field at row creation time; updateDynamic keeps them in sync.
     const opOpts = OPS
       .filter(o => isDir ? o.v === 'in_direction_range' : o.v !== 'in_direction_range')
       .map(o => `<option value="${o.v}"${data.operator === o.v ? ' selected' : ''}>${o.l}</option>`).join('');
-    const groupVal  = esc(data.group_id || '');
-    const staBName  = data.station_b_id ? (allStations.find(s => s.station_id === data.station_b_id)?.name || data.station_b_id) : '';
+    const staBName = data.station_b_id ? (allStations.find(s => s.station_id === data.station_b_id)?.name || data.station_b_id) : '';
 
     el.innerHTML = `
       <div class="station-search">
@@ -659,17 +655,7 @@
       <select class="cond-select op-select">${opOpts}</select>
       <input type="number" class="cond-input val-a" step="any" value="${data.value_a ?? ''}" placeholder="0" />
       <input type="number" class="cond-input val-b" step="any" value="${data.value_b ?? ''}" placeholder="0" />
-      <select class="cond-select colour-select">
-        <option value="green"  ${data.result_colour === 'green'  ? 'selected' : ''} class="colour-green">🟢 Green</option>
-        <option value="orange" ${data.result_colour === 'orange' ? 'selected' : ''} class="colour-orange">🟠 Orange</option>
-        <option value="red"    ${(!data.result_colour || data.result_colour === 'red') ? 'selected' : ''} class="colour-red">🔴 Red</option>
-      </select>
-      <input type="text" class="group-input" placeholder="—" maxlength="20"
-        value="${groupVal}" title="AND group: rows with the same tag are ANDed together" />
       <button class="btn-remove" title="Remove condition">✕</button>`;
-
-    const list = document.getElementById('conditionList');
-    list.appendChild(el);
 
     // ── Station A autocomplete ──
     makeStationSearch(el.querySelector('.station-search'), 'station-input', 'station-dropdown', data.station_id || '', 'Search station…', () => redrawMapOverlays());
@@ -687,176 +673,64 @@
     function updateDynamic() {
       const isPressureDelta = fieldSel.value === 'pressure_delta';
       const isDirection     = fieldSel.value === 'wind_direction';
-      const needsB          = TWO_VALUE_OPS.has(opSel.value);
-
-      // Rebuild operator options based on selected field
       const currentOp = opSel.value;
       opSel.innerHTML = OPS
         .filter(o => isDirection ? o.v === 'in_direction_range' : o.v !== 'in_direction_range')
         .map(o => `<option value="${o.v}">${o.l}</option>`).join('');
-      // Restore selection if still valid, otherwise pick first available
       opSel.value = [...opSel.options].some(o => o.value === currentOp) ? currentOp : opSel.options[0]?.value;
-
-      // Station B visibility
       staBWrap.style.display = isPressureDelta ? 'block' : 'none';
-
-      // Value B
-      const needsBNow = TWO_VALUE_OPS.has(opSel.value);
-      valB.style.opacity = needsBNow ? '1' : '0.2';
-      valB.disabled = !needsBNow;
-
-      // Compass datalist helper on direction fields
+      const needsB = TWO_VALUE_OPS.has(opSel.value);
+      valB.style.opacity = needsB ? '1' : '0.2';
+      valB.disabled = !needsB;
       valA.setAttribute('list', isDirection ? 'compassDirs' : '');
       valB.setAttribute('list', isDirection ? 'compassDirs' : '');
-
       redrawMapOverlays();
     }
     fieldSel.addEventListener('change', updateDynamic);
     opSel.addEventListener('change', updateDynamic);
     valA.addEventListener('input', redrawMapOverlays);
     valB.addEventListener('input', redrawMapOverlays);
-    el.querySelector('.colour-select').addEventListener('change', redrawMapOverlays);
     updateDynamic();
 
-    // ── AND group visual ──
-    const groupInput = el.querySelector('.group-input');
-    function updateGroupVisual() {
-      applyGroupColour(el, groupInput.value.trim());
-    }
-    groupInput.addEventListener('input', () => {
-      updateGroupVisual();
-      // When a user removes a group tag, garbage-collect the colour only if
-      // no other row uses that tag any more.
-      refreshAllGroupColours();
-    });
-    updateGroupVisual();
-
     // ── Remove button ──
-    el.querySelector('.btn-remove').addEventListener('click', () => { el.remove(); redrawMapOverlays(); });
+    el.querySelector('.btn-remove').addEventListener('click', () => { wrapper.remove(); redrawMapOverlays(); });
   }
 
   // ── Read conditions from DOM ───────────────────────────────────────────
   function readConditions() {
-    const rows = document.querySelectorAll('.condition-row');
     const result = [];
     let valid = true;
-    rows.forEach((row, i) => {
-      const stationId = row.querySelector('.station-input').dataset.selectedId;
-      if (!stationId) { valid = false; return; }
-      const field  = row.querySelector('.field-select').value;
-      const op     = row.querySelector('.op-select').value;
-      const valA   = parseFloat(row.querySelector('.val-a').value);
-      const valBEl = row.querySelector('.val-b');
-      const valB   = TWO_VALUE_OPS.has(op) && valBEl.value !== '' ? parseFloat(valBEl.value) : null;
-      const groupRaw = row.querySelector('.group-input')?.value.trim() || '';
-
-      // Station B: only relevant for pressure_delta
-      const staBInput = row.querySelector('.station-b-input');
-      const staBId    = (field === 'pressure_delta' && staBInput?.dataset.selectedId)
-                          ? staBInput.dataset.selectedId
-                          : null;
-
-      result.push({
-        station_id:    stationId,
-        station_b_id:  staBId,
-        field,
-        operator:      op,
-        value_a:       isNaN(valA) ? 0 : valA,
-        value_b:       valB,
-        result_colour: row.querySelector('.colour-select').value,
-        sort_order:    i,
-        group_id:      groupRaw || null,
+    let sortOrder = 0;
+    document.querySelectorAll('.condition-group').forEach(groupEl => {
+      const gid = groupEl.dataset.groupId;
+      const colour = groupEl.querySelector('.group-colour-select')?.value || 'red';
+      const rows = groupEl.querySelectorAll('.condition-row');
+      rows.forEach(row => {
+        const stationId = row.querySelector('.station-input').dataset.selectedId;
+        if (!stationId) { valid = false; return; }
+        const field  = row.querySelector('.field-select').value;
+        const op     = row.querySelector('.op-select').value;
+        const valA   = parseFloat(row.querySelector('.val-a').value);
+        const valBEl = row.querySelector('.val-b');
+        const valB   = TWO_VALUE_OPS.has(op) && valBEl.value !== '' ? parseFloat(valBEl.value) : null;
+        const staBInput = row.querySelector('.station-b-input');
+        const staBId    = (field === 'pressure_delta' && staBInput?.dataset.selectedId)
+                            ? staBInput.dataset.selectedId : null;
+        result.push({
+          station_id:    stationId,
+          station_b_id:  staBId,
+          field,
+          operator:      op,
+          value_a:       isNaN(valA) ? 0 : valA,
+          value_b:       valB,
+          result_colour: colour,
+          sort_order:    sortOrder++,
+          group_id:      rows.length > 1 ? gid : null,
+        });
       });
     });
     return valid ? result : null;
   }
-
-  // ── Load existing rule set for editing ────────────────────────────────
-  async function loadEdit(id) {
-    const res = await fetchAuth(`/api/rulesets/${id}`);
-    if (!res.ok) { showError('Could not load rule set.'); return; }
-    const rs = await res.json();
-
-    document.getElementById('pageTitle').textContent = 'Edit Rule Set';
-    document.getElementById('rsName').value    = rs.name || '';
-    document.getElementById('rsDesc').value    = rs.description || '';
-    document.getElementById('rsLat').value     = rs.lat ?? '';
-    document.getElementById('rsLon').value     = rs.lon ?? '';
-    document.getElementById('rsAlt').value     = rs.altitude_m ?? '';
-    document.getElementById('rsLogic').value   = rs.combination_logic || 'worst_wins';
-    document.getElementById('rsPublic').checked = rs.is_public || false;
-    updatePublicLabel();
-
-    // Place pin on map after filling in coordinates
-    initPinFromInputs();
-
-    for (const c of rs.conditions) makeCondRow(c);
-    redrawMapOverlays(); // ensure all sectors + highlights are applied after full list loads
-  }
-
-  // ── Save ──────────────────────────────────────────────────────────────
-  document.getElementById('saveBtn').addEventListener('click', async () => {
-    clearMessages();
-    const name = document.getElementById('rsName').value.trim();
-    if (!name) { showError('Name is required.'); return; }
-
-    const conditions = readConditions();
-    if (conditions === null) { showError('Please select a station for every condition row.'); return; }
-
-    const btn = document.getElementById('saveBtn');
-    btn.disabled = true; btn.textContent = 'Saving…';
-
-    const meta = {
-      name,
-      description: document.getElementById('rsDesc').value.trim() || null,
-      lat:         parseFloatOrNull(document.getElementById('rsLat').value),
-      lon:         parseFloatOrNull(document.getElementById('rsLon').value),
-      altitude_m:  parseIntOrNull(document.getElementById('rsAlt').value),
-      combination_logic: document.getElementById('rsLogic').value,
-      is_public:   document.getElementById('rsPublic').checked,
-    };
-
-    try {
-      let rsId = editId;
-
-      if (editId) {
-        // Update metadata
-        const r = await fetchAuth(`/api/rulesets/${editId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(meta),
-        });
-        if (!r.ok) throw new Error(await extractError(r));
-      } else {
-        // Create
-        const r = await fetchAuth('/api/rulesets', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(meta),
-        });
-        if (!r.ok) throw new Error(await extractError(r));
-        const created = await r.json();
-        rsId = created.id;
-        editId = rsId;  // make subsequent saves update instead of create
-        // Update URL without reload so a second save becomes an edit
-        history.replaceState(null, '', `/ruleset-editor?id=${rsId}`);
-      }
-
-      // Replace conditions
-      const cr = await fetchAuth(`/api/rulesets/${rsId}/conditions`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ conditions }),
-      });
-      if (!cr.ok) throw new Error(await extractError(cr));
-
-      showSuccess('Saved successfully.');
-    } catch (e) {
-      showError(e.message);
-    } finally {
-      btn.disabled = false; btn.textContent = 'Save rule set';
-    }
-  });
 
   // ── Helpers ───────────────────────────────────────────────────────────
   function parseFloatOrNull(v) { const n = parseFloat(v); return isNaN(n) ? null : n; }
@@ -891,28 +765,161 @@
       ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
 
-  // ── Sort conditions by AND group ──────────────────────────────────────
-  document.getElementById('sortGroupsBtn').addEventListener('click', () => {
-    const list = document.getElementById('conditionList');
-    const rows = [...list.querySelectorAll('.condition-row')];
-    // Stable sort: grouped rows cluster together (preserving original insertion
-    // order within a group), ungrouped rows stay at the back.
-    rows.sort((a, b) => {
-      const ga = a.querySelector('.group-input')?.value.trim() || '';
-      const gb = b.querySelector('.group-input')?.value.trim() || '';
-      if (ga === gb) return 0;
-      if (!ga) return 1;   // ungrouped → end
-      if (!gb) return -1;
-      return ga.localeCompare(gb);
-    });
-    rows.forEach(r => list.appendChild(r));  // re-insert in sorted order
+  // ── Site type toggle ──────────────────────────────────────────────────
+  function setSiteType(type) {
+    document.getElementById('rsSiteType').value = type;
+    document.getElementById('btnTypeLaunch').classList.toggle('active',  type === 'launch');
+    document.getElementById('btnTypeLanding').classList.toggle('active', type === 'landing');
+    document.getElementById('landingPickerSection').style.display = type === 'launch' ? '' : 'none';
+  }
+
+  // ── Landing picker ────────────────────────────────────────────────────
+  let myLandingRulesets = [];   // {id, name, lat, lon} — user's landing-type rulesets
+
+  async function loadLandingRulesets() {
+    const res = await fetchAuth('/api/rulesets');
+    if (!res.ok) return;
+    const all = await res.json();
+    myLandingRulesets = all.filter(rs => rs.site_type === 'landing' && rs.id !== editId);
+  }
+
+  function renderLandingPicker(selectedIds = []) {
+    const list = document.getElementById('landingPickerList');
+    if (myLandingRulesets.length === 0) {
+      list.innerHTML = '<p class="landing-picker-hint">No landing zones yet — create a ruleset with type "Landing zone" first.</p>';
+      return;
+    }
+    list.innerHTML = myLandingRulesets.map(rs => {
+      const checked = selectedIds.includes(rs.id) ? 'checked' : '';
+      const coord = rs.lat != null ? `${rs.lat.toFixed(4)}, ${rs.lon.toFixed(4)}` : '';
+      return `<div class="landing-picker-item">
+        <input type="checkbox" id="lp-${rs.id}" value="${rs.id}" ${checked} />
+        <label for="lp-${rs.id}">${esc(rs.name)}</label>
+        ${coord ? `<span class="lp-coord">${coord}</span>` : ''}
+      </div>`;
+    }).join('');
+  }
+
+  function getSelectedLandingIds() {
+    return [...document.querySelectorAll('#landingPickerList input[type=checkbox]:checked')].map(el => el.value);
+  }
+
+  // ── Load existing rule set for editing ────────────────────────────────
+  async function loadEdit(id) {
+    const res = await fetchAuth(`/api/rulesets/${id}`);
+    if (!res.ok) { showError('Could not load rule set.'); return; }
+    const rs = await res.json();
+
+    document.getElementById('pageTitle').textContent = 'Edit Rule Set';
+    document.getElementById('rsName').value    = rs.name || '';
+    document.getElementById('rsLat').value     = rs.lat ?? '';
+    document.getElementById('rsLon').value     = rs.lon ?? '';
+    document.getElementById('rsAlt').value     = rs.altitude_m ?? '';
+    document.getElementById('rsPublic').checked = rs.is_public || false;
+    updatePublicLabel();
+    setSiteType(rs.site_type || 'launch');
+    renderLandingPicker(rs.linked_landing_ids || []);
+
+    // Place pin on map after filling in coordinates
+    initPinFromInputs();
+
+    // Reconstruct visual groups from flat condition list
+    const sorted = [...rs.conditions].sort((a, b) => a.sort_order - b.sort_order);
+    const seenGroupIds = new Set();
+    for (const c of sorted) {
+      if (!c.group_id) {
+        makeCondGroup([c]);
+      } else if (!seenGroupIds.has(c.group_id)) {
+        seenGroupIds.add(c.group_id);
+        makeCondGroup(sorted.filter(x => x.group_id === c.group_id));
+      }
+    }
+    redrawMapOverlays();
+  }
+
+  // ── Save ──────────────────────────────────────────────────────────────
+  document.getElementById('saveBtn').addEventListener('click', async () => {
+    clearMessages();
+    const name = document.getElementById('rsName').value.trim();
+    if (!name) { showError('Name is required.'); return; }
+
+    const conditions = readConditions();
+    if (conditions === null) { showError('Please select a station for every condition row.'); return; }
+
+    const btn = document.getElementById('saveBtn');
+    btn.disabled = true; btn.textContent = 'Saving…';
+
+    const siteType = document.getElementById('rsSiteType').value;
+
+    const meta = {
+      name,
+      description: null,
+      lat:         parseFloatOrNull(document.getElementById('rsLat').value),
+      lon:         parseFloatOrNull(document.getElementById('rsLon').value),
+      altitude_m:  parseIntOrNull(document.getElementById('rsAlt').value),
+      site_type:   siteType,
+      combination_logic: 'worst_wins',
+      is_public:   document.getElementById('rsPublic').checked,
+    };
+
+    try {
+      let rsId = editId;
+
+      if (editId) {
+        const r = await fetchAuth(`/api/rulesets/${editId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(meta),
+        });
+        if (!r.ok) throw new Error(await extractError(r));
+      } else {
+        const r = await fetchAuth('/api/rulesets', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(meta),
+        });
+        if (!r.ok) throw new Error(await extractError(r));
+        const created = await r.json();
+        rsId = created.id;
+        editId = rsId;
+        history.replaceState(null, '', `/ruleset-editor?id=${rsId}`);
+      }
+
+      // Replace conditions
+      const cr = await fetchAuth(`/api/rulesets/${rsId}/conditions`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conditions }),
+      });
+      if (!cr.ok) throw new Error(await extractError(cr));
+
+      // Save landing links (only for launch type)
+      if (siteType === 'launch') {
+        const lr = await fetchAuth(`/api/rulesets/${rsId}/landings`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ landing_ids: getSelectedLandingIds() }),
+        });
+        if (!lr.ok) throw new Error(await extractError(lr));
+      }
+
+      showSuccess('Saved successfully.');
+    } catch (e) {
+      showError(e.message);
+    } finally {
+      btn.disabled = false; btn.textContent = 'Save rule set';
+    }
   });
 
   // ── Init ──────────────────────────────────────────────────────────────
   document.getElementById('rsPublic').addEventListener('change', updatePublicLabel);
-  document.getElementById('addCondBtn').addEventListener('click', () => makeCondRow());
+  document.getElementById('btnTypeLaunch').addEventListener('click', () => setSiteType('launch'));
+  document.getElementById('btnTypeLanding').addEventListener('click', () => setSiteType('landing'));
+  document.getElementById('addGroupBtn').addEventListener('click', () => makeCondGroup());
 
   await loadStations();
+  await loadLandingRulesets();
+  renderLandingPicker();
   drawStationMarkersOnEditorMap();
   if (editId) await loadEdit(editId);
 </script>

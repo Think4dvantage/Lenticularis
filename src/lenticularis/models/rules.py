@@ -8,6 +8,8 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
+SiteType = Literal["launch", "landing"]
+
 FieldName = Literal[
     "wind_speed", "wind_gust", "wind_direction",
     "temperature", "humidity", "pressure", "pressure_delta",
@@ -59,6 +61,7 @@ class RuleSetCreate(BaseModel):
     lat: Optional[float] = None
     lon: Optional[float] = None
     altitude_m: Optional[int] = None
+    site_type: SiteType = "launch"
     combination_logic: CombinationLogic = "worst_wins"
     is_public: bool = False
 
@@ -69,6 +72,7 @@ class RuleSetUpdate(BaseModel):
     lat: Optional[float] = None
     lon: Optional[float] = None
     altitude_m: Optional[int] = None
+    site_type: Optional[SiteType] = None
     combination_logic: Optional[CombinationLogic] = None
     is_public: Optional[bool] = None
 
@@ -81,10 +85,12 @@ class RuleSetOut(BaseModel):
     lat: Optional[float]
     lon: Optional[float]
     altitude_m: Optional[int]
+    site_type: SiteType
     combination_logic: CombinationLogic
     is_public: bool
     clone_count: int
     cloned_from_id: Optional[str]
+    linked_landing_ids: list[str] = []
     created_at: datetime
     updated_at: Optional[datetime]
 
@@ -99,6 +105,11 @@ class RuleSetDetail(RuleSetOut):
 class ConditionsReplaceRequest(BaseModel):
     """Replace the full condition list for a rule set in one call."""
     conditions: list[RuleConditionCreate]
+
+
+class LandingLinksRequest(BaseModel):
+    """Replace landing links for a launch ruleset."""
+    landing_ids: list[str]
 
 
 # ---------------------------------------------------------------------------
@@ -118,9 +129,19 @@ class ConditionResult(BaseModel):
     group_all_matched: Optional[bool] = None
 
 
+class LandingDecision(BaseModel):
+    """Evaluation summary for one linked landing zone."""
+    ruleset_id: str
+    name: str
+    decision: ResultColour
+
+
 class EvaluationResult(BaseModel):
     """Full evaluation result for a rule set."""
     decision: ResultColour
     evaluated_at: str
     condition_results: list[ConditionResult] = []
     no_data_stations: list[str] = []
+    # Populated only when site_type == "launch" and landing links exist
+    landing_decisions: list[LandingDecision] = []
+    best_landing_decision: Optional[ResultColour] = None

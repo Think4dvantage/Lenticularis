@@ -3,10 +3,11 @@ SQLAlchemy ORM models for Lenticularis.
 
 Tables
 ------
-users            — pilot and admin accounts (local + social login)
-oauth_identities — one row per linked social provider per user
-rulesets         — pilot's rule set (includes site name + coordinates)
-rule_conditions  — individual condition rows within a rule set
+users                — pilot and admin accounts (local + social login)
+oauth_identities     — one row per linked social provider per user
+rulesets             — pilot's rule set (includes site name + coordinates)
+rule_conditions      — individual condition rows within a rule set
+launch_landing_links — links a launch ruleset to one or more landing rulesets
 """
 from __future__ import annotations
 
@@ -90,6 +91,9 @@ class RuleSet(Base):
     lon = Column(Float, nullable=True)
     altitude_m = Column(Integer, nullable=True)
 
+    # Site type: "launch" (default) or "landing"
+    site_type = Column(String, nullable=False, default="launch")
+
     # Evaluation
     combination_logic = Column(String, nullable=False, default="worst_wins")  # worst_wins | majority_vote
 
@@ -112,6 +116,42 @@ class RuleSet(Base):
     conditions = relationship(
         "RuleCondition", back_populates="ruleset", cascade="all, delete-orphan",
         order_by="RuleCondition.sort_order",
+    )
+
+    # Landing links — only populated/meaningful when site_type == "launch"
+    landing_links = relationship(
+        "LaunchLandingLink",
+        foreign_keys="LaunchLandingLink.launch_ruleset_id",
+        back_populates="launch_ruleset",
+        cascade="all, delete-orphan",
+    )
+
+    @property
+    def linked_landing_ids(self) -> list[str]:
+        return [link.landing_ruleset_id for link in self.landing_links]
+
+
+class LaunchLandingLink(Base):
+    """Associates a launch ruleset with one or more landing rulesets (many-to-many)."""
+
+    __tablename__ = "launch_landing_links"
+    __table_args__ = (
+        UniqueConstraint("launch_ruleset_id", "landing_ruleset_id", name="uq_launch_landing"),
+    )
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    launch_ruleset_id = Column(
+        String, ForeignKey("rulesets.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    landing_ruleset_id = Column(
+        String, ForeignKey("rulesets.id", ondelete="CASCADE"), nullable=False
+    )
+
+    launch_ruleset = relationship(
+        "RuleSet", foreign_keys=[launch_ruleset_id], back_populates="landing_links"
+    )
+    landing_ruleset = relationship(
+        "RuleSet", foreign_keys=[landing_ruleset_id]
     )
 
 

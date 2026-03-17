@@ -6,7 +6,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from lenticularis.database.models import Base
@@ -17,6 +17,16 @@ _engine = None
 _SessionLocal = None
 
 
+def _run_column_migrations(engine) -> None:
+    """Add columns introduced after the initial schema — safe to re-run (idempotent)."""
+    with engine.connect() as conn:
+        cols = {row[1] for row in conn.execute(text("PRAGMA table_info(rulesets)")).fetchall()}
+        if "site_type" not in cols:
+            conn.execute(text("ALTER TABLE rulesets ADD COLUMN site_type TEXT NOT NULL DEFAULT 'launch'"))
+            conn.commit()
+            logger.info("Migration: added rulesets.site_type column")
+
+
 def init_db(db_path: str) -> None:
     """Create the SQLite file + all tables (idempotent)."""
     global _engine, _SessionLocal
@@ -24,6 +34,7 @@ def init_db(db_path: str) -> None:
     db_url = f"sqlite:///{db_path}"
     _engine = create_engine(db_url, connect_args={"check_same_thread": False})
     Base.metadata.create_all(bind=_engine)
+    _run_column_migrations(_engine)
     _SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=_engine)
     logger.info("SQLite database ready: %s", db_path)
 

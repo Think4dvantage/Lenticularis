@@ -77,7 +77,9 @@ A condition with field `pressure_delta` shows two station pickers. The runtime e
 
 ### Rule set metadata
 
-`name`, `description`, `launch_site_id`, `is_public` (false by default), `clone_count` (read-only), `cloned_from_id`
+`name`, `description`, `site_type` (`"launch"` | `"landing"`), `lat`, `lon`, `altitude_m`, `is_public` (false by default), `clone_count` (read-only), `cloned_from_id`
+
+A **launch** ruleset can be linked to multiple **landing** rulesets via `PUT /api/rulesets/{id}/landings`. The evaluate endpoint for a launch also evaluates all linked landings and returns `landing_decisions` + `best_landing_decision` (best_wins: green > orange > red).
 
 ---
 
@@ -116,11 +118,13 @@ A condition with field `pressure_delta` shows two station pickers. The runtime e
 
 - `users` — `id`, `username`, `email`, `hashed_password`, `role`, `created_at`
 - `weather_stations` — `station_id`, `name`, `network`, `latitude`, `longitude`, `elevation`, `canton`, `active`
-- `launch_sites` — `id`, `name`, `latitude`, `longitude`, `owner_id` FK → users
-- `rulesets` — `id`, `name`, `description`, `launch_site_id`, `owner_id`, `combination_logic`, `is_public`, `clone_count`, `cloned_from_id`, `created_at`, `updated_at`
+- `rulesets` — `id`, `name`, `description`, `site_type` (`"launch"` | `"landing"`, default `"launch"`), `lat`, `lon`, `altitude_m`, `owner_id` FK → users, `combination_logic`, `is_public`, `clone_count`, `cloned_from_id`, `created_at`, `updated_at`
+- `launch_landing_links` — `id`, `launch_ruleset_id` FK → rulesets, `landing_ruleset_id` FK → rulesets (unique pair constraint); links a launch ruleset to one or more landing rulesets
 - `rule_conditions` — `id`, `ruleset_id`, `group_id` (nullable), `station_id`, `station_b_id` (nullable), `field`, `operator`, `value_a`, `value_b` (nullable), `result_colour`, `sort_order`
 - `condition_groups` — `id`, `ruleset_id`, `parent_group_id` (nullable), `logic` (AND/OR), `sort_order`
-- `notification_configs` — `id`, `user_id`, `launch_site_id`, `channel`, `config_json`, `on_transitions_json`
+- `notification_configs` — `id`, `user_id`, `ruleset_id`, `channel`, `config_json`, `on_transitions_json`
+
+> There is **no separate `launch_sites` table** — site identity (name, coordinates, altitude) is embedded in `rulesets`. The `site_type` field distinguishes launches from landings.
 
 ### Pydantic models
 
@@ -381,23 +385,18 @@ All time-range endpoints accept `?from=&to=` parameters. Best-windows also accep
 
 ---
 
-### v0.7 — Rules Evaluator + Traffic Lights on Map
-**Goal:** rule sets are evaluated against live station data; the map shows GREEN/ORANGE/RED badges per launch site.
+### v0.7 — Rules Evaluator + Traffic Lights on Map ✅
+**Goal:** rule sets are evaluated against live station data; the map shows GREEN/ORANGE/RED badges per launch site with halo for landing zones.
 
 - `rules/evaluator.py` walks condition tree, fetches latest InfluxDB measurement per station per condition, applies operator logic, resolves combination logic, returns `TrafficLightDecision` with full `condition_results`
 - Writes decision + `condition_results` JSON to `rule_decisions` InfluxDB measurement
-- `POST /api/rulesets/{id}/evaluate` endpoint (on-demand evaluation)
-- Scheduler runs periodic evaluation of all active rulesets (from v0.5 scheduler)
-- `GET /api/decisions?launch_site_id=&from=&to=` endpoint
-- Map (`static/app.js`) shows traffic light badges on launch site markers; clicking shows which conditions triggered
-
-#### Implementation steps for v0.7
-1. Implement `rules/evaluator.py` (condition tree walk, per-condition InfluxDB fetch, operator logic, combination logic)
-2. Add `write_decision()` + `query_decisions()` helpers to `database/influx.py`
-3. Add evaluate endpoint to `api/routers/rulesets.py`
-4. Add `api/routers/decisions.py` for decisions history endpoint
-5. Add evaluation scheduler job in `scheduler.py`
-6. Update `static/app.js` to fetch and display traffic light badges
+- `GET /api/rulesets/{id}/evaluate` — evaluates launch + all linked landings; returns `landing_decisions` + `best_landing_decision`
+- `PUT /api/rulesets/{id}/landings` — replace landing zone links for a launch ruleset
+- Rulesets have `site_type`: `"launch"` (default) or `"landing"`; linked via `launch_landing_links` table
+- Map shows **▲ launch markers** (coloured disc + optional halo ring) and **⚑ landing markers** (flag icon):
+  - Launch disc colour = launch decision; halo colour = best landing decision (best_wins: green > orange > red)
+  - No halo if no landings linked
+- `static/rulesets.html` cards show site type badge + inline landing decision badges per linked zone
 
 ---
 
@@ -539,3 +538,6 @@ All time-range endpoints accept `?from=&to=` parameters. Best-windows also accep
 - Rule sharing is clone-only (no co-editing); private by default, opt-in publish
 - Chart.js for all charts (lightweight, no framework required)
 - MeteoSwiss, SLF, and METAR are the primary no-auth collectors; Holfuy, Windline, and Ecovitt are deferred to v1.2
+- **No separate `launch_sites` table** — site identity is embedded in `rulesets`; `site_type` field (`"launch"` | `"landing"`) distinguishes the two
+- **Launch–landing linking**: a launch ruleset links to ≥0 landing rulesets via `launch_landing_links`; the evaluate endpoint returns both decisions; landing decisions are also written to `rule_decisions` for independent statistics
+- **Map halo**: launch markers have a coloured halo showing the best landing decision (best_wins); no halo = no landings linked; landing markers use a distinct flag icon

@@ -10,6 +10,7 @@ GET    /api/rulesets/{id}             — get detail (with conditions)
 PUT    /api/rulesets/{id}             — update metadata
 DELETE /api/rulesets/{id}             — delete
 PUT    /api/rulesets/{id}/conditions  — replace full condition list
+PUT    /api/rulesets/{id}/landings    — replace landing zone links (launch only)
 POST   /api/rulesets/{id}/clone       — clone a public rule set
 """
 from __future__ import annotations
@@ -24,10 +25,12 @@ from sqlalchemy.orm import Session
 
 from lenticularis.api.dependencies import get_current_user
 from lenticularis.database.db import get_db
-from lenticularis.database.models import RuleCondition, RuleSet, User
+from lenticularis.database.models import LaunchLandingLink, RuleCondition, RuleSet, User
 from lenticularis.models.rules import (
     ConditionsReplaceRequest,
     EvaluationResult,
+    LandingDecision,
+    LandingLinksRequest,
     RuleSetCreate,
     RuleSetDetail,
     RuleSetOut,
@@ -120,20 +123,46 @@ def evaluate_ruleset(
     if rs.owner_id != current_user.id and not rs.is_public:
         raise HTTPException(status_code=403, detail="Not your rule set")
 
-    if not rs.conditions:
-        return EvaluationResult(
-            decision="green",
-            evaluated_at=datetime.now(timezone.utc).isoformat(),
-            condition_results=[],
-            no_data_stations=[],
-        )
-
     from lenticularis.rules.evaluator import run_evaluation, write_decision
 
     influx = request.app.state.influx
-    result = run_evaluation(rs, influx)
-    write_decision(rs, result, influx)
-    logger.info("Evaluated ruleset %s → %s (no-data: %s)", rs.id, result["decision"], result["no_data_stations"])
+
+    if not rs.conditions:
+        result = {
+            "decision": "green",
+            "evaluated_at": datetime.now(timezone.utc).isoformat(),
+            "condition_results": [],
+            "no_data_stations": [],
+        }
+    else:
+        result = run_evaluation(rs, influx)
+        write_decision(rs, result, influx)
+        logger.info("Evaluated ruleset %s → %s (no-data: %s)", rs.id, result["decision"], result["no_data_stations"])
+
+    # For launch rulesets, also evaluate linked landing zones
+    landing_decisions: list[LandingDecision] = []
+    if rs.site_type == "launch" and rs.landing_links:
+        _priority = ["green", "orange", "red"]
+        for link in rs.landing_links:
+            lr = db.get(RuleSet, link.landing_ruleset_id)
+            if lr is None:
+                continue
+            if not lr.conditions:
+                ldec = "green"
+            else:
+                lresult = run_evaluation(lr, influx)
+                write_decision(lr, lresult, influx)
+                ldec = lresult["decision"]
+            landing_decisions.append(LandingDecision(ruleset_id=lr.id, name=lr.name, decision=ldec))
+
+        best = None
+        for c in _priority:
+            if any(ld.decision == c for ld in landing_decisions):
+                best = c
+                break
+        result["landing_decisions"] = [ld.model_dump() for ld in landing_decisions]
+        result["best_landing_decision"] = best
+
     return result
 
 
@@ -214,7 +243,46 @@ def replace_conditions(
             id=str(uuid.uuid4()),
             ruleset_id=rs.id,
             sort_order=i,
-            **cond.model_dump(),
+            **cond.model_dump(exclude={'sort_order'}),
+        ))
+
+    rs.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(rs)
+    return rs
+
+
+# ---------------------------------------------------------------------------
+# Replace landing zone links (launch → landing associations)
+# ---------------------------------------------------------------------------
+
+@router.put("/{ruleset_id}/landings", response_model=RuleSetOut)
+def replace_landings(
+    ruleset_id: str,
+    body: LandingLinksRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    rs = _get_own_ruleset(ruleset_id, current_user, db)
+
+    # Validate each landing ID: must exist and be owned by the same user
+    for lid in body.landing_ids:
+        lr = db.get(RuleSet, lid)
+        if lr is None:
+            raise HTTPException(status_code=404, detail=f"Landing ruleset {lid} not found")
+        if lr.owner_id != current_user.id:
+            raise HTTPException(status_code=403, detail=f"Landing ruleset {lid} is not yours")
+        if lr.site_type != "landing":
+            raise HTTPException(status_code=400, detail=f"Ruleset {lid} is not of type 'landing'")
+
+    # Replace all links atomically
+    for link in list(rs.landing_links):
+        db.delete(link)
+    for lid in body.landing_ids:
+        db.add(LaunchLandingLink(
+            id=str(uuid.uuid4()),
+            launch_ruleset_id=rs.id,
+            landing_ruleset_id=lid,
         ))
 
     rs.updated_at = datetime.now(timezone.utc)
@@ -248,6 +316,7 @@ def clone_ruleset(
         lat=source.lat,
         lon=source.lon,
         altitude_m=source.altitude_m,
+        site_type=source.site_type,
         combination_logic=source.combination_logic,
         is_public=False,
         clone_count=0,

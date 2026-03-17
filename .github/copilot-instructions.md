@@ -43,13 +43,13 @@ src/lenticularis/
 │   ├── metar.py             # Live METAR observations (AviationWeather)
 │   └── forecast_meteoswiss.py  # ICON-CH1/CH2 NWP forecast collector (GRIB2)
 ├── database/
-│   ├── models.py            # SQLAlchemy ORM models
-│   ├── db.py                # SQLAlchemy session + get_db dependency
+│   ├── models.py            # SQLAlchemy ORM models (RuleSet, RuleCondition, LaunchLandingLink, …)
+│   ├── db.py                # SQLAlchemy session + get_db dependency + _run_column_migrations()
 │   └── influx.py            # InfluxDB client (write + query, both weather_data and weather_forecast)
 ├── models/
 │   ├── weather.py           # WeatherStation, WeatherMeasurement
 │   ├── auth.py              # User, UserCreate, Token
-│   └── rules.py             # RuleSet, Condition, EvaluationResult, ForecastStep, ForecastResult
+│   └── rules.py             # RuleSet, Condition, EvaluationResult, LandingDecision, ForecastStep, ForecastResult
 ├── rules/
 │   └── evaluator.py         # Live evaluator (run_evaluation) + forecast evaluator (run_forecast_evaluation)
 ├── services/
@@ -58,9 +58,9 @@ src/lenticularis/
 ├── config.py                # YAML loader + Pydantic config models
 └── scheduler.py             # APScheduler wiring all collectors
 static/
-├── index.html / app.js / map.js   # Map dashboard (Leaflet.js)
-├── rulesets.html                  # Rule set card list + live badge + forecast timeline strip
-├── ruleset-editor.html            # Condition builder
+├── index.html / map.js      # Map dashboard (Leaflet.js) — station markers + launch/landing site markers
+├── rulesets.html            # Rule set card list + live badge + landing decision badges
+├── ruleset-editor.html      # Condition builder + site type toggle (launch/landing) + landing picker
 ├── stations.html / station-detail.html  # Station browser + detail charts
 └── auth.js / login.html / register.html # Auth UI
 ```
@@ -82,6 +82,18 @@ static/
 
 ---
 
+## Deployment Philosophy
+
+Lenticularis runs self-hosted on a homelab (Traefik + Docker, Fedora host). Cloud deployment is not a goal, but the architecture must remain **cloud-portable** — avoid choices that permanently prevent horizontal scaling:
+
+- No local file state (except InfluxDB and SQLite paths, which are volume-mounted)
+- No hardcoded hostnames or absolute paths
+- All config via `config.yml` or environment variables
+
+**Database scalability note:** SQLite is acceptable for now (single instance, homelab). If the project ever needs to run multiple replicas or move to a cloud platform, the migration path is SQLite → PostgreSQL. When touching `database/models.py` or `db.py`, prefer SQLAlchemy patterns that work on both engines (avoid SQLite-only pragmas in production code paths).
+
+---
+
 ## Rules Engine — Critical Design
 
 The rules evaluator (`rules/evaluator.py`) must:
@@ -99,6 +111,37 @@ The station picker is **per condition row** — a single rule set can reference 
 ### Forecast Evaluation (Milestone 2)
 
 `run_forecast_evaluation(ruleset, influx, horizon_hours=120)` re-uses the identical standalone/group/combination logic but iterates over hourly `valid_time` steps from `weather_forecast` instead of fetching the single latest `weather_data` value. It returns a `list[ForecastStep]` and does **not** write to InfluxDB (ephemeral, on-demand). The `GET /api/rulesets/{id}/forecast?hours=120` endpoint must be declared **before** `GET /{ruleset_id}` to avoid FastAPI route shadowing.
+
+---
+
+## Launch / Landing Design
+
+Every `RuleSet` has a `site_type` field: `"launch"` (default) or `"landing"`. There is **no separate `launch_sites` table** — site coordinates and name are embedded in the ruleset.
+
+### Linking
+
+A launch ruleset can be linked to one or more landing rulesets via the `launch_landing_links` join table. Manage links with `PUT /api/rulesets/{id}/landings` (`{"landing_ids": [...]}`). Each landing ID must be owned by the same user and have `site_type == "landing"`.
+
+### Evaluation
+
+`GET /api/rulesets/{id}/evaluate` on a **launch** ruleset:
+1. Evaluates the launch conditions normally → writes to `rule_decisions`
+2. For each linked landing: evaluates its conditions → writes to `rule_decisions`
+3. Returns `landing_decisions: [{ruleset_id, name, decision}]` and `best_landing_decision` (best_wins: green > orange > red)
+
+This means landing statistics are populated whenever the parent launch is evaluated — no separate evaluation call needed.
+
+### Map visualisation
+
+- **Launch marker**: filled circle (colour = launch decision) + optional halo ring (colour = `best_landing_decision`). No halo if no landings are linked.
+- **Landing marker**: flag icon (colour = landing decision).
+- Halo uses **best_wins**: if any linked landing is green the halo is green, regardless of others.
+
+### Key invariants
+
+- A landing ruleset can be linked to multiple launches (shared landing field).
+- Cloning a launch ruleset does **not** copy landing links — they are location-specific.
+- `site_type` can be changed after creation; changing a launch to landing does not auto-remove existing links (they become inactive until type is changed back).
 
 ---
 

@@ -14,6 +14,8 @@ const map = L.map('map', {
   zoom: 11,
   zoomControl: true,
 });
+// Expose globally so the auth module script can add the ruleset layer
+window._lentiMap = map;
 
 L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
   attribution:

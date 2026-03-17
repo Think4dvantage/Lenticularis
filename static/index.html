@@ -166,8 +166,126 @@
 
 <script src="/static/map.js"></script>
 <script type="module">
-  import { renderNavAuth } from '/static/auth.js';
+  import { renderNavAuth, isLoggedIn, fetchAuth } from '/static/auth.js';
   renderNavAuth('map');
+
+  if (isLoggedIn()) {
+
+  // ── Decision colour palette ─────────────────────────────────────────────
+  const DC = { green: '#68d391', orange: '#f6ad55', red: '#fc8181', null: '#4a5568' };
+
+  function decisionColor(d) { return DC[d] ?? DC.null; }
+
+  function bestLanding(landingDecisions) {
+    for (const c of ['green', 'orange', 'red']) {
+      if (landingDecisions.some(d => d.decision === c)) return c;
+    }
+    return null;
+  }
+
+  // ── Marker icons ────────────────────────────────────────────────────────
+  function launchIcon(launchColor, haloColor) {
+    const lc = decisionColor(launchColor);
+    const halo = haloColor
+      ? `<circle cx="24" cy="24" r="21" fill="none" stroke="${decisionColor(haloColor)}" stroke-width="5" opacity="0.8"/>`
+      : '';
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48">
+      ${halo}
+      <circle cx="24" cy="24" r="13" fill="${lc}" fill-opacity="0.92"/>
+      <text x="24" y="29" font-size="13" text-anchor="middle" fill="#000" opacity="0.7">▲</text>
+    </svg>`;
+    return L.divIcon({ html: svg, className: '', iconSize: [48, 48], iconAnchor: [24, 24], popupAnchor: [0, -26] });
+  }
+
+  function landingIcon(color) {
+    const c = decisionColor(color);
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="32" viewBox="0 0 24 32">
+      <line x1="4" y1="2" x2="4" y2="30" stroke="${c}" stroke-width="2.5" stroke-linecap="round"/>
+      <polygon points="4,3 22,10 4,17" fill="${c}" fill-opacity="0.85"/>
+    </svg>`;
+    return L.divIcon({ html: svg, className: '', iconSize: [24, 32], iconAnchor: [4, 30], popupAnchor: [10, -30] });
+  }
+
+  // ── Popup HTML ──────────────────────────────────────────────────────────
+  function escHtml(s) {
+    return String(s).replace(/[&<>"']/g, c =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  function launchPopup(rs, dec) {
+    const lc = decisionColor(dec.decision);
+    const altLabel = rs.altitude_m != null ? ` · ${rs.altitude_m} m` : '';
+    let landingRows = '';
+    for (const ld of (dec.landing_decisions || [])) {
+      landingRows += `<div class="popup-row"><span>⚑ ${escHtml(ld.name)}</span>
+        <span style="color:${decisionColor(ld.decision)};font-weight:700">${ld.decision.toUpperCase()}</span></div>`;
+    }
+    return `
+      <div class="popup-name">▲ ${escHtml(rs.name)}</div>
+      <div class="popup-meta">Launch${altLabel}</div>
+      <div class="popup-row" style="margin-bottom:6px">
+        <span>Launch</span>
+        <span style="color:${lc};font-weight:700">${dec.decision.toUpperCase()}</span>
+      </div>
+      ${landingRows}
+      <a class="popup-link" href="/ruleset-editor?id=${rs.id}">Edit →</a>`;
+  }
+
+  function landingPopup(rs, dec) {
+    const lc = decisionColor(dec.decision);
+    const altLabel = rs.altitude_m != null ? ` · ${rs.altitude_m} m` : '';
+    return `
+      <div class="popup-name">⚑ ${escHtml(rs.name)}</div>
+      <div class="popup-meta">Landing zone${altLabel}</div>
+      <div class="popup-row" style="margin-bottom:6px">
+        <span>Landable</span>
+        <span style="color:${lc};font-weight:700">${dec.decision.toUpperCase()}</span>
+      </div>
+      <a class="popup-link" href="/ruleset-editor?id=${rs.id}">Edit →</a>`;
+  }
+
+  // ── Marker layer ────────────────────────────────────────────────────────
+  const rulesetLayer = L.layerGroup().addTo(window._lentiMap);
+
+  async function loadRulesetMarkers() {
+    try {
+      const res = await fetchAuth('/api/rulesets');
+      if (!res.ok) return;
+      const rulesets = await res.json();
+      const positioned = rulesets.filter(rs => rs.lat != null && rs.lon != null);
+      if (positioned.length === 0) return;
+
+      // Evaluate all in parallel
+      const evaluations = await Promise.allSettled(
+        positioned.map(rs => fetchAuth(`/api/rulesets/${rs.id}/evaluate`).then(r => r.ok ? r.json() : null))
+      );
+
+      rulesetLayer.clearLayers();
+
+      positioned.forEach((rs, i) => {
+        const dec = evaluations[i].status === 'fulfilled' ? evaluations[i].value : null;
+        if (!dec) return;
+
+        if (rs.site_type === 'launch') {
+          const haloColor = dec.landing_decisions?.length ? dec.best_landing_decision : null;
+          L.marker([rs.lat, rs.lon], { icon: launchIcon(dec.decision, haloColor), zIndexOffset: 500 })
+            .addTo(rulesetLayer)
+            .bindPopup(launchPopup(rs, dec), { maxWidth: 280 });
+        } else {
+          L.marker([rs.lat, rs.lon], { icon: landingIcon(dec.decision), zIndexOffset: 400 })
+            .addTo(rulesetLayer)
+            .bindPopup(landingPopup(rs, dec), { maxWidth: 240 });
+        }
+      });
+    } catch (err) {
+      console.error('Failed to load ruleset markers:', err);
+    }
+  }
+
+  loadRulesetMarkers();
+  setInterval(loadRulesetMarkers, 60_000);
+
+  } // end if (isLoggedIn())
 </script>
 </body>
 </html>
