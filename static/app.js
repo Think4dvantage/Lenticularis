@@ -163,6 +163,18 @@ function startAutoRefresh() {
   _autoRefreshTimer = setInterval(loadStations, AUTO_REFRESH_SECONDS * 1000);
 }
 
+function stopAutoRefresh() {
+  if (_autoRefreshTimer) { clearInterval(_autoRefreshTimer); _autoRefreshTimer = null; }
+}
+
+// ---------------------------------------------------------------------------
+// Replay integration — called by the replay bar (inline script in stations.html)
+// ---------------------------------------------------------------------------
+function applyReplaySnapshot(stations) {
+  _allStations = stations;
+  renderTable();
+}
+
 // ---------------------------------------------------------------------------
 // Status indicator
 // ---------------------------------------------------------------------------

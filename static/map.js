@@ -207,5 +207,35 @@ function setStatus(ok, label) {
   document.getElementById('navStatus').textContent = label;
 }
 
+// ---------------------------------------------------------------------------
+// Live auto-refresh (disabled during replay)
+// ---------------------------------------------------------------------------
+let _liveTimer = null;
+
+function startLiveRefresh() {
+  stopLiveRefresh();
+  _liveTimer = setInterval(loadStations, 60_000);
+}
+
+function stopLiveRefresh() {
+  if (_liveTimer) { clearInterval(_liveTimer); _liveTimer = null; }
+}
+
 loadStations();
-setInterval(loadStations, 60_000); // refresh arrows + popups every 60 s
+startLiveRefresh();
+
+// ---------------------------------------------------------------------------
+// Replay integration — called by the replay bar (inline script in index.html)
+// ---------------------------------------------------------------------------
+function applyReplaySnapshot(stations) {
+  markerLayer.clearLayers();
+  let placed = 0;
+  for (const s of stations) {
+    if (s.latitude == null || s.longitude == null) continue;
+    L.marker([s.latitude, s.longitude], { icon: markerIcon(s) })
+      .addTo(markerLayer)
+      .bindPopup(buildPopup(s), { maxWidth: 260 });
+    placed++;
+  }
+  return placed;
+}

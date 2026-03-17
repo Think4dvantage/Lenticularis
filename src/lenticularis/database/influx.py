@@ -208,6 +208,89 @@ from(bucket: "{self._cfg.bucket}")
         return rows
 
     # ------------------------------------------------------------------
+    # Query — data bounds (earliest / latest timestamp with any data)
+    # ------------------------------------------------------------------
+
+    def query_data_bounds(self) -> dict:
+        """
+        Return the earliest and latest timestamps that have any recorded data.
+        Scans up to 365 days back for the earliest point.
+        """
+        flux_earliest = f"""
+from(bucket: "{self._cfg.bucket}")
+  |> range(start: -365d)
+  |> filter(fn: (r) => r._measurement == "{MEASUREMENT_WEATHER}")
+  |> keep(columns: ["_time"])
+  |> sort(columns: ["_time"])
+  |> first()
+"""
+        flux_latest = f"""
+from(bucket: "{self._cfg.bucket}")
+  |> range(start: -48h)
+  |> filter(fn: (r) => r._measurement == "{MEASUREMENT_WEATHER}")
+  |> keep(columns: ["_time"])
+  |> last()
+"""
+        earliest: Optional[datetime] = None
+        latest: Optional[datetime] = None
+
+        try:
+            for table in self._query_api.query(flux_earliest, org=self._cfg.org):
+                for record in table.records:
+                    t = record.get_time()
+                    if earliest is None or t < earliest:
+                        earliest = t
+        except Exception as exc:
+            logger.error("InfluxDB data_bounds earliest error: %s", exc)
+
+        try:
+            for table in self._query_api.query(flux_latest, org=self._cfg.org):
+                for record in table.records:
+                    t = record.get_time()
+                    if latest is None or t > latest:
+                        latest = t
+        except Exception as exc:
+            logger.error("InfluxDB data_bounds latest error: %s", exc)
+
+        return {"earliest": earliest, "latest": latest}
+
+    # ------------------------------------------------------------------
+    # Query — history for all stations (replay)
+    # ------------------------------------------------------------------
+
+    def query_history_all_stations(self, start: datetime, end: datetime) -> dict[str, list[dict]]:
+        """
+        Return time-series data for **every** station between ``start`` and ``end``.
+        Returns a dict keyed by ``station_id``, each value a time-sorted list of measurement dicts.
+        """
+        start_str = start.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        end_str = end.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        flux = f"""
+from(bucket: "{self._cfg.bucket}")
+  |> range(start: {start_str}, stop: {end_str})
+  |> filter(fn: (r) => r._measurement == "{MEASUREMENT_WEATHER}")
+  |> pivot(rowKey: ["_time", "station_id", "network"], columnKey: ["_field"], valueColumn: "_value")
+  |> sort(columns: ["_time"])
+"""
+        try:
+            tables = self._query_api.query(flux, org=self._cfg.org)
+        except Exception as exc:
+            logger.error("InfluxDB history_all query error: %s", exc)
+            return {}
+
+        results: dict[str, list[dict]] = {}
+        for table in tables:
+            for record in table.records:
+                sid = record.values.get("station_id", "")
+                entry: dict = {"timestamp": record.get_time()}
+                entry.update({
+                    k: v for k, v in record.values.items()
+                    if not k.startswith("_") and k not in ("result", "table", "station_id", "network")
+                })
+                results.setdefault(sid, []).append(entry)
+        return results
+
+    # ------------------------------------------------------------------
     # Idempotency guard
     # ------------------------------------------------------------------
 

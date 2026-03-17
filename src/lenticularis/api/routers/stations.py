@@ -11,6 +11,7 @@ Endpoints:
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request
@@ -103,6 +104,82 @@ async def list_stations(request: Request):
     # Sort by network, then name for stable UI ordering
     results.sort(key=lambda s: (s.network, s.name))
     return results
+
+
+@router.get("/data-bounds")
+async def get_data_bounds(request: Request):
+    """Return the earliest and latest timestamps that have any recorded data."""
+    influx = _get_influx(request)
+    bounds = influx.query_data_bounds()
+    return {
+        "earliest": bounds["earliest"].isoformat() if bounds["earliest"] else None,
+        "latest": bounds["latest"].isoformat() if bounds["latest"] else None,
+    }
+
+
+@router.get("/replay")
+async def get_replay(
+    request: Request,
+    hours: Optional[int] = Query(default=None, ge=1, le=168, description="Relative range in hours (1–168)"),
+    start: Optional[str] = Query(default=None, description="ISO 8601 start datetime"),
+    end: Optional[str] = Query(default=None, description="ISO 8601 end datetime"),
+):
+    """
+    Return historical measurements for **all** stations within a time window,
+    suitable for client-side replay.
+
+    Either supply ``hours`` for a relative window ending now, or both ``start``
+    and ``end`` for an absolute window (max 7 days).
+    """
+    influx = _get_influx(request)
+    registry = _get_station_registry(request)
+    now = datetime.now(timezone.utc)
+
+    if hours is not None:
+        end_dt = now
+        start_dt = now - timedelta(hours=hours)
+    elif start and end:
+        try:
+            start_dt = datetime.fromisoformat(start.replace("Z", "+00:00"))
+            end_dt = datetime.fromisoformat(end.replace("Z", "+00:00"))
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid ISO 8601 date format")
+        if (end_dt - start_dt).total_seconds() > 7 * 24 * 3600:
+            raise HTTPException(status_code=400, detail="Date range too large (max 7 days)")
+        if end_dt <= start_dt:
+            raise HTTPException(status_code=400, detail="end must be after start")
+    else:
+        end_dt = now
+        start_dt = now - timedelta(hours=24)
+
+    raw = influx.query_history_all_stations(start_dt, end_dt)
+
+    result: dict[str, Any] = {}
+    for sid, measurements in raw.items():
+        station = registry.get(sid)
+        serialised = [
+            {k: v.isoformat() if hasattr(v, "isoformat") else v for k, v in m.items()}
+            for m in measurements
+        ]
+        result[sid] = {
+            "station": {
+                "station_id": sid,
+                "name": station.name if station else sid,
+                "network": station.network if station else "",
+                "latitude": station.latitude if station else None,
+                "longitude": station.longitude if station else None,
+                "elevation": station.elevation if station else None,
+                "canton": station.canton if station else None,
+            },
+            "measurements": serialised,
+        }
+
+    return {
+        "start": start_dt.isoformat(),
+        "end": end_dt.isoformat(),
+        "station_count": len(result),
+        "data": result,
+    }
 
 
 @router.get("/{station_id}", response_model=StationResponse)
