@@ -38,61 +38,73 @@ const NETWORK_COLOR = {
 
 // ---------------------------------------------------------------------------
 // Wind speed → colour
-// 0–25 km/h : white → dark green
-// 25–35 km/h : dark green → dark blue
-// 35–50 km/h : dark blue → bright red
-// 50+ km/h  : bright red
+//  0–15 km/h : #003bc4 (blue)
+// 15–30 km/h : #003bc4 → #8900c4 (blue → purple)
+// 30–50 km/h : #8900c4 → #ff0000 (purple → bright red)
+// 50+ km/h   : #ff0000 (bright red)
 // ---------------------------------------------------------------------------
 function windSpeedColor(speed) {
-  if (speed == null) return '#718096'; // grey = no data
+  if (speed == null) return '#a0aec0'; // grey = no data
 
   function lerp(a, b, t) { return Math.round(a + (b - a) * t); }
   function lerpRGB(c1, c2, t) {
-    return `rgb(${lerp(c1[0],c2[0],t)},${lerp(c1[1],c2[1],t)},${lerp(c1[2],c2[2],t)})`;
+    return `#${[0,1,2].map(i => lerp(c1[i], c2[i], t).toString(16).padStart(2,'0')).join('')}`;
   }
 
-  const white     = [255, 255, 255];
-  const darkGreen = [ 39, 103,  73];
-  const darkBlue  = [ 43,  77, 160];
-  const brightRed = [229,  62,  62];
+  const blue   = [0x00, 0x3b, 0xc4];
+  const purple = [0x89, 0x00, 0xc4];
+  const red    = [0xff, 0x00, 0x00];
 
-  if (speed <=  0) return 'rgb(255,255,255)';
-  if (speed <= 25) return lerpRGB(white,     darkGreen, speed / 25);
-  if (speed <= 35) return lerpRGB(darkGreen, darkBlue,  (speed - 25) / 10);
-  if (speed <= 50) return lerpRGB(darkBlue,  brightRed, (speed - 35) / 15);
-  return 'rgb(229,62,62)';
+  if (speed <= 15) return '#003bc4';
+  if (speed <= 30) return lerpRGB(blue,   purple, (speed - 15) / 15);
+  if (speed <= 50) return lerpRGB(purple, red,    (speed - 30) / 20);
+  return '#ff0000';
 }
 
 // ---------------------------------------------------------------------------
-// Marker icon — directional arrow (down = direction wind travels to),
-// rotated by wind_direction, coloured by wind_speed
+// Marker size — scales with gust: 24 px (calm) → 52 px (70+ km/h)
+// ---------------------------------------------------------------------------
+function markerSize(gust) {
+  const g = Math.min(Math.max(gust ?? 0, 0), 70);
+  return Math.round(24 + (g / 70) * 28);
+}
+
+// ---------------------------------------------------------------------------
+// Marker icon — directional arrow (tip points where wind travels TO),
+// rotated by wind_direction, coloured + sized by wind_gust / wind_speed.
+// Dark outline ensures visibility against the light OpenTopoMap background.
 // ---------------------------------------------------------------------------
 function markerIcon(station) {
-  const m       = station.latest || {};
-  const color   = windSpeedColor(m.wind_gust ?? m.wind_speed);
-  const dir     = m.wind_direction ?? 0;
-  const hasDir  = m.wind_direction != null;
+  const m      = station.latest || {};
+  const gust   = m.wind_gust ?? m.wind_speed;
+  const color  = windSpeedColor(gust);
+  const dir    = m.wind_direction ?? 0;
+  const hasDir = m.wind_direction != null;
+  const size   = markerSize(gust);
 
   const arrow = hasDir
     ? `<g transform="rotate(${dir},16,16)">
-        <line x1="16" y1="4" x2="16" y2="20"
-              stroke="${color}" stroke-width="2.5" stroke-linecap="round"/>
-        <polygon points="9,20 23,20 16,28" fill="${color}"/>
+        <line x1="16" y1="4" x2="16" y2="21"
+              stroke="black" stroke-width="8" stroke-linecap="round"/>
+        <polygon points="5,17 27,17 16,32" fill="black"/>
+        <line x1="16" y1="4" x2="16" y2="21"
+              stroke="${color}" stroke-width="4.5" stroke-linecap="round"/>
+        <polygon points="5,17 27,17 16,32" fill="${color}"/>
        </g>`
-    : `<circle cx="16" cy="16" r="4" fill="${color}"/>`;
+    : `<circle cx="16" cy="16" r="5" fill="${color}"
+               stroke="white" stroke-width="2"/>`;
 
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
-    <circle cx="16" cy="16" r="14" fill="#0f1117" fill-opacity="0.80"
-            stroke="${color}" stroke-width="1.5"/>
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 32 32">
     ${arrow}
+    <circle cx="16" cy="16" r="3.5" fill="white" stroke="rgba(0,0,0,0.5)" stroke-width="1"/>
   </svg>`;
 
   return L.divIcon({
     html: svg,
     className: '',
-    iconSize: [32, 32],
-    iconAnchor: [16, 16],
-    popupAnchor: [0, -18],
+    iconSize:    [size, size],
+    iconAnchor:  [size / 2, size / 2],
+    popupAnchor: [0, -(size / 2 + 4)],
   });
 }
 

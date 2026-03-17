@@ -159,17 +159,21 @@ from(bucket: "{self._cfg.bucket}")
         for table in tables:
             for record in table.records:
                 sid = record.values.get("station_id", "")
-                entry: dict = {
-                    "station_id": sid,
-                    "network": record.values.get("network", ""),
-                    "timestamp": record.get_time(),
-                }
-                entry.update({
+                fields = {
                     k: v
                     for k, v in record.values.items()
                     if not k.startswith("_") and k not in ("result", "table", "station_id", "network")
-                })
-                results[sid] = entry
+                }
+                if sid not in results:
+                    results[sid] = {
+                        "station_id": sid,
+                        "network": record.values.get("network", ""),
+                        "timestamp": record.get_time(),
+                    }
+                # Merge fields — never overwrite an existing non-None value with None
+                for k, v in fields.items():
+                    if k not in results[sid] or (results[sid][k] is None and v is not None):
+                        results[sid][k] = v
         return results
 
     # ------------------------------------------------------------------
