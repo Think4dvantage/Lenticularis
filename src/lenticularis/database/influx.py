@@ -320,6 +320,39 @@ from(bucket: "{self._cfg.bucket}")
         return False
 
     # ------------------------------------------------------------------
+    # Query — ruleset decision history
+    # ------------------------------------------------------------------
+
+    def query_decision_history(self, ruleset_id: str, hours: int = 24) -> list[dict]:
+        """
+        Return historical evaluation decisions for ``ruleset_id`` over the
+        last ``hours`` hours, sorted chronologically.
+        """
+        flux = f"""
+from(bucket: "{self._cfg.bucket}")
+  |> range(start: -{hours}h)
+  |> filter(fn: (r) => r._measurement == "rule_decisions")
+  |> filter(fn: (r) => r.ruleset_id == "{ruleset_id}")
+  |> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")
+  |> sort(columns: ["_time"])
+"""
+        try:
+            tables = self._query_api.query(flux, org=self._cfg.org)
+        except Exception as exc:
+            logger.error("InfluxDB decision_history query error for %s: %s", ruleset_id, exc)
+            return []
+
+        rows: list[dict] = []
+        for table in tables:
+            for record in table.records:
+                rows.append({
+                    "timestamp": record.get_time().isoformat(),
+                    "decision": record.values.get("decision"),
+                    "condition_results_json": record.values.get("condition_results"),
+                })
+        return rows
+
+    # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
 

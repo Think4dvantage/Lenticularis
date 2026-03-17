@@ -46,8 +46,9 @@
       padding: 20px 24px; display: flex; align-items: flex-start; gap: 16px;
     }
     .card-icon { font-size: 1.5rem; flex-shrink: 0; margin-top: 2px; }
-    .card-body { flex: 1; min-width: 0; }
-    .card-title { font-size: 1rem; font-weight: 600; color: #e2e8f0; }
+    .card-body { flex: 1; min-width: 0; text-decoration: none; color: inherit; cursor: pointer; }
+    .card-body:hover .card-title { color: #90cdf4; }
+    .card-title { font-size: 1rem; font-weight: 600; color: #e2e8f0; transition: color 0.15s; }
     .card-meta { margin-top: 5px; font-size: 0.78rem; color: #718096; display: flex; gap: 14px; flex-wrap: wrap; }
     .card-meta span { display: flex; align-items: center; gap: 5px; }
     .card-actions { display: flex; gap: 8px; flex-shrink: 0; align-items: center; }
@@ -143,7 +144,7 @@
       return `
       <div class="card" id="card-${rs.id}">
         <div class="card-icon" style="font-size:1.2rem">${isLanding ? '⛑' : '▲'}</div>
-        <div class="card-body">
+        <a class="card-body" href="/ruleset-analysis?id=${rs.id}">
           <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
             <span class="card-title">${esc(rs.name)}</span>
             <span class="badge" style="background:#1a2530;color:#90cdf4;border:1px solid #2a4a6e">${isLanding ? 'Landing zone' : 'Launch'}</span>
@@ -159,7 +160,7 @@
             <span>${new Date(rs.created_at).toLocaleDateString()}</span>
           </div>
           ${rs.description ? `<div style="margin-top:7px;font-size:0.82rem;color:#a0aec0">${esc(rs.description)}</div>` : ''}
-        </div>
+        </a>
         <div class="card-actions">
           <a href="/ruleset-editor?id=${rs.id}" class="btn btn-ghost">Edit</a>
           <button class="btn btn-danger" onclick="deleteSet('${rs.id}')">Delete</button>

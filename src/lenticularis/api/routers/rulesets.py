@@ -19,7 +19,9 @@ import uuid
 import logging
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+import json as _json
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -164,6 +166,40 @@ def evaluate_ruleset(
         result["best_landing_decision"] = best
 
     return result
+
+
+# ---------------------------------------------------------------------------
+# Decision history — chronological list of past evaluations from InfluxDB
+# ---------------------------------------------------------------------------
+
+@router.get("/{ruleset_id}/history")
+def get_evaluation_history(
+    ruleset_id: str,
+    request: Request,
+    hours: int = Query(default=24, ge=1, le=720),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Return chronological evaluation decisions for the last N hours."""
+    rs = db.get(RuleSet, ruleset_id)
+    if rs is None:
+        raise HTTPException(status_code=404, detail="Rule set not found")
+    if rs.owner_id != current_user.id and not rs.is_public:
+        raise HTTPException(status_code=403, detail="Not your rule set")
+
+    influx = getattr(request.app.state, "influx", None)
+    if influx is None:
+        raise HTTPException(status_code=503, detail="InfluxDB not available")
+
+    rows = influx.query_decision_history(ruleset_id, hours=hours)
+    # Parse stored condition_results JSON string into objects
+    for row in rows:
+        raw = row.pop("condition_results_json", None)
+        try:
+            row["condition_results"] = _json.loads(raw) if raw else []
+        except Exception:
+            row["condition_results"] = []
+    return {"ruleset_id": ruleset_id, "hours": hours, "count": len(rows), "data": rows}
 
 
 # ---------------------------------------------------------------------------

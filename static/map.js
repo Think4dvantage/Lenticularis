@@ -176,12 +176,19 @@ function buildPopup(s) {
 // ---------------------------------------------------------------------------
 const markerLayer = L.layerGroup().addTo(map);
 
+// Exposed globally so ruleset popup builders can resolve station names
+window._lentiStationsMap = {};
+
 async function loadStations() {
   try {
     // Cache-buster ensures the browser never serves a stale response
     const res = await fetch(`/api/stations?_t=${Date.now()}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const stations = await res.json();
+
+    // Update global station lookup
+    window._lentiStationsMap = {};
+    for (const s of stations) window._lentiStationsMap[s.station_id] = s;
 
     markerLayer.clearLayers();
 

@@ -197,6 +197,10 @@ def create_app() -> FastAPI:
         @app.get("/ruleset-editor", include_in_schema=False)
         async def serve_ruleset_editor():
             return FileResponse(str(static_dir / "ruleset-editor.html"))
+
+        @app.get("/ruleset-analysis", include_in_schema=False)
+        async def serve_ruleset_analysis():
+            return FileResponse(str(static_dir / "ruleset-analysis.html"))
     else:
         @app.get("/", include_in_schema=False)
         async def root():

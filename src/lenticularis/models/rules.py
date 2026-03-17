@@ -122,6 +122,9 @@ class ConditionResult(BaseModel):
     station_id: str
     station_b_id: Optional[str] = None
     field: str
+    operator: str
+    value_a: float
+    value_b: Optional[float] = None
     actual_value: Optional[float] = None
     matched: bool
     result_colour: ResultColour

@@ -257,6 +257,26 @@
     .network-windline   { background: #1f4e5f; color: #b2f5ea; }
     .network-ecovitt    { background: #7b341e; color: #fbd38d; }
     .network-unknown    { background: #2d3748; color: #a0aec0; }
+
+    /* Condition breakdown in ruleset popups */
+    .popup-cond-header {
+      color: #718096; font-size: 0.7rem; text-transform: uppercase;
+      letter-spacing: 0.07em; margin: 10px 0 4px; border-top: 1px solid #2d3748; padding-top: 8px;
+    }
+    .popup-cond-row {
+      display: flex; align-items: flex-start; gap: 5px;
+      padding: 2px 0; font-size: 0.75rem;
+    }
+    .popup-cond-text {
+      display: flex; flex-direction: column; gap: 1px; line-height: 1.3;
+    }
+    .popup-cond-group {
+      border-left: 2px solid #4a5568; padding-left: 6px; margin: 4px 0;
+    }
+    .popup-cond-group-label {
+      font-size: 0.65rem; color: #718096; text-transform: uppercase;
+      letter-spacing: 0.05em; margin-bottom: 2px;
+    }
   </style>
 </head>
 <body>
@@ -530,6 +550,76 @@ async function replayLoad(params) {
       ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
 
+  const FIELD_LABEL = {
+    wind_speed:'Wind', wind_gust:'Gust', wind_direction:'Dir',
+    temperature:'Temp', humidity:'Hum', pressure:'Pressure',
+    pressure_delta:'ΔPressure', precipitation:'Precip', snow_depth:'Snow'
+  };
+  const FIELD_UNIT = {
+    wind_speed:'km/h', wind_gust:'km/h', wind_direction:'°',
+    temperature:'°C', humidity:'%', pressure:'hPa',
+    pressure_delta:'hPa', precipitation:'mm', snow_depth:'cm'
+  };
+  const DC_HEX = { green:'#68d391', orange:'#f6ad55', red:'#fc8181' };
+
+  function condThreshold(cr) {
+    const u = FIELD_UNIT[cr.field] || '';
+    if (cr.operator === 'between')           return `${cr.value_a}–${cr.value_b} ${u}`;
+    if (cr.operator === 'not_between')       return `not ${cr.value_a}–${cr.value_b} ${u}`;
+    if (cr.operator === 'in_direction_range') return `${cr.value_a}°–${cr.value_b}°`;
+    return `${cr.operator} ${cr.value_a} ${u}`;
+  }
+
+  function condActual(cr) {
+    if (cr.actual_value == null) return '<span style="color:#4a5568">no data</span>';
+    return `${cr.actual_value.toFixed(1)} ${FIELD_UNIT[cr.field] || ''}`;
+  }
+
+  function stationName(sid) {
+    return (window._lentiStationsMap?.[sid]?.name) || sid;
+  }
+
+  function buildConditionRows(condResults) {
+    if (!condResults || condResults.length === 0) return '';
+
+    // Group conditions by group_id
+    const groups = {};
+    const standalone = [];
+    for (const cr of condResults) {
+      if (cr.group_id) (groups[cr.group_id] = groups[cr.group_id] || []).push(cr);
+      else standalone.push(cr);
+    }
+
+    let html = '<div class="popup-cond-header">Conditions</div>';
+
+    function renderCond(cr, isGroupMember, groupAllMatched) {
+      const triggered = cr.matched && (isGroupMember ? groupAllMatched : true);
+      const dotColor  = triggered ? DC_HEX[cr.result_colour] : '#4a5568';
+      const label     = FIELD_LABEL[cr.field] || cr.field;
+      const stn       = stationName(cr.station_id);
+      return `<div class="popup-cond-row">
+        <span style="color:${dotColor};font-size:0.7rem">●</span>
+        <span class="popup-cond-text">
+          <span style="color:#718096;font-size:0.68rem">${escHtml(stn)}</span>
+          <span>${escHtml(label)} ${escHtml(condThreshold(cr))}</span>
+          <span style="color:${triggered ? DC_HEX[cr.result_colour] : '#718096'}">${condActual(cr)}</span>
+        </span>
+      </div>`;
+    }
+
+    for (const cr of standalone) html += renderCond(cr, false, false);
+
+    for (const [, crs] of Object.entries(groups)) {
+      const allMatched = crs[0].group_all_matched;
+      html += `<div class="popup-cond-group">
+        <div class="popup-cond-group-label">Condition Group${allMatched ? ' — triggered' : ''}</div>`;
+      for (const cr of crs) html += renderCond(cr, true, allMatched);
+      html += '</div>';
+    }
+
+    return html;
+  }
+
   function launchPopup(rs, dec) {
     const lc = decisionColor(dec.decision);
     const altLabel = rs.altitude_m != null ? ` · ${rs.altitude_m} m` : '';
@@ -546,7 +636,11 @@ async function replayLoad(params) {
         <span style="color:${lc};font-weight:700">${dec.decision.toUpperCase()}</span>
       </div>
       ${landingRows}
-      <a class="popup-link" href="/ruleset-editor?id=${rs.id}">Edit →</a>`;
+      ${buildConditionRows(dec.condition_results)}
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <a class="popup-link" href="/ruleset-analysis?id=${rs.id}">Analysis →</a>
+        <a class="popup-link" style="background:#2d3748" href="/ruleset-editor?id=${rs.id}">Edit</a>
+      </div>`;
   }
 
   function landingPopup(rs, dec) {
@@ -559,7 +653,11 @@ async function replayLoad(params) {
         <span>Landable</span>
         <span style="color:${lc};font-weight:700">${dec.decision.toUpperCase()}</span>
       </div>
-      <a class="popup-link" href="/ruleset-editor?id=${rs.id}">Edit →</a>`;
+      ${buildConditionRows(dec.condition_results)}
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <a class="popup-link" href="/ruleset-analysis?id=${rs.id}">Analysis →</a>
+        <a class="popup-link" style="background:#2d3748" href="/ruleset-editor?id=${rs.id}">Edit</a>
+      </div>`;
   }
 
   // ── Marker layer ────────────────────────────────────────────────────────
@@ -588,11 +686,11 @@ async function replayLoad(params) {
           const haloColor = dec.landing_decisions?.length ? dec.best_landing_decision : null;
           L.marker([rs.lat, rs.lon], { icon: launchIcon(dec.decision, haloColor), zIndexOffset: 500 })
             .addTo(rulesetLayer)
-            .bindPopup(launchPopup(rs, dec), { maxWidth: 280 });
+            .bindPopup(launchPopup(rs, dec), { maxWidth: 320 });
         } else {
           L.marker([rs.lat, rs.lon], { icon: landingIcon(dec.decision), zIndexOffset: 400 })
             .addTo(rulesetLayer)
-            .bindPopup(landingPopup(rs, dec), { maxWidth: 240 });
+            .bindPopup(landingPopup(rs, dec), { maxWidth: 300 });
         }
       });
     } catch (err) {
