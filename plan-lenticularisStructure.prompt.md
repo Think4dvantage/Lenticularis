@@ -389,18 +389,55 @@ All time-range endpoints accept `?from=&to=` parameters. Best-windows also accep
 **Goal:** rule sets are evaluated against live station data; the map shows GREEN/ORANGE/RED badges per launch site with halo for landing zones.
 
 - `rules/evaluator.py` walks condition tree, fetches latest InfluxDB measurement per station per condition, applies operator logic, resolves combination logic, returns `TrafficLightDecision` with full `condition_results`
-- Writes decision + `condition_results` JSON to `rule_decisions` InfluxDB measurement
+- Writes decision + `condition_results` JSON to `rule_decisions` InfluxDB measurement; `ConditionResult` includes `operator`, `value_a`, `value_b` so clients can render thresholds without a second API call
 - `GET /api/rulesets/{id}/evaluate` — evaluates launch + all linked landings; returns `landing_decisions` + `best_landing_decision`
 - `PUT /api/rulesets/{id}/landings` — replace landing zone links for a launch ruleset
 - Rulesets have `site_type`: `"launch"` (default) or `"landing"`; linked via `launch_landing_links` table
-- Map shows **▲ launch markers** (coloured disc + optional halo ring) and **⚑ landing markers** (flag icon):
+- Map shows vivid gust-scaled wind arrow markers; **▲ launch markers** (coloured disc + optional halo ring) and **⛑ landing markers**:
   - Launch disc colour = launch decision; halo colour = best landing decision (best_wins: green > orange > red)
   - No halo if no landings linked
+- Map auto-refresh every 5 minutes
 - `static/rulesets.html` cards show site type badge + inline landing decision badges per linked zone
+- Ecovitt collector (personal weather stations)
 
 ---
 
-### v0.8 — Statistics Dashboard
+### v0.8 — Replay + Ruleset Analysis & Decision History ✅
+**Goal:** pilots can replay historical weather data on the map and table, and inspect why a rule set produced a given decision at any point in time.
+
+#### Weather data replay
+- `GET /api/stations/data-bounds` — returns earliest/latest timestamp with any data (used to constrain custom date picker)
+- `GET /api/stations/replay?hours=N` or `?start=ISO&end=ISO` — returns all station history for the replay window
+- `static/replay.js` — `ReplayEngine` class: `load()`, `play()`, `pause()`, `seekTo()`, speed control
+  - Frame intervals: 10× 50× 100× 200× 500×
+  - Per-frame snapshot: for each station finds latest measurement ≤ current timestamp
+- Replay bar on map (`index.html`) and station table (`stations.html`): range selector (6h / 24h / 7d / custom), speed buttons, play/pause, scrubber
+- Custom date picker constrained to actual data range via `utcToLocalInputValue` conversion
+
+#### Ruleset analysis page
+- `GET /api/rulesets/{id}/history?hours=N` — returns chronological evaluation decisions from `rule_decisions` InfluxDB measurement, with `condition_results` JSON parsed into objects
+- `/ruleset-analysis` page (`static/ruleset-analysis.html`):
+  - **Header**: site icon, name, meta (type / altitude / logic / visibility), current decision pill, Edit button
+  - **Current evaluation table**: Station | Field | Condition | Actual | Status; no-data warning; Refresh button; Condition Group label for AND groups
+  - **Decision history**: range buttons (6h / 24h / 7d / 30d), leading-empty timeline strip (full window always shown), Chart.js scatter/step chart with pinned x-axis range, grouped state-change table
+  - **State-change table**: collapses consecutive same-decision entries into runs (From / To / Duration / N evals); click to expand condition detail table at the transition point (Station | Field | Condition | Actual | Status); falls back to current ruleset condition definitions for historical data lacking stored thresholds
+- Map popup condition breakdown: clicking a launch/landing marker shows per-condition evaluation with coloured status dots, threshold strings, and actual values
+- Rulesets list cards navigate to analysis page on click (card body is an `<a>` tag)
+- "AND group" renamed to "Condition Group" throughout
+
+#### Implementation steps completed
+1. Added `query_data_bounds()` and `query_history_all_stations()` to `database/influx.py`
+2. Added `query_decision_history()` to `database/influx.py`
+3. Added `GET /api/stations/data-bounds` and `GET /api/stations/replay` to stations router (before `/{station_id}`)
+4. Added `GET /api/rulesets/{id}/history` to rulesets router
+5. Extended `ConditionResult` Pydantic model with `operator`, `value_a`, `value_b`
+6. Updated evaluator to include these fields in `condition_results` dict and stored JSON
+7. Created `static/replay.js` (`ReplayEngine`) and `static/ruleset-analysis.html`
+8. Added popup condition breakdown to `static/index.html` and `static/map.js`
+
+---
+
+### v0.9 — Statistics Dashboard
 **Goal:** pilots can view historical flyability patterns for their sites.
 
 - `services/stats.py` — Flux queries for all 7 metrics; best-windows algorithm server-side
@@ -415,7 +452,7 @@ All time-range endpoints accept `?from=&to=` parameters. Best-windows also accep
   - Best windows list
 - Time-range filter (`?from=&to=`) on all charts
 
-#### Implementation steps for v0.8
+#### Implementation steps for v0.9
 1. Implement `services/stats.py` with all 7 Flux queries and best-windows algorithm
 2. Add `api/routers/stats.py` with all 7 endpoints
 3. Create `static/stats.html` page shell
@@ -423,7 +460,7 @@ All time-range endpoints accept `?from=&to=` parameters. Best-windows also accep
 
 ---
 
-### v0.9 — Notifications
+### v1.0 — Notifications
 **Goal:** pilots receive alerts when a launch site changes traffic light status.
 
 - `services/notifications.py` — status-transition detection; dispatch via email (`aiosmtplib`) and Pushover
@@ -432,7 +469,7 @@ All time-range endpoints accept `?from=&to=` parameters. Best-windows also accep
 - Notification config UI on the launch site detail page (channel + transition filter)
 - `aiosmtplib` + Pushover HTTP API integration
 
-#### Implementation steps for v0.9
+#### Implementation steps for v1.0
 1. Add `aiosmtplib` to `pyproject.toml`
 2. Implement `services/notifications.py` (transition detection, email + Pushover dispatch)
 3. Call notification service from evaluator after each decision write
@@ -441,7 +478,7 @@ All time-range endpoints accept `?from=&to=` parameters. Best-windows also accep
 
 ---
 
-### v1.0 — Full MVP Release
+### v1.1 — Full MVP Release
 **Goal:** stable, tested, fully deployable release of all core features.
 
 - All endpoints from the API contracts section are implemented and tested

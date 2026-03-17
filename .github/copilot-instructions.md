@@ -58,10 +58,12 @@ src/lenticularis/
 ├── config.py                # YAML loader + Pydantic config models
 └── scheduler.py             # APScheduler wiring all collectors
 static/
-├── index.html / map.js      # Map dashboard (Leaflet.js) — station markers + launch/landing site markers
-├── rulesets.html            # Rule set card list + live badge + landing decision badges
-├── ruleset-editor.html      # Condition builder + site type toggle (launch/landing) + landing picker
-├── stations.html / station-detail.html  # Station browser + detail charts
+├── index.html / map.js          # Map dashboard (Leaflet.js) — station markers, launch/landing markers, replay bar, popup condition breakdown
+├── replay.js                    # ReplayEngine class — load history, play/pause/scrub, per-frame snapshots
+├── rulesets.html                # Rule set card list + live decision badge + landing decision badges (cards link to analysis page)
+├── ruleset-analysis.html        # Per-ruleset analysis: current evaluation table, decision history timeline/chart, grouped state-change table with expandable condition detail
+├── ruleset-editor.html          # Condition builder + site type toggle (launch/landing) + landing picker
+├── stations.html / station-detail.html  # Station browser + detail charts + replay bar
 └── auth.js / login.html / register.html # Auth UI
 ```
 
@@ -103,8 +105,9 @@ The rules evaluator (`rules/evaluator.py`) must:
 3. Apply the operator/value logic to produce a per-condition `result_colour`
 4. Walk AND/OR group nesting to combine condition results within groups
 5. Apply the ruleset's `combination_logic` (`worst_wins` or `majority_vote`) across top-level results
-6. Return a `TrafficLightDecision` including a `condition_results` array: `[{condition_id, station_id, field, actual_value, result_colour}]`
-7. Write the full decision (including `condition_results` JSON) to the `rule_decisions` InfluxDB measurement
+6. Return a `TrafficLightDecision` including a `condition_results` array: `[{condition_id, station_id, field, operator, value_a, value_b, actual_value, result_colour, group_id, group_all_matched}]`
+   - `operator`, `value_a`, `value_b` are included so clients can render thresholds without a second API call
+7. Write the full decision (including `condition_results` JSON) to the `rule_decisions` InfluxDB measurement via `write_decision()`
 
 The station picker is **per condition row** — a single rule set can reference any number of different stations. This is intentional and central to the product.
 
@@ -198,6 +201,21 @@ Admins do **not** manage launch sites, rule sets, or station-to-site assignments
 - A pilot can publish a rule set (`is_public = true`) so it appears in the gallery
 - Other pilots can **clone** a public rule set into their own account (`cloned_from_id` is set, `clone_count` increments on the original)
 - Clones are independent — editing a clone does not affect the original
+
+---
+
+## Replay & Decision History
+
+### Weather data replay
+- `GET /api/stations/data-bounds` and `GET /api/stations/replay` are declared **before** `GET /api/stations/{station_id}` in `routers/stations.py` — literal-path routes must precede path-parameter routes in FastAPI
+- `replay.js` exports a `ReplayEngine` class: `load({hours}|{start,end})`, `play()`, `pause()`, `setSpeed(n)`, `seekTo(idx)`; calls `onFrame(snapshot, ts, idx, total)` and `onStateChange(state)` callbacks
+- Replay data is loaded once upfront; per-frame snapshots are built by scanning each station's history for the latest measurement ≤ current timestamp
+
+### Decision history
+- `GET /api/rulesets/{id}/evaluate` also calls `write_decision(rs, result, influx)` which persists `decision` + `condition_results` JSON string to the `rule_decisions` InfluxDB measurement
+- `GET /api/rulesets/{id}/history?hours=N` fetches from `rule_decisions`, parses the stored JSON back to objects
+- `GET /api/rulesets/{id}/forecast` must be declared **before** `GET /api/rulesets/{id}` to avoid FastAPI route shadowing (same pattern as stations)
+- The ruleset analysis page (`/ruleset-analysis`) loads both the ruleset detail and live evaluation on init; stores condition definitions in `_condDefs` keyed by `condition_id` as fallback for historical data that predates `operator`/`value_a`/`value_b` being stored
 
 ---
 

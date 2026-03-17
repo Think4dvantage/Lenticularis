@@ -106,35 +106,42 @@ And comment out the InfluxDB service in `docker-compose.yml`.
 
 ## Development Status
 
-### MVP 0.1 — ✅ Deployed
+### v0.1 — ✅ Deployed
+- Project structure, config, InfluxDB client, MeteoSwiss collector, APScheduler, FastAPI REST API, live station table
 
-- [x] Project structure and configuration (`config.py`, Pydantic models)
-- [x] `WeatherStation` + `WeatherMeasurement` models (3 pressure variants, snow depth)
-- [x] `BaseCollector` abstract class with HTTP helpers and station-ID namespacing
-- [x] InfluxDB 2.x client (`write_measurements`, `query_latest`, `query_history`, `has_measure`)
-- [x] MeteoSwiss collector — 8 GeoJSON endpoints, LV95→WGS84 coordinate transform, 154 stations, 299 measurements/cycle
-- [x] APScheduler wiring with per-job jitter
-- [x] FastAPI app with lifespan, station registry, static file serving
-- [x] `/api/stations` REST endpoints (list, single, latest, history)
-- [x] Live data table dashboard (sortable, filterable, auto-refreshing)
-- [x] `Dockerfile` + `docker-compose.yml` + `docker-compose.dev.yml` (dev overlay with Traefik labels)
-- [x] Remote deployment to homelab Fedora host via `scripts/remote.ps1`
-- [x] Live at `https://lenti-dev.lg4.ch` behind Traefik v3 + pocket-id OIDC auth
+### v0.2 — ✅ Deployed
+- Leaflet.js map (`index.html`) with station markers, click-to-popup with latest measurement
 
-### 0.2 — In Progress
-- [ ] Holfuy collector (free REST API — wind + temperature + pressure)
-- [x] SLF collector (free JSON API — alpine stations, 30 min)
-- [x] METAR collector (AviationWeather no-auth API, Swiss ICAOs, 15 min)
-- [ ] Ecovitt collector (personal weather stations)
-- [ ] Leaflet.js map view with station pins (color = data freshness)
-- [ ] Click-to-popup with sparkline (Chart.js last 24 h)
+### v0.3 — ✅ Deployed
+- JWT auth (register/login/refresh), SQLite via SQLAlchemy, `get_current_user` / `require_admin` FastAPI dependencies
 
-### 1.0 — Planned
-- [ ] SQLAlchemy ORM — launch sites, rule sets, condition tree
-- [ ] Rule engine evaluator (AND/OR tree → GREEN/ORANGE/RED)
-- [ ] Traffic light layer on the map
-- [ ] Rule set editor UI
-- [ ] Scheduler triggers rule evaluation after each collection run
+### v0.4 — ✅ Deployed (folded into rulesets — no separate launch_sites table)
+- Site identity embedded in rulesets (`site_type`, `lat`, `lon`, `altitude_m`); launch site markers on map
+
+### v0.5 — ✅ Deployed
+- SLF collector (30 min), METAR collector (15 min, AviationWeather), Ecovitt collector (personal weather stations), full APScheduler wiring
+
+### v0.6 — ✅ Deployed
+- Graphical rule set editor (`/ruleset-editor`): per-row station picker, field/operator/value inputs, AND/OR (Condition Group) nesting, direction-range compass, pressure-delta two-station mode, combination logic selector
+
+### v0.7 — ✅ Deployed
+- Rules evaluator (`rules/evaluator.py`): evaluates live InfluxDB data per condition, writes `rule_decisions` to InfluxDB
+- `GET /api/rulesets/{id}/evaluate` — launch + linked landing evaluation; returns `landing_decisions` + `best_landing_decision`
+- Map: vivid gust-scaled wind arrow markers, launch ▲ / landing ⛑ markers with coloured halo (best landing decision)
+- Rulesets list (`/rulesets`): live GREEN/ORANGE/RED decision badges + landing decision badges per card
+- Map auto-refresh; Ecovitt collector
+
+### v0.8 — ✅ Deployed (current)
+- **Weather data replay**: time-range selector (6h / 24h / 7d / custom), speed multipliers (10× 50× 100× 200× 500×), play/pause/scrub controls on both map and station table; `GET /api/stations/data-bounds` + `GET /api/stations/replay` endpoints; `replay.js` `ReplayEngine` class
+- **Ruleset analysis page** (`/ruleset-analysis`): current evaluation table (Station / Field / Condition / Actual / Status), decision history with timeline strip, Chart.js scatter chart, grouped state-change table (click to expand condition detail at transition point)
+- **Map popup condition breakdown**: clicking a launch/landing marker shows per-condition evaluation with thresholds, actual values, and coloured status
+- **Decision history API**: `GET /api/rulesets/{id}/history?hours=N` backed by `rule_decisions` InfluxDB measurement; `ConditionResult` extended with `operator`, `value_a`, `value_b`
+- Rulesets list cards navigate to analysis page on click
+
+### Next — v0.9 — Statistics Dashboard
+- `services/stats.py` — Flux queries: flyable days, hourly pattern, monthly/seasonal breakdown, condition trigger rate, site comparison, best windows
+- All `GET /api/stats/…` endpoints
+- `static/stats.html` + Chart.js charts
 
 ## Contributing
 
