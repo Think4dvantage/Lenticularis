@@ -271,10 +271,14 @@ function esc(s) {
 
 function condThreshold(cr) {
   const u = FIELD_UNIT[cr.field] || '';
-  if (cr.operator === 'between')            return `${cr.value_a}–${cr.value_b} ${u}`;
-  if (cr.operator === 'not_between')        return `not ${cr.value_a}–${cr.value_b} ${u}`;
-  if (cr.operator === 'in_direction_range') return `${cr.value_a}°–${cr.value_b}°`;
-  return `${cr.operator} ${cr.value_a} ${u}`;
+  const op = cr.operator ?? _condDefs[cr.condition_id]?.operator;
+  const va = cr.value_a  ?? _condDefs[cr.condition_id]?.value_a;
+  const vb = cr.value_b  ?? _condDefs[cr.condition_id]?.value_b;
+  if (!op || va == null) return '—';
+  if (op === 'between')            return `${va}–${vb} ${u}`;
+  if (op === 'not_between')        return `not ${va}–${vb} ${u}`;
+  if (op === 'in_direction_range') return `${va}°–${vb}°`;
+  return `${op} ${va} ${u}`;
 }
 
 function ageLabel(isoString) {
@@ -291,6 +295,7 @@ const rsId    = params.get('id');
 let _histHours = 24;
 let _histChart = null;
 let _stationNames = {};
+let _condDefs = {};   // condition_id → {operator, value_a, value_b, field} from ruleset detail
 
 if (!rsId) {
   document.getElementById('loadingState').innerHTML = '<p style="color:#fc8181">No rule set ID specified.</p>';
@@ -327,6 +332,11 @@ async function init() {
 
   const rs  = await rsRes.json();
   const dec = evalRes.ok ? await evalRes.json() : null;
+
+  // Build condition-definition lookup for fallback in history detail
+  for (const c of (rs.conditions || [])) {
+    _condDefs[c.id] = c;
+  }
 
   renderHeader(rs, dec);
   renderConditions(dec);
@@ -628,12 +638,18 @@ function buildCondDetail(condResults) {
   }
 
   function condThresholdStr(cr) {
-    const u = FIELD_UNIT[cr.field] || '';
-    if (!cr.operator) return '—';
-    if (cr.operator === 'between')             return `${cr.value_a}–${cr.value_b} ${u}`;
-    if (cr.operator === 'not_between')         return `not ${cr.value_a}–${cr.value_b} ${u}`;
-    if (cr.operator === 'in_direction_range')  return `${cr.value_a}°–${cr.value_b}°`;
-    return `${cr.operator} ${cr.value_a} ${u}`;
+    // Fall back to the current condition definition for history data that
+    // predates operator/value_a/value_b being stored in InfluxDB.
+    const def = _condDefs[cr.condition_id];
+    const u   = FIELD_UNIT[cr.field] || '';
+    const op  = cr.operator ?? def?.operator;
+    const va  = cr.value_a  ?? def?.value_a;
+    const vb  = cr.value_b  ?? def?.value_b;
+    if (!op || va == null) return '—';
+    if (op === 'between')            return `${va}–${vb} ${u}`;
+    if (op === 'not_between')        return `not ${va}–${vb} ${u}`;
+    if (op === 'in_direction_range') return `${va}°–${vb}°`;
+    return `${op} ${va} ${u}`;
   }
 
   function renderRows(crs, isGroup, groupAllMatched) {
