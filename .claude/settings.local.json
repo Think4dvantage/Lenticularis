@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(wc -l /c/git/Lenticularis/src/lenticularis/**/*.py)",
+      "Bash(python3:*)",
+      "Bash(git checkout:*)",
+      "Bash(python -c \"import ast, sys; ast.parse\\(open\\(''src/lenticularis/database/influx.py''\\).read\\(\\)\\); print\\(''influx.py OK''\\)\")",
+      "Bash(python -c \"import ast, sys; ast.parse\\(open\\(''src/lenticularis/api/routers/stations.py''\\).read\\(\\)\\); print\\(''stations.py OK''\\)\")",
+      "Bash(node --check static/replay.js)",
+      "Bash(node --check static/map.js)",
+      "Bash(node --check static/app.js)",
+      "Bash(python -c \"import ast; ast.parse\\(open\\(''src/lenticularis/database/influx.py''\\).read\\(\\)\\); print\\(''influx.py OK''\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\(''src/lenticularis/api/routers/stations.py''\\).read\\(\\)\\); print\\(''stations.py OK''\\)\")",
+      "Bash(python:*)"
+    ]
+  }
+}
