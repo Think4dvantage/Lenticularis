@@ -11,7 +11,11 @@
       "Bash(node --check static/app.js)",
       "Bash(python -c \"import ast; ast.parse\\(open\\(''src/lenticularis/database/influx.py''\\).read\\(\\)\\); print\\(''influx.py OK''\\)\")",
       "Bash(python -c \"import ast; ast.parse\\(open\\(''src/lenticularis/api/routers/stations.py''\\).read\\(\\)\\); print\\(''stations.py OK''\\)\")",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "WebSearch",
+      "Bash(.venv/Scripts/python -c \":*)",
+      "Bash(.venv/Scripts/python -m lenticularis.scheduler)",
+      "Bash(.venv/Scripts/python -c \"import sqlalchemy; print\\(''sqlalchemy OK:'', sqlalchemy.__version__\\)\")"
     ]
   }
 }
