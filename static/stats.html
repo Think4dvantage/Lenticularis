@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lenticularis — Statistics</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: #0f1117; color: #e2e8f0; min-height: 100vh; display: flex; flex-direction: column;
+    }
+
+    /* ── Nav ── */
+    .top-nav { background: #1a1f2e; border-bottom: 1px solid #2d3748; padding: 0 24px; display: flex; align-items: center; flex-shrink: 0; height: 48px; }
+    .nav-brand { font-size: 1.1rem; font-weight: 600; color: #90cdf4; margin-right: 24px; white-space: nowrap; }
+    .nav-links { display: flex; gap: 2px; flex: 1; }
+    .nav-link { color: #718096; text-decoration: none; font-size: 0.85rem; padding: 6px 14px; border-radius: 6px; transition: background 0.15s, color 0.15s; }
+    .nav-link:hover { background: #2d3748; color: #e2e8f0; }
+    .nav-link.active { background: #2d4a6e; color: #90cdf4; font-weight: 500; }
+    .nav-user { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+    .nav-btn { background: transparent; border: 1px solid #4a5568; color: #a0aec0; font-size: 0.8rem; padding: 4px 10px; border-radius: 5px; cursor: pointer; transition: background 0.15s; }
+    .nav-btn:hover { background: #2d3748; color: #e2e8f0; }
+
+    /* ── Layout ── */
+    .page { max-width: 1100px; margin: 0 auto; padding: 28px 20px 60px; width: 100%; }
+    .page-header { margin-bottom: 24px; }
+    .page-header h1 { font-size: 1.4rem; font-weight: 600; }
+    .page-header p { color: #718096; font-size: 0.85rem; margin-top: 4px; }
+
+    /* ── Auth gate ── */
+    .auth-gate { display: none; text-align: center; padding: 60px 20px; }
+    .auth-gate.visible { display: block; }
+    .auth-gate p { color: #718096; margin-bottom: 16px; }
+    .btn { display: inline-flex; align-items: center; gap: 7px; padding: 8px 16px; border-radius: 7px; font-size: 0.85rem; font-weight: 500; cursor: pointer; border: none; transition: background 0.15s; text-decoration: none; }
+    .btn-primary { background: #2b6cb0; color: #fff; }
+    .btn-primary:hover { background: #3182ce; }
+    .btn-ghost { background: transparent; border: 1px solid #2d3748; color: #a0aec0; }
+    .btn-ghost:hover { background: #2d3748; color: #e2e8f0; }
+
+    /* ── Tabs ── */
+    .tab-bar { display: flex; gap: 4px; border-bottom: 1px solid #2d3748; margin-bottom: 28px; }
+    .tab-btn {
+      padding: 10px 20px; font-size: 0.88rem; font-weight: 500; cursor: pointer; border: none;
+      background: transparent; color: #718096; border-bottom: 2px solid transparent;
+      transition: color 0.15s, border-color 0.15s; margin-bottom: -1px;
+    }
+    .tab-btn:hover { color: #e2e8f0; }
+    .tab-btn.active { color: #90cdf4; border-bottom-color: #90cdf4; }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* ── Controls bar ── */
+    .controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 24px; }
+    .control-label { font-size: 0.8rem; color: #718096; white-space: nowrap; }
+    .seg-control { background: #1a1f2e; border: 1px solid #2d3748; border-radius: 6px; display: flex; gap: 2px; padding: 3px; }
+    .seg-btn { padding: 4px 14px; border-radius: 4px; font-size: 0.8rem; cursor: pointer; border: none; background: transparent; color: #718096; transition: background 0.12s, color 0.12s; }
+    .seg-btn.active { background: #2d4a6e; color: #90cdf4; font-weight: 500; }
+    .seg-btn:hover:not(.active) { background: #2d3748; color: #e2e8f0; }
+
+    /* ── Summary cards ── */
+    .summary-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 14px; margin-bottom: 22px; }
+    .sc {
+      background: #1a1f2e; border: 1px solid #2d3748; border-radius: 10px;
+      padding: 16px 18px;
+    }
+    .sc-label { font-size: 0.72rem; color: #718096; text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 6px; }
+    .sc-value { font-size: 1.9rem; font-weight: 700; line-height: 1; }
+    .sc-value.green  { color: #68d391; }
+    .sc-value.orange { color: #f6ad55; }
+    .sc-value.red    { color: #fc8181; }
+    .sc-value.blue   { color: #90cdf4; }
+    .sc-sub { font-size: 0.75rem; color: #718096; margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    /* ── Chart grid ── */
+    .chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+    @media (max-width: 720px) { .chart-grid { grid-template-columns: 1fr; } }
+    .chart-card { background: #1a1f2e; border: 1px solid #2d3748; border-radius: 10px; padding: 20px; }
+    .chart-card.wide { grid-column: 1 / -1; }
+    .chart-title { font-size: 0.9rem; font-weight: 600; margin-bottom: 3px; }
+    .chart-subtitle { font-size: 0.74rem; color: #718096; margin-bottom: 14px; }
+    .chart-wrap { position: relative; height: 220px; }
+    .chart-wrap.tall { height: 280px; }
+
+    /* ── Site comparison bars ── */
+    .compare-list { display: flex; flex-direction: column; gap: 10px; max-height: 320px; overflow-y: auto; }
+    .compare-row { display: grid; grid-template-columns: 200px 1fr 50px; align-items: center; gap: 12px; }
+    .compare-name { font-size: 0.8rem; color: #a0aec0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .compare-bar { height: 16px; background: #2d3748; border-radius: 4px; overflow: hidden; display: flex; }
+    .bar-green  { background: #276749; }
+    .bar-orange { background: #c05621; }
+    .bar-red    { background: #7b2020; }
+    .compare-pct { text-align: right; font-size: 0.8rem; font-weight: 600; color: #68d391; }
+    .compare-empty { color: #4a5568; font-size: 0.82rem; padding: 12px 0; }
+
+    /* ── Weather extremes grid ── */
+    .extremes-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 14px;
+      margin-bottom: 22px;
+    }
+    .extreme-card {
+      background: #1a1f2e; border: 1px solid #2d3748; border-radius: 10px;
+      padding: 16px 18px; display: flex; flex-direction: column; gap: 4px;
+    }
+    .extreme-card.highlight { border-color: #2d4a6e; }
+    .ec-label { font-size: 0.72rem; color: #718096; text-transform: uppercase; letter-spacing: 0.06em; display: flex; align-items: center; gap: 6px; }
+    .ec-badge { font-size: 0.65rem; padding: 1px 6px; border-radius: 9999px; font-weight: 600; }
+    .ec-badge-max { background: #3a2a1a; color: #f6ad55; border: 1px solid #c05621; }
+    .ec-badge-min { background: #1a2a3a; color: #90cdf4; border: 1px solid #2b6cb0; }
+    .ec-value { font-size: 1.7rem; font-weight: 700; line-height: 1.1; }
+    .ec-unit { font-size: 0.8rem; color: #718096; font-weight: 400; }
+    .ec-station { font-size: 0.78rem; color: #a0aec0; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ec-network { font-size: 0.72rem; color: #4a5568; }
+
+    /* ── Data tables ── */
+    .data-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+    .data-table th { color: #718096; font-weight: 500; text-align: left; padding: 6px 10px; border-bottom: 1px solid #2d3748; white-space: nowrap; }
+    .data-table td { padding: 7px 10px; border-bottom: 1px solid #1e2432; }
+    .data-table tr:last-child td { border-bottom: none; }
+    .data-table tbody tr:hover td { background: #1e2635; }
+    .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; flex-shrink: 0; }
+    .dot-fresh { background: #68d391; }
+    .dot-stale { background: #fc8181; }
+    .dot-ok    { background: #68d391; }
+    .dot-warn  { background: #f6ad55; }
+    .dot-err   { background: #fc8181; }
+    .dot-dis   { background: #4a5568; }
+
+    /* ── Loading / empty ── */
+    .loading { color: #4a5568; font-size: 0.83rem; padding: 24px 0; text-align: center; }
+    .empty-msg { color: #4a5568; font-size: 0.83rem; padding: 20px 0; text-align: center; }
+    .spin { animation: spin 1s linear infinite; display: inline-block; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Section header ── */
+    .section-header { display: flex; align-items: baseline; gap: 10px; margin-bottom: 14px; margin-top: 28px; }
+    .section-header:first-child { margin-top: 0; }
+    .section-title { font-size: 0.88rem; font-weight: 600; color: #a0aec0; text-transform: uppercase; letter-spacing: 0.06em; }
+    .section-divider { flex: 1; height: 1px; background: #2d3748; }
+  </style>
+</head>
+<body>
+
+<nav class="top-nav">
+  <span class="nav-brand">🪁 Lenticularis</span>
+  <div class="nav-links">
+    <a href="/" class="nav-link">Map</a>
+    <a href="/stations" class="nav-link">Stations</a>
+    <a href="/rulesets" class="nav-link">Rule Sets</a>
+    <a href="/stats" class="nav-link active">Statistics</a>
+  </div>
+  <div class="nav-user" id="navUser"></div>
+</nav>
+
+<div class="page">
+  <div class="auth-gate" id="authGate">
+    <p>Sign in to view statistics.</p>
+    <a href="/login?next=/stats" class="btn btn-primary">Sign in</a>
+  </div>
+
+  <div id="mainContent" style="display:none">
+    <div class="page-header">
+      <h1>Statistics</h1>
+      <p>Aggregate insights across all your rule sets, live weather extremes, and service health.</p>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tab-bar">
+      <button class="tab-btn active" data-tab="ruleset">Ruleset Stats</button>
+      <button class="tab-btn" data-tab="weather">Weather Stats</button>
+      <button class="tab-btn" data-tab="service">Service Stats</button>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════════════
+         TAB 1 — RULESET STATS
+    ══════════════════════════════════════════════════════════════ -->
+    <div class="tab-panel active" id="tab-ruleset">
+
+      <div class="controls">
+        <span class="control-label">Period</span>
+        <div class="seg-control" id="rsPeriod">
+          <button class="seg-btn active" data-hours="168">7 d</button>
+          <button class="seg-btn" data-hours="720">30 d</button>
+          <button class="seg-btn" data-hours="2160">90 d</button>
+          <button class="seg-btn" data-hours="8760">1 y</button>
+        </div>
+        <button class="btn btn-ghost" id="rsRefresh" style="margin-left:auto">↻ Refresh</button>
+      </div>
+
+      <!-- Summary cards -->
+      <div class="summary-row" id="rsSummary">
+        <div class="sc"><div class="sc-label">Total evaluations</div><div class="sc-value blue" id="sc-total">—</div></div>
+        <div class="sc"><div class="sc-label">Overall green</div><div class="sc-value green" id="sc-green-pct">—</div><div class="sc-sub" id="sc-green-count"></div></div>
+        <div class="sc"><div class="sc-label">Overall orange</div><div class="sc-value orange" id="sc-orange-pct">—</div><div class="sc-sub" id="sc-orange-count"></div></div>
+        <div class="sc"><div class="sc-label">Overall red</div><div class="sc-value red" id="sc-red-pct">—</div><div class="sc-sub" id="sc-red-count"></div></div>
+        <div class="sc"><div class="sc-label">Best site</div><div class="sc-value green" id="sc-best-pct">—</div><div class="sc-sub" id="sc-best-name" style="color:#68d391"></div></div>
+        <div class="sc"><div class="sc-label">Worst site</div><div class="sc-value red" id="sc-worst-pct">—</div><div class="sc-sub" id="sc-worst-name" style="color:#fc8181"></div></div>
+      </div>
+
+      <div id="rsNoData" style="display:none" class="empty-msg">
+        No decision history found in this period. Run some ruleset evaluations first.
+      </div>
+
+      <!-- Site comparison (full width) -->
+      <div class="section-header"><span class="section-title">Site comparison</span><div class="section-divider"></div></div>
+      <div class="chart-card" style="margin-bottom:20px">
+        <div class="chart-subtitle">% green / orange / red per rule set — sorted by green</div>
+        <div id="compareList" class="loading"><span class="spin">⟳</span> Loading…</div>
+      </div>
+
+      <!-- Daily + hourly -->
+      <div class="section-header"><span class="section-title">Patterns</span><div class="section-divider"></div></div>
+      <div class="chart-grid">
+        <div class="chart-card">
+          <div class="chart-title">Daily decisions</div>
+          <div class="chart-subtitle">Evaluations per day across all rule sets</div>
+          <div class="chart-wrap"><canvas id="chartFlyable"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Hourly pattern</div>
+          <div class="chart-subtitle">% status by hour of day (UTC), all rule sets</div>
+          <div class="chart-wrap"><canvas id="chartHourly"></canvas></div>
+        </div>
+      </div>
+
+    </div><!-- /tab-ruleset -->
+
+    <!-- ══════════════════════════════════════════════════════════════
+         TAB 2 — WEATHER STATS
+    ══════════════════════════════════════════════════════════════ -->
+    <div class="tab-panel" id="tab-weather">
+
+      <!-- Extremes period selector -->
+      <div class="section-header"><span class="section-title">Extremes</span><div class="section-divider"></div></div>
+      <div class="controls" style="margin-bottom:16px">
+        <div class="seg-control" id="wxExtremePeriod">
+          <button class="seg-btn active" data-period="now">Now</button>
+          <button class="seg-btn" data-period="today">Today</button>
+          <button class="seg-btn" data-period="yesterday">Yesterday</button>
+          <button class="seg-btn" data-period="last_week">Last 7 d</button>
+          <button class="seg-btn" data-period="tomorrow">Tomorrow ▸</button>
+          <button class="seg-btn" data-period="choose">📅 Date</button>
+        </div>
+        <input type="date" id="wxDatePicker"
+               style="display:none; background:#1a1f2e; border:1px solid #2d3748; color:#e2e8f0; border-radius:6px; padding:5px 10px; font-size:0.83rem; cursor:pointer" />
+        <span id="extremePeriodLabel" style="font-size:0.78rem; color:#718096; margin-left:4px"></span>
+        <button class="btn btn-ghost" id="wxRefresh" style="margin-left:auto">↻ Refresh</button>
+      </div>
+
+      <div id="extremesGrid" class="extremes-grid">
+        <div class="loading" style="grid-column:1/-1"><span class="spin">⟳</span> Loading…</div>
+      </div>
+
+      <!-- Network + freshness -->
+      <div class="section-header"><span class="section-title">Station health</span><div class="section-divider"></div></div>
+      <div class="chart-grid">
+        <div class="chart-card">
+          <div class="chart-title">Network coverage</div>
+          <div class="chart-subtitle">Stations seen in last 24 h, by network</div>
+          <div id="netCoverage" class="loading"><span class="spin">⟳</span> Loading…</div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Station freshness</div>
+          <div class="chart-subtitle">20 most stale stations</div>
+          <div id="stationFreshness" class="loading"><span class="spin">⟳</span> Loading…</div>
+        </div>
+      </div>
+
+    </div><!-- /tab-weather -->
+
+    <!-- ══════════════════════════════════════════════════════════════
+         TAB 3 — SERVICE STATS
+    ══════════════════════════════════════════════════════════════ -->
+    <div class="tab-panel" id="tab-service">
+
+      <div class="controls">
+        <button class="btn btn-ghost" id="svcRefresh">↻ Refresh</button>
+      </div>
+
+      <!-- Summary cards -->
+      <div class="section-header"><span class="section-title">Totals</span><div class="section-divider"></div></div>
+      <div class="summary-row">
+        <div class="sc"><div class="sc-label">Users</div><div class="sc-value blue" id="sc-users">—</div></div>
+        <div class="sc"><div class="sc-label">Rule sets</div><div class="sc-value blue" id="sc-rulesets">—</div><div class="sc-sub" id="sc-public">— public</div></div>
+        <div class="sc"><div class="sc-label">Clones</div><div class="sc-value blue" id="sc-clones">—</div></div>
+        <div class="sc"><div class="sc-label">Collectors</div><div class="sc-value blue" id="sc-collectors">—</div><div class="sc-sub" id="sc-healthy">— healthy</div></div>
+      </div>
+
+      <!-- InfluxDB storage cards -->
+      <div class="section-header"><span class="section-title">InfluxDB storage</span><div class="section-divider"></div></div>
+      <div class="summary-row">
+        <div class="sc"><div class="sc-label">Weather records</div><div class="sc-value green" id="sc-wx-records">—</div><div class="sc-sub">last 365 days</div></div>
+        <div class="sc"><div class="sc-label">Forecast records</div><div class="sc-value blue" id="sc-fc-records">—</div><div class="sc-sub">last 30 days</div></div>
+        <div class="sc"><div class="sc-label">InfluxDB size</div><div class="sc-value" id="sc-db-size">—</div><div class="sc-sub" id="sc-db-size-sub">all shards on-disk</div></div>
+      </div>
+
+      <!-- Daily ingestion chart -->
+      <div class="section-header"><span class="section-title">Daily ingestion (last 30 days)</span><div class="section-divider"></div></div>
+      <div class="chart-card">
+        <div class="chart-title">Records written per day</div>
+        <div class="chart-subtitle">wind_speed observations · weather (green) and forecast (blue)</div>
+        <div id="influxChartWrap" class="loading"><span class="spin">⟳</span> Loading…</div>
+        <canvas id="influxGrowthChart" height="90" style="display:none"></canvas>
+      </div>
+
+      <!-- Collector health table -->
+      <div class="section-header"><span class="section-title">Collector health</span><div class="section-divider"></div></div>
+      <div class="chart-card">
+        <div id="collectorTable" class="loading"><span class="spin">⟳</span> Loading…</div>
+      </div>
+
+    </div><!-- /tab-service -->
+
+  </div><!-- /mainContent -->
+</div><!-- /page -->
+
+<script type="module">
+import { getUser, renderNavAuth, fetchAuth } from '/static/auth.js';
+
+renderNavAuth('stats');
+
+const user = getUser();
+if (!user) {
+  document.getElementById('authGate').classList.add('visible');
+} else {
+  document.getElementById('mainContent').style.display = '';
+  // Defer one frame so the browser finishes layout before Chart.js
+  // measures canvas dimensions. Without this, canvases have 0 size on
+  // the first render and Chart.js silently fails, leaving "Loading…" stuck.
+  requestAnimationFrame(init);
+}
+
+// ---------------------------------------------------------------------------
+// Tab switching — lazy-load service tab
+// ---------------------------------------------------------------------------
+const _loaded = { ruleset: false, weather: false, service: false };
+
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    const tab = btn.dataset.tab;
+    document.getElementById('tab-' + tab).classList.add('active');
+    if (!_loaded[tab]) {
+      if (tab === 'weather') loadWeatherTab();
+      if (tab === 'service') loadServiceTab();
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Chart.js defaults
+// ---------------------------------------------------------------------------
+Chart.defaults.color = '#718096';
+Chart.defaults.borderColor = '#2d3748';
+Chart.defaults.font.family = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
+Chart.defaults.font.size = 11;
+
+const C = {
+  green:  { bg: 'rgba(39,103,73,0.85)',  border: '#68d391' },
+  orange: { bg: 'rgba(192,86,33,0.85)',  border: '#f6ad55' },
+  red:    { bg: 'rgba(123,32,32,0.85)',  border: '#fc8181' },
+  blue:   { bg: 'rgba(43,108,176,0.5)',  border: '#90cdf4' },
+};
+
+const _charts = {};
+function mkChart(id, type, data, options) {
+  if (_charts[id]) _charts[id].destroy();
+  const ctx = document.getElementById(id)?.getContext('2d');
+  if (!ctx) return null;
+  _charts[id] = new Chart(ctx, { type, data, options });
+}
+
+// ---------------------------------------------------------------------------
+// Segmented period control
+// ---------------------------------------------------------------------------
+let _rsHours = 168;
+
+document.querySelectorAll('#rsPeriod .seg-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#rsPeriod .seg-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    _rsHours = parseInt(btn.dataset.hours);
+    loadRulesetTab();
+  });
+});
+
+document.getElementById('rsRefresh').addEventListener('click', loadRulesetTab);
+document.getElementById('wxRefresh').addEventListener('click', () => loadExtremes());
+document.getElementById('svcRefresh').addEventListener('click', loadServiceTab);
+
+// ---------------------------------------------------------------------------
+// Weather extremes period control
+// ---------------------------------------------------------------------------
+let _extremePeriod = 'now';
+
+document.querySelectorAll('#wxExtremePeriod .seg-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#wxExtremePeriod .seg-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const p = btn.dataset.period;
+    const picker = document.getElementById('wxDatePicker');
+    if (p === 'choose') {
+      picker.style.display = '';
+      picker.focus();
+      // Wait for date selection — handled by picker's change event
+      return;
+    }
+    picker.style.display = 'none';
+    _extremePeriod = p;
+    updateExtremePeriodLabel();
+    loadExtremes();
+  });
+});
+
+document.getElementById('wxDatePicker').addEventListener('change', e => {
+  const val = e.target.value; // YYYY-MM-DD
+  if (!val) return;
+  _extremePeriod = 'date:' + val;
+  updateExtremePeriodLabel();
+  loadExtremes();
+});
+
+function updateExtremePeriodLabel() {
+  const labels = {
+    now: 'latest snapshot (last measurement per station)',
+    today: 'UTC midnight → now',
+    yesterday: 'yesterday UTC',
+    last_week: 'rolling 7 days',
+    tomorrow: 'next 24 h — from forecast data',
+  };
+  const lbl = document.getElementById('extremePeriodLabel');
+  if (_extremePeriod.startsWith('date:')) {
+    lbl.textContent = _extremePeriod.slice(5) + ' (full day UTC)';
+  } else {
+    lbl.textContent = labels[_extremePeriod] ?? '';
+  }
+}
+
+// ---------------------------------------------------------------------------
+// INIT
+// ---------------------------------------------------------------------------
+function init() {
+  loadRulesetTab();
+  // Weather and service load lazily on first tab open
+}
+
+// ============================================================
+// TAB 1 — RULESET STATS
+// ============================================================
+async function loadRulesetTab() {
+  _loaded.ruleset = true;
+  // Reset to loading state on each call (covers re-loads from period buttons)
+  document.getElementById('compareList').innerHTML =
+    '<div class="loading"><span class="spin">⟳</span> Loading…</div>';
+  try {
+    const res = await fetchAuth(`/api/stats/rulesets/overview?hours=${_rsHours}`);
+    if (!res.ok) {
+      document.getElementById('compareList').innerHTML =
+        `<div class="empty-msg">Error ${res.status} loading stats.</div>`;
+      return;
+    }
+    const data = await res.json();
+    renderRulesetOverview(data);
+  } catch (err) {
+    document.getElementById('compareList').innerHTML =
+      `<div class="empty-msg">Failed to load: ${err.message}</div>`;
+    console.error('loadRulesetTab error:', err);
+  }
+}
+
+function renderRulesetOverview(d) {
+  const agg = d.aggregate;
+  const noData = agg.total === 0;
+
+  document.getElementById('rsNoData').style.display = noData ? '' : 'none';
+
+  // Summary cards
+  document.getElementById('sc-total').textContent = noData ? '—' : agg.total.toLocaleString();
+  document.getElementById('sc-green-pct').textContent = noData ? '—' : agg.green_pct + '%';
+  document.getElementById('sc-green-count').textContent = noData ? '' : agg.green_count.toLocaleString() + ' evaluations';
+  document.getElementById('sc-orange-pct').textContent = noData ? '—' : agg.orange_pct + '%';
+  document.getElementById('sc-orange-count').textContent = noData ? '' : agg.orange_count.toLocaleString() + ' evaluations';
+  document.getElementById('sc-red-pct').textContent = noData ? '—' : agg.red_pct + '%';
+  document.getElementById('sc-red-count').textContent = noData ? '' : agg.red_count.toLocaleString() + ' evaluations';
+
+  const rsList = d.per_ruleset.filter(r => r.total > 0);
+  if (rsList.length > 0) {
+    const best = rsList[0];
+    const worst = rsList[rsList.length - 1];
+    document.getElementById('sc-best-pct').textContent = best.green_pct + '%';
+    document.getElementById('sc-best-name').textContent = best.name;
+    document.getElementById('sc-worst-pct').textContent = worst.red_pct + '%' + ' red';
+    document.getElementById('sc-worst-name').textContent = worst.name;
+  } else {
+    ['sc-best-pct','sc-worst-pct'].forEach(id => document.getElementById(id).textContent = '—');
+  }
+
+  // Site comparison
+  renderCompare(d.per_ruleset);
+
+  if (!noData) {
+    renderFlyable(d.flyable_days);
+    renderHourly(d.hourly_pattern);
+  }
+}
+
+function renderCompare(rsList) {
+  const el = document.getElementById('compareList');
+  if (!rsList.length) { el.innerHTML = '<div class="compare-empty">No rule sets found.</div>'; return; }
+
+  const withData = rsList.filter(r => r.total > 0);
+  const noData   = rsList.filter(r => r.total === 0);
+
+  const rows = [...withData, ...noData].map(r => {
+    if (r.total === 0) {
+      return `<div class="compare-row">
+        <div class="compare-name" title="${esc(r.name)}">${esc(r.name)}</div>
+        <div class="compare-bar"><div class="bar-green" style="width:0%"></div></div>
+        <div class="compare-pct" style="color:#4a5568">—</div>
+      </div>`;
+    }
+    return `<div class="compare-row">
+      <div class="compare-name" title="${esc(r.name)}">${esc(r.name)}</div>
+      <div class="compare-bar">
+        <div class="bar-green"  style="width:${r.green_pct}%"  title="${r.green_pct}% green"></div>
+        <div class="bar-orange" style="width:${r.orange_pct}%" title="${r.orange_pct}% orange"></div>
+        <div class="bar-red"    style="width:${r.red_pct}%"    title="${r.red_pct}% red"></div>
+      </div>
+      <div class="compare-pct">${r.green_pct}%</div>
+    </div>`;
+  }).join('');
+
+  el.innerHTML = `<div class="compare-list">${rows}</div>`;
+}
+
+function renderFlyable(data) {
+  mkChart('chartFlyable', 'bar', {
+    labels: data.map(d => d.date),
+    datasets: [
+      { label: 'Green',  data: data.map(d => d.green),  backgroundColor: C.green.bg,  borderColor: C.green.border,  borderWidth: 1, stack: 'a' },
+      { label: 'Orange', data: data.map(d => d.orange), backgroundColor: C.orange.bg, borderColor: C.orange.border, borderWidth: 1, stack: 'a' },
+      { label: 'Red',    data: data.map(d => d.red),    backgroundColor: C.red.bg,    borderColor: C.red.border,    borderWidth: 1, stack: 'a' },
+    ],
+  }, {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { position: 'top', labels: { boxWidth: 10, padding: 10 } }, tooltip: { mode: 'index' } },
+    scales: {
+      x: { stacked: true, ticks: { maxRotation: 45, autoSkip: true, maxTicksLimit: 14 } },
+      y: { stacked: true, beginAtZero: true, title: { display: true, text: 'evaluations' } },
+    },
+  });
+}
+
+function renderHourly(data) {
+  mkChart('chartHourly', 'bar', {
+    labels: data.map(d => `${String(d.hour).padStart(2,'0')}h`),
+    datasets: [
+      { label: 'Green %',  data: data.map(d => d.green_pct),  backgroundColor: C.green.bg,  borderColor: C.green.border,  borderWidth: 1, stack: 'a' },
+      { label: 'Orange %', data: data.map(d => d.orange_pct), backgroundColor: C.orange.bg, borderColor: C.orange.border, borderWidth: 1, stack: 'a' },
+      { label: 'Red %',    data: data.map(d => d.red_pct),    backgroundColor: C.red.bg,    borderColor: C.red.border,    borderWidth: 1, stack: 'a' },
+    ],
+  }, {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { position: 'top', labels: { boxWidth: 10, padding: 10 } }, tooltip: { mode: 'index' } },
+    scales: {
+      x: { stacked: true },
+      y: { stacked: true, beginAtZero: true, max: 100, title: { display: true, text: '%' } },
+    },
+  });
+}
+
+// ============================================================
+// TAB 2 — WEATHER STATS
+// ============================================================
+async function loadWeatherTab() {
+  _loaded.weather = true;
+  updateExtremePeriodLabel();
+  // Load extremes and station health in parallel
+  await Promise.all([loadExtremes(), loadWeatherHealth()]);
+}
+
+async function loadExtremes() {
+  document.getElementById('extremesGrid').innerHTML =
+    '<div class="loading" style="grid-column:1/-1"><span class="spin">⟳</span> Loading…</div>';
+  const res = await fetchAuth(`/api/stats/weather/extremes?period=${encodeURIComponent(_extremePeriod)}`);
+  if (res.ok) renderExtremes(await res.json());
+  else document.getElementById('extremesGrid').innerHTML = '<div class="empty-msg" style="grid-column:1/-1">Failed to load extremes.</div>';
+}
+
+async function loadWeatherHealth() {
+  const [covRes, freshRes] = await Promise.all([
+    fetchAuth('/api/stats/weather/network-coverage'),
+    fetchAuth('/api/stats/weather/station-freshness'),
+  ]);
+  if (covRes.ok)   renderNetCoverage(await covRes.json());
+  if (freshRes.ok) renderFreshness(await freshRes.json());
+}
+
+// Config: label, emoji, colour for each extreme
+const EXTREME_CFG = [
+  { field: 'wind_speed',   extreme: 'max', label: 'Highest wind',      emoji: '💨', colour: '#90cdf4' },
+  { field: 'wind_gust',    extreme: 'max', label: 'Highest gust',       emoji: '🌪',  colour: '#f6ad55' },
+  { field: 'temperature',  extreme: 'max', label: 'Hottest',            emoji: '🌡',  colour: '#fc8181' },
+  { field: 'temperature',  extreme: 'min', label: 'Coldest',            emoji: '🥶',  colour: '#90cdf4' },
+  { field: 'pressure_qnh', extreme: 'max', label: 'Highest pressure',   emoji: '⬆',  colour: '#68d391' },
+  { field: 'pressure_qnh', extreme: 'min', label: 'Lowest pressure',    emoji: '⬇',  colour: '#f6ad55' },
+  { field: 'precipitation',extreme: 'max', label: 'Most precipitation', emoji: '🌧',  colour: '#90cdf4' },
+  { field: 'snow_depth',   extreme: 'max', label: 'Deepest snow',       emoji: '❄',  colour: '#e2e8f0' },
+  { field: 'humidity',     extreme: 'max', label: 'Highest humidity',   emoji: '💧',  colour: '#90cdf4' },
+  { field: 'humidity',     extreme: 'min', label: 'Lowest humidity',    emoji: '🏜',  colour: '#d69e2e' },
+];
+
+function renderExtremes(data) {
+  const el = document.getElementById('extremesGrid');
+  const isForecast = _extremePeriod === 'tomorrow';
+
+  const cards = EXTREME_CFG.map(cfg => {
+    const entry = data[cfg.field]?.[cfg.extreme];
+    const badgeClass = cfg.extreme === 'max' ? 'ec-badge-max' : 'ec-badge-min';
+    const badgeLabel = cfg.extreme === 'max' ? '▲ MAX' : '▼ MIN';
+    const forecastBadge = isForecast
+      ? `<span class="ec-badge" style="background:#1a2a3a;color:#90cdf4;border:1px solid #2b6cb0;margin-left:4px">forecast</span>`
+      : '';
+    if (!entry) {
+      return `<div class="extreme-card">
+        <div class="ec-label">${cfg.emoji} ${cfg.label} <span class="ec-badge ${badgeClass}">${badgeLabel}</span>${forecastBadge}</div>
+        <div class="ec-value" style="color:#4a5568;font-size:1.2rem">No data</div>
+      </div>`;
+    }
+    const ts = entry.timestamp ? fmtDt(entry.timestamp) : '';
+    return `<div class="extreme-card highlight">
+      <div class="ec-label">${cfg.emoji} ${cfg.label} <span class="ec-badge ${badgeClass}">${badgeLabel}</span>${forecastBadge}</div>
+      <div class="ec-value" style="color:${cfg.colour}">${entry.value}<span class="ec-unit"> ${entry.unit}</span></div>
+      <div class="ec-station" title="${esc(entry.station_id)}">${esc(entry.name)}</div>
+      <div class="ec-network">${esc(entry.network)}${ts ? ' · ' + ts : ''}</div>
+    </div>`;
+  }).join('');
+
+  el.innerHTML = cards;
+}
+
+function renderNetCoverage(data) {
+  const el = document.getElementById('netCoverage');
+  if (!data.length) { el.innerHTML = '<div class="empty-msg">No data.</div>'; return; }
+  el.innerHTML = `<table class="data-table">
+    <thead><tr><th>Network</th><th>Total</th><th>Fresh</th><th>Stale</th></tr></thead>
+    <tbody>${data.map(n => `<tr>
+      <td>${esc(n.network)}</td><td>${n.total}</td>
+      <td style="color:#68d391">${n.fresh}</td>
+      <td style="color:${n.stale ? '#fc8181' : '#718096'}">${n.stale}</td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+
+function renderFreshness(data) {
+  const el = document.getElementById('stationFreshness');
+  if (!data.length) { el.innerHTML = '<div class="empty-msg">No stations found.</div>'; return; }
+  const sorted = [...data].sort((a, b) => b.age_minutes - a.age_minutes).slice(0, 20);
+  el.innerHTML = `<table class="data-table">
+    <thead><tr><th>Station</th><th>Network</th><th>Age</th></tr></thead>
+    <tbody>${sorted.map(s => `<tr>
+      <td><span class="dot ${s.is_stale ? 'dot-stale' : 'dot-fresh'}"></span>${esc(s.station_id)}</td>
+      <td style="color:#718096">${esc(s.network)}</td>
+      <td style="color:${s.is_stale ? '#fc8181' : '#68d391'}">${s.age_minutes} min</td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+
+// ============================================================
+// TAB 3 — SERVICE STATS
+// ============================================================
+let _influxChart = null;
+
+async function loadServiceTab() {
+  _loaded.service = true;
+  const [summary, health, influx] = await Promise.all([
+    fetchAuth('/api/stats/service/summary').then(r => r.ok ? r.json() : null),
+    fetchAuth('/api/health/collectors').then(r => r.ok ? r.json() : null),
+    fetchAuth('/api/stats/service/influx').then(r => r.ok ? r.json() : null),
+  ]);
+
+  if (summary) {
+    document.getElementById('sc-users').textContent = summary.users.total;
+    document.getElementById('sc-rulesets').textContent = summary.rulesets.total;
+    document.getElementById('sc-public').textContent = `${summary.rulesets.public} public`;
+    document.getElementById('sc-clones').textContent = summary.rulesets.total_clones;
+    document.getElementById('sc-collectors').textContent = summary.collectors.total;
+    document.getElementById('sc-healthy').textContent = `${summary.collectors.healthy} healthy`;
+  }
+
+  if (influx) renderInfluxStats(influx);
+  if (health?.collectors) renderCollectorTable(health.collectors);
+}
+
+function fmtBytes(bytes) {
+  if (bytes == null) return '—';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
+  return `${(bytes / 1024 ** 3).toFixed(2)} GB`;
+}
+
+function fmtCount(n) {
+  if (n == null) return '—';
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)} M`;
+  if (n >= 1_000)     return `${(n / 1_000).toFixed(1)} K`;
+  return String(n);
+}
+
+function renderInfluxStats(data) {
+  document.getElementById('sc-wx-records').textContent = fmtCount(data.weather_records_365d);
+  document.getElementById('sc-fc-records').textContent = fmtCount(data.forecast_records_30d);
+
+  const sizeEl    = document.getElementById('sc-db-size');
+  const sizeSubEl = document.getElementById('sc-db-size-sub');
+  if (data.storage_bytes != null) {
+    sizeEl.textContent    = fmtBytes(data.storage_bytes);
+    sizeEl.className      = 'sc-value';
+    sizeSubEl.textContent = 'on-disk';
+  } else {
+    sizeEl.textContent    = 'N/A';
+    sizeEl.className      = 'sc-value';
+    sizeSubEl.textContent = '/metrics unavailable';
+  }
+
+  // Build chart
+  const wrap   = document.getElementById('influxChartWrap');
+  const canvas = document.getElementById('influxGrowthChart');
+  const wxDaily = data.weather_daily  || [];
+  const fcDaily = data.forecast_daily || [];
+
+  // Union of all dates
+  const allDates = [...new Set([...wxDaily.map(d => d.date), ...fcDaily.map(d => d.date)])].sort();
+  if (!allDates.length) { wrap.innerHTML = '<div class="empty-msg">No data</div>'; return; }
+
+  const wxMap = Object.fromEntries(wxDaily.map(d => [d.date, d.count]));
+  const fcMap = Object.fromEntries(fcDaily.map(d => [d.date, d.count]));
+
+  wrap.style.display = 'none';
+  canvas.style.display = 'block';
+
+  if (_influxChart) { _influxChart.destroy(); _influxChart = null; }
+
+  _influxChart = new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels: allDates,
+      datasets: [
+        {
+          label: 'Weather observations',
+          data: allDates.map(d => wxMap[d] ?? 0),
+          borderColor: '#48bb78',
+          backgroundColor: 'rgba(72,187,120,0.15)',
+          fill: true,
+          tension: 0.3,
+          pointRadius: 2,
+        },
+        {
+          label: 'Forecast records',
+          data: allDates.map(d => fcMap[d] ?? 0),
+          borderColor: '#63b3ed',
+          backgroundColor: 'rgba(99,179,237,0.15)',
+          fill: true,
+          tension: 0.3,
+          pointRadius: 2,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { labels: { color: '#a0aec0', font: { size: 11 } } },
+        tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y.toLocaleString()}` } },
+      },
+      scales: {
+        x: {
+          ticks: { color: '#718096', maxTicksLimit: 10, font: { size: 10 } },
+          grid:  { color: '#2d3748' },
+        },
+        y: {
+          ticks: { color: '#718096', font: { size: 10 },
+            callback: v => v >= 1000 ? `${(v/1000).toFixed(0)}K` : v },
+          grid: { color: '#2d3748' },
+        },
+      },
+    },
+  });
+}
+
+function renderCollectorTable(collectors) {
+  const el = document.getElementById('collectorTable');
+  if (!collectors.length) { el.innerHTML = '<div class="empty-msg">No collectors configured.</div>'; return; }
+
+  function dotCls(s) {
+    if (['ok','ok_no_data'].includes(s)) return 'dot-ok';
+    if (['scheduled','running','pending'].includes(s)) return 'dot-warn';
+    if (s === 'disabled') return 'dot-dis';
+    return 'dot-err';
+  }
+
+  el.innerHTML = `<table class="data-table">
+    <thead><tr><th>Collector</th><th>Type</th><th>Status</th><th>Last success</th><th>Last error</th><th>Failures</th><th>Interval</th></tr></thead>
+    <tbody>${collectors.map(c => `<tr>
+      <td><span class="dot ${dotCls(c.status)}"></span>${esc(c.collector)}</td>
+      <td style="color:#718096">${c.type ?? '—'}</td>
+      <td>${esc(c.status)}</td>
+      <td style="color:#718096;font-size:0.75rem">${c.last_success_at ? fmtDt(c.last_success_at) : '—'}</td>
+      <td style="color:${c.last_error ? '#fc8181':'#718096'};font-size:0.75rem;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+          title="${esc(c.last_error ?? '')}">${c.last_error ? esc(c.last_error.slice(0,50)) + (c.last_error.length > 50 ? '…' : '') : '—'}</td>
+      <td style="color:${(c.consecutive_failures??0)>0?'#fc8181':'#718096'}">${c.consecutive_failures ?? 0}</td>
+      <td style="color:#718096">${c.interval_minutes} min</td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function fmtDt(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
+}
+</script>
+</body>
+</html>

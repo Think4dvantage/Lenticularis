@@ -79,118 +79,113 @@
       width: 100%;
     }
 
-    /* ── Replay bar ─────────────────────────────────────────────── */
-    .replay-bar {
+    /* ── Time navigation bar ────────────────────────────────────── */
+    #timeNavBar {
       background: #111827;
       border-top: 1px solid #2d3748;
-      padding: 8px 16px;
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 12px;
       flex-shrink: 0;
-      font-size: 0.8rem;
     }
 
-    .replay-section {
+    .tn-day-row {
       display: flex;
       align-items: center;
-      gap: 6px;
+      justify-content: center;
+      gap: 4px;
+      padding: 6px 16px;
+      overflow-x: auto;
     }
 
-    .replay-sep {
-      width: 1px;
-      height: 20px;
-      background: #2d3748;
+    .tn-hour-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      padding: 4px 16px;
+      border-bottom: 1px solid #1a2035;
+      background: #0d1117;
+      overflow-x: auto;
     }
 
-    .replay-label {
-      color: #718096;
-      white-space: nowrap;
-    }
+    .freshness.forecast { color: #f6ad55; }
 
-    .rp-btn {
+    .tn-day-btn {
       background: #1a2035;
       border: 1px solid #4a5568;
-      border-radius: 5px;
+      border-radius: 6px;
       color: #a0aec0;
-      font-size: 0.78rem;
-      padding: 3px 9px;
+      font-size: 0.76rem;
+      padding: 5px 10px;
       cursor: pointer;
+      white-space: nowrap;
+      text-align: center;
+      min-width: 66px;
+      line-height: 1.3;
       transition: background 0.12s, color 0.12s;
-      white-space: nowrap;
-    }
-    .rp-btn:hover { background: #2d3748; color: #e2e8f0; }
-    .rp-btn.active { background: #2b6cb0; border-color: #3182ce; color: #fff; }
-
-    .rp-ctrl {
-      background: #1a2035;
-      border: 1px solid #4a5568;
-      border-radius: 5px;
-      color: #a0aec0;
-      font-size: 0.95rem;
-      padding: 3px 8px;
-      cursor: pointer;
-      transition: background 0.12s;
-      line-height: 1;
-    }
-    .rp-ctrl:hover { background: #2d3748; color: #e2e8f0; }
-    .rp-ctrl.rp-play { background: #276749; border-color: #48bb78; color: #68d391; }
-    .rp-ctrl.rp-play:hover { background: #2f855a; }
-
-    .replay-time {
-      color: #90cdf4;
-      font-variant-numeric: tabular-nums;
-      white-space: nowrap;
-      min-width: 140px;
-    }
-
-    .replay-scrubber {
-      width: 180px;
-      accent-color: #3182ce;
-      cursor: pointer;
-    }
-
-    .replay-frame-label {
-      color: #718096;
-      white-space: nowrap;
-      min-width: 80px;
-    }
-
-    .replay-status {
-      color: #ed8936;
-      font-size: 0.75rem;
-    }
-    .replay-status.playing { color: #68d391; }
-    .replay-status.paused  { color: #90cdf4; }
-
-    .replay-custom-inputs {
       display: flex;
+      flex-direction: column;
       align-items: center;
-      gap: 6px;
+      gap: 1px;
     }
+    .tn-day-btn small { font-size: 0.65rem; color: #718096; }
+    .tn-day-btn:hover { background: #2d3748; color: #e2e8f0; }
+    .tn-day-btn.active { background: #2b6cb0; border-color: #3182ce; color: #fff; }
+    .tn-day-btn.active small { color: #bee3f8; }
+    .tn-day-btn.now-btn { border-color: #276749; color: #68d391; }
+    .tn-day-btn.now-btn:hover { background: #1c3a2c; }
+    .tn-day-btn.now-btn.active { background: #276749; border-color: #68d391; color: #fff; }
+    .tn-day-btn.now-btn.active small { color: #c6f6d5; }
+    .tn-day-btn.future { border-color: #744210; color: #f6ad55; }
+    .tn-day-btn.future:hover { background: #2d1f0a; }
+    .tn-day-btn.future.active { background: #744210; border-color: #f6ad55; color: #fefcbf; }
+    .tn-day-btn.future.active small { color: #fef08a; }
 
-    .replay-custom-inputs input[type="datetime-local"] {
+    .tn-sep { width: 1px; height: 28px; background: #2d3748; flex-shrink: 0; margin: 0 4px; }
+
+    .tn-custom-input {
       background: #2d3748;
       border: 1px solid #4a5568;
       border-radius: 5px;
       color: #e2e8f0;
-      padding: 3px 8px;
-      font-size: 0.78rem;
+      padding: 4px 8px;
+      font-size: 0.76rem;
     }
 
-    .replay-toggle-btn {
-      background: transparent;
+    .tn-hour-btn {
+      background: #1a2035;
       border: 1px solid #4a5568;
       border-radius: 5px;
       color: #a0aec0;
-      font-size: 0.8rem;
-      padding: 4px 10px;
+      font-size: 0.74rem;
+      padding: 3px 7px;
       cursor: pointer;
-      transition: background 0.15s, color 0.15s, border-color 0.15s;
+      white-space: nowrap;
+      transition: background 0.12s, color 0.12s;
     }
-    .replay-toggle-btn:hover { background: #2d3748; color: #e2e8f0; }
-    .replay-toggle-btn.active { background: #2c5282; border-color: #3182ce; color: #90cdf4; }
+    .tn-hour-btn:hover { background: #2d3748; color: #e2e8f0; }
+    .tn-hour-btn.active { background: #2b6cb0; border-color: #3182ce; color: #fff; }
+
+    .tn-time-display {
+      color: #90cdf4;
+      font-variant-numeric: tabular-nums;
+      font-size: 0.76rem;
+      white-space: nowrap;
+      margin: 0 8px;
+    }
+
+    .tn-play-btn {
+      background: #276749;
+      border: 1px solid #48bb78;
+      border-radius: 5px;
+      color: #68d391;
+      font-size: 0.76rem;
+      padding: 3px 12px;
+      cursor: pointer;
+      white-space: nowrap;
+      flex-shrink: 0;
+      transition: background 0.12s;
+    }
+    .tn-play-btn:hover { background: #2f855a; }
+    .tn-play-btn.playing { background: #7b341e; border-color: #f6ad55; color: #fed7aa; }
 
     /* Leaflet popup */
     .leaflet-popup-content-wrapper {
@@ -287,60 +282,54 @@
     <a href="/" class="nav-link active">Map</a>
     <a href="/stations" class="nav-link">Stations</a>
     <a href="/rulesets" class="nav-link">Rule Sets</a>
+    <a href="/stats" class="nav-link">Statistics</a>
   </div>
   <div class="nav-status">
     <span class="dot grey" id="dbDot"></span>
     <span id="navStatus">Connecting…</span>
   </div>
-  <button class="replay-toggle-btn" id="replayToggleBtn" onclick="replayToggleMode()" title="Toggle replay mode">▶ Replay</button>
   <div class="nav-user" id="navUser"></div>
 </nav>
 
 <div id="map"></div>
 
-<!-- Replay bar — shown when replay mode is active -->
-<div id="replayBar" class="replay-bar" style="display:none">
-  <div class="replay-section">
-    <span class="replay-label">Range:</span>
-    <button class="rp-btn active" data-hours="6"   onclick="replaySetRange(6)">6h</button>
-    <button class="rp-btn"       data-hours="24"  onclick="replaySetRange(24)">24h</button>
-    <button class="rp-btn"       data-hours="168" onclick="replaySetRange(168)">7d</button>
-    <button class="rp-btn"       id="mapCustomBtn" onclick="replayToggleCustom()">Custom</button>
-    <div class="replay-custom-inputs" id="mapCustomInputs" style="display:none">
-      <input type="datetime-local" id="mapRangeStart" />
-      <span style="color:#718096">→</span>
-      <input type="datetime-local" id="mapRangeEnd" />
-      <button class="rp-btn" onclick="replayLoadCustom()">Load</button>
-      <span id="mapDataHint" style="display:none;color:#718096;font-size:0.72rem;white-space:nowrap"></span>
+<!-- Time navigation bar — always visible -->
+<div id="timeNavBar">
+  <!-- Hour row: appears when a specific day is selected -->
+  <div id="tnHourRow" style="display:none">
+    <div class="tn-hour-row">
+      <button class="tn-hour-btn" data-hour="7"  onclick="tnSelectHour(7)">07:00</button>
+      <button class="tn-hour-btn" data-hour="8"  onclick="tnSelectHour(8)">08:00</button>
+      <button class="tn-hour-btn" data-hour="9"  onclick="tnSelectHour(9)">09:00</button>
+      <button class="tn-hour-btn" data-hour="10" onclick="tnSelectHour(10)">10:00</button>
+      <button class="tn-hour-btn" data-hour="11" onclick="tnSelectHour(11)">11:00</button>
+      <button class="tn-hour-btn" data-hour="12" onclick="tnSelectHour(12)">12:00</button>
+      <button class="tn-hour-btn" data-hour="13" onclick="tnSelectHour(13)">13:00</button>
+      <button class="tn-hour-btn" data-hour="14" onclick="tnSelectHour(14)">14:00</button>
+      <button class="tn-hour-btn" data-hour="15" onclick="tnSelectHour(15)">15:00</button>
+      <button class="tn-hour-btn" data-hour="16" onclick="tnSelectHour(16)">16:00</button>
+      <button class="tn-hour-btn" data-hour="17" onclick="tnSelectHour(17)">17:00</button>
+      <button class="tn-hour-btn" data-hour="18" onclick="tnSelectHour(18)">18:00</button>
+      <button class="tn-hour-btn" data-hour="19" onclick="tnSelectHour(19)">19:00</button>
+      <span class="tn-time-display" id="tnTimeDisplay"></span>
+      <button class="tn-play-btn" id="tnPlayDayBtn" onclick="tnTogglePlay()">▶ Play day</button>
     </div>
   </div>
-  <div class="replay-sep"></div>
-  <div class="replay-section">
-    <span class="replay-label">Speed:</span>
-    <button class="rp-btn active" data-speed="10"  onclick="replaySetSpeed(10)">10×</button>
-    <button class="rp-btn"       data-speed="50"  onclick="replaySetSpeed(50)">50×</button>
-    <button class="rp-btn"       data-speed="100" onclick="replaySetSpeed(100)">100×</button>
-    <button class="rp-btn"       data-speed="200" onclick="replaySetSpeed(200)">200×</button>
-    <button class="rp-btn"       data-speed="500" onclick="replaySetSpeed(500)">500×</button>
-  </div>
-  <div class="replay-sep"></div>
-  <div class="replay-section">
-    <button class="rp-ctrl" onclick="_mapReplay.seekFirst()"   title="First">⏮</button>
-    <button class="rp-ctrl" onclick="_mapReplay.stepBack()"    title="Previous">⏪</button>
-    <button class="rp-ctrl" id="mapPlayBtn" onclick="_mapReplay.toggle()" title="Play/Pause">▶</button>
-    <button class="rp-ctrl" onclick="_mapReplay.stepForward()" title="Next">⏩</button>
-    <button class="rp-ctrl" onclick="_mapReplay.seekLast()"    title="Last">⏭</button>
-  </div>
-  <div class="replay-sep"></div>
-  <div class="replay-section" style="flex:1;min-width:260px">
-    <span class="replay-time" id="mapReplayTime">—</span>
-    <input type="range" id="mapScrubber" class="replay-scrubber" min="0" max="100" value="0"
-           oninput="_mapReplay.seekTo(+this.value)" style="flex:1" />
-    <span class="replay-frame-label" id="mapFrameLabel">—</span>
-  </div>
-  <div class="replay-sep"></div>
-  <div class="replay-section">
-    <span class="replay-status" id="mapReplayStatus">—</span>
+  <!-- Day row: always visible -->
+  <div class="tn-day-row">
+    <button class="tn-day-btn" data-offset="-3" onclick="tnSelectDay(-3)">−3 Days<small id="tnLabel_m3"></small></button>
+    <button class="tn-day-btn" data-offset="-2" onclick="tnSelectDay(-2)">−2 Days<small id="tnLabel_m2"></small></button>
+    <button class="tn-day-btn" data-offset="-1" onclick="tnSelectDay(-1)">Yesterday<small id="tnLabel_m1"></small></button>
+    <button class="tn-day-btn" data-offset="0" onclick="tnSelectDay(0)">Today<small id="tnLabel_0"></small></button>
+    <button class="tn-day-btn now-btn active" id="tnNowBtn" onclick="tnGoLive()">Now<small>Live</small></button>
+    <button class="tn-day-btn future" data-offset="1" onclick="tnSelectDay(1)">Tomorrow<small id="tnLabel_1"></small></button>
+    <button class="tn-day-btn future" data-offset="2" onclick="tnSelectDay(2)">+2 Days<small id="tnLabel_2"></small></button>
+    <button class="tn-day-btn future" data-offset="3" onclick="tnSelectDay(3)">+3 Days<small id="tnLabel_3"></small></button>
+    <button class="tn-day-btn future" data-offset="4" onclick="tnSelectDay(4)">+4 Days<small id="tnLabel_4"></small></button>
+    <button class="tn-day-btn future" data-offset="5" onclick="tnSelectDay(5)">+5 Days<small id="tnLabel_5"></small></button>
+    <span class="tn-sep"></span>
+    <button class="tn-day-btn" id="tnCustomBtn" onclick="tnToggleCustom()">📅 Custom<small>Date</small></button>
+    <input type="date" id="tnCustomDate" class="tn-custom-input" style="display:none" onchange="tnSelectCustomDate()" />
   </div>
 </div>
 
@@ -348,162 +337,234 @@
 <script src="/static/map.js"></script>
 <script>
 // ---------------------------------------------------------------------------
-// Replay bar — map page
+// Time navigation bar
 // ---------------------------------------------------------------------------
-let _mapReplayActive = false;
-let _mapReplayRange  = 6;
-let _mapReplaySpeed  = 10;
+let _tnOffset     = null;    // integer day offset (0=today), null = live or custom
+let _tnLive       = true;    // true when in live mode (Now button active)
+let _tnCustomDate = null;    // "YYYY-MM-DD" when custom date selected
+let _tnPlayTimer  = null;
+let _tnPlayActive = false;
+let _tnPlayHour   = 7;
 
 const _mapReplay = new ReplayEngine(
-  // onFrame
+  // onFrame — update time display and nearest hour button
   (snapshot, ts, idx, total, isForecast) => {
     applyReplaySnapshot(snapshot);
-    // Update UI
     const d = new Date(ts);
-    const timeEl = document.getElementById('mapReplayTime');
-    timeEl.textContent = (isForecast ? '📡 ' : '') +
-      d.toLocaleString([], { month:'short', day:'2-digit', hour:'2-digit', minute:'2-digit', timeZoneName:'short' });
-    timeEl.style.color = isForecast ? '#f6ad55' : '';
-    const scrubber = document.getElementById('mapScrubber');
-    scrubber.max = total - 1;
-    scrubber.value = idx;
-    document.getElementById('mapFrameLabel').textContent = `${idx + 1} / ${total}`;
+    const el = document.getElementById('tnTimeDisplay');
+    if (el) {
+      el.textContent = (isForecast ? '📡 ' : '') +
+        d.toLocaleString([], { month:'short', day:'2-digit', hour:'2-digit', minute:'2-digit', timeZoneName:'short' });
+      el.style.color = isForecast ? '#f6ad55' : '';
+    }
+    // Highlight the nearest hour button (only when not in our own play animation)
+    if (!_tnPlayActive) {
+      const h = d.getUTCHours();
+      document.querySelectorAll('.tn-hour-btn').forEach(b => {
+        const bh = +b.dataset.hour;
+        b.classList.toggle('active', bh === h || (d.getUTCMinutes() >= 30 && bh === h + 1));
+      });
+    }
   },
-  // onStateChange
+  // onStateChange — show loading state on play button
   (state) => {
-    const statusEl = document.getElementById('mapReplayStatus');
-    const playBtn  = document.getElementById('mapPlayBtn');
-    if (state === 'loading') {
-      statusEl.textContent = 'Loading…';
-      statusEl.className = 'replay-status';
-      playBtn.textContent = '▶';
-      playBtn.classList.remove('rp-play');
-    } else if (state === 'playing') {
-      statusEl.textContent = '● Playing';
-      statusEl.className = 'replay-status playing';
-      playBtn.textContent = '⏸';
-      playBtn.classList.add('rp-play');
-    } else if (state === 'paused') {
-      statusEl.textContent = '⏸ Paused';
-      statusEl.className = 'replay-status paused';
-      playBtn.textContent = '▶';
-      playBtn.classList.remove('rp-play');
-    } else {
-      statusEl.textContent = '—';
-      statusEl.className = 'replay-status';
-      playBtn.textContent = '▶';
-      playBtn.classList.remove('rp-play');
+    const playBtn = document.getElementById('tnPlayDayBtn');
+    if (playBtn && state === 'loading') {
+      playBtn.textContent = '⏳ Loading…';
+      playBtn.classList.remove('playing');
+    } else if (playBtn && state !== 'loading' && !_tnPlayActive) {
+      playBtn.textContent = '▶ Play day';
     }
   }
 );
 
-async function replayToggleMode() {
-  const btn = document.getElementById('replayToggleBtn');
-  const bar = document.getElementById('replayBar');
-  _mapReplayActive = !_mapReplayActive;
-  if (_mapReplayActive) {
-    btn.textContent = '✕ Live';
-    btn.classList.add('active');
-    bar.style.display = 'flex';
-    stopLiveRefresh();
-    await replayLoad();
-  } else {
-    _mapReplay.pause();
-    btn.textContent = '▶ Replay';
-    btn.classList.remove('active');
-    bar.style.display = 'none';
-    loadStations();
-    startLiveRefresh();
+// -- Day label initialisation ------------------------------------------------
+function tnInitLabels() {
+  const DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const now = new Date();
+  for (let off = -3; off <= 5; off++) {
+    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) + off * 86400000);
+    const label = off === 0
+      ? `${DOW[d.getUTCDay()]} ${d.getUTCDate()} ${MON[d.getUTCMonth()]}`
+      : `${DOW[d.getUTCDay()]} ${d.getUTCDate()} ${MON[d.getUTCMonth()]}`;
+    const key = off < 0 ? `m${-off}` : `${off}`;
+    const el = document.getElementById(`tnLabel_${key}`);
+    if (el) el.textContent = label;
   }
 }
 
-function replaySetRange(hours) {
-  _mapReplayRange = hours;
-  document.querySelectorAll('#replayBar [data-hours]').forEach(b =>
-    b.classList.toggle('active', +b.dataset.hours === hours));
-  document.getElementById('mapCustomBtn').classList.remove('active');
-  document.getElementById('mapCustomInputs').style.display = 'none';
-  if (_mapReplayActive) replayLoad();
-}
-
-async function replayToggleCustom() {
-  const inp = document.getElementById('mapCustomInputs');
-  const showing = inp.style.display !== 'none';
-  inp.style.display = showing ? 'none' : 'flex';
-  document.getElementById('mapCustomBtn').classList.toggle('active', !showing);
-  if (!showing) await replayApplyDataBounds('mapRangeStart', 'mapRangeEnd', 'mapDataHint');
-}
-
-// Convert a UTC ISO string to the "YYYY-MM-DDTHH:MM" LOCAL-time string
-// required by datetime-local input min/max/value attributes.
-function utcToLocalInputValue(iso) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  // Subtract getTimezoneOffset (minutes behind UTC) to get local wall-clock time
-  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
-}
-
-async function replayApplyDataBounds(startId, endId, hintId) {
-  try {
-    const res = await fetch('/api/stations/data-bounds');
-    if (!res.ok) return;
-    const { earliest, latest } = await res.json();
-    if (!earliest || !latest) return;
-
-    const startEl = document.getElementById(startId);
-    const endEl   = document.getElementById(endId);
-    const eLocal  = utcToLocalInputValue(earliest);
-    const lLocal  = utcToLocalInputValue(latest);
-
-    startEl.min = eLocal;
-    startEl.max = lLocal;
-    endEl.min   = eLocal;
-    endEl.max   = lLocal;
-
-    // Pre-fill only if still empty
-    if (!startEl.value) startEl.value = eLocal;
-    if (!endEl.value)   endEl.value   = lLocal;
-
-    // Show hint
-    if (hintId) {
-      const hint = document.getElementById(hintId);
-      if (hint) {
-        const fmt = iso => new Date(iso).toLocaleString([], { month:'short', day:'2-digit', hour:'2-digit', minute:'2-digit' });
-        hint.textContent = `Data: ${fmt(earliest)} → ${fmt(latest)}`;
-        hint.style.display = 'inline';
-      }
-    }
-  } catch (e) { /* silently ignore */ }
-}
-
-async function replayLoadCustom() {
-  const s = document.getElementById('mapRangeStart').value;
-  const e = document.getElementById('mapRangeEnd').value;
-  if (!s || !e) { alert('Please select both start and end date/time.'); return; }
-  document.querySelectorAll('#replayBar [data-hours]').forEach(b => b.classList.remove('active'));
-  await replayLoad({ start: new Date(s).toISOString(), end: new Date(e).toISOString() });
-}
-
-function replaySetSpeed(speed) {
-  _mapReplaySpeed = speed;
-  document.querySelectorAll('#replayBar [data-speed]').forEach(b =>
-    b.classList.toggle('active', +b.dataset.speed === speed));
-  _mapReplay.setSpeed(speed);
-}
-
-async function replayLoad(params) {
+// -- Live mode (Now button) --------------------------------------------------
+function tnGoLive() {
+  _tnLive = true;
+  _tnOffset = null;
+  _tnCustomDate = null;
+  tnStopPlay();
+  document.querySelectorAll('.tn-day-btn[data-offset]').forEach(b => b.classList.remove('active'));
+  document.getElementById('tnCustomBtn').classList.remove('active');
+  document.getElementById('tnCustomDate').style.display = 'none';
+  document.getElementById('tnNowBtn').classList.add('active');
+  document.getElementById('tnHourRow').style.display = 'none';
   _mapReplay.pause();
-  try {
-    const count = await _mapReplay.load(params || { hours: _mapReplayRange });
-    document.getElementById('mapFrameLabel').textContent = `0 / ${count}`;
-    if (count === 0) {
-      document.getElementById('mapReplayStatus').textContent = 'No data';
-    }
-  } catch (err) {
-    console.error('Replay load error:', err);
-    document.getElementById('mapReplayStatus').textContent = 'Error loading data';
+  loadStations();
+  startLiveRefresh();
+}
+
+// Returns the forecast_hours needed to cover a given day offset from today.
+// Past days don't need forecast; today and future days do.
+function tnForecastHours(offset) {
+  if (offset === null || offset < 0) return 0;    // past days: no forecast needed
+  if (offset === 0) return 36;                    // today: cover rest of today + buffer
+  return Math.min(120, (offset + 1) * 24 + 12);  // future: +12h buffer to cover full day
+}
+
+// -- Day selection -----------------------------------------------------------
+async function tnSelectDay(offset) {
+  _tnOffset = offset;
+  _tnLive = false;
+  _tnCustomDate = null;
+  tnStopPlay();
+
+  document.querySelectorAll('.tn-day-btn[data-offset]').forEach(b =>
+    b.classList.toggle('active', +b.dataset.offset === offset));
+  document.getElementById('tnNowBtn').classList.remove('active');
+  document.getElementById('tnCustomBtn').classList.remove('active');
+  document.getElementById('tnCustomDate').style.display = 'none';
+
+  stopLiveRefresh();
+  _mapReplay.pause();
+  document.getElementById('tnHourRow').style.display = 'block';
+
+  const [start, end] = tnDayBounds(offset, null);
+  const fh = tnForecastHours(offset);
+  const loadParams = fh > 0
+    ? { start, end, forecast_hours: fh }
+    : { start, end, include_forecast: false };
+  try { await _mapReplay.load(loadParams); } catch(err) { console.error('Time nav load error:', err); }
+
+  if (offset === 0) {
+    // "Now" — default to the most recent (latest) frame
+    _mapReplay.seekLast();
+  } else if (offset > 0) {
+    // Future day — default to noon
+    tnSeekToHour(12);
+  } else {
+    // Past day — default to noon
+    tnSeekToHour(12);
   }
 }
+
+function tnToggleCustom() {
+  const inp = document.getElementById('tnCustomDate');
+  const btn = document.getElementById('tnCustomBtn');
+  if (inp.style.display === 'none') {
+    const now = new Date();
+    inp.min = new Date(now.getTime() - 30 * 86400000).toISOString().slice(0, 10);
+    inp.max = new Date(now.getTime() +  5 * 86400000).toISOString().slice(0, 10);
+    inp.style.display = 'inline-block';
+    inp.focus();
+    btn.classList.add('active');
+  } else {
+    inp.style.display = 'none';
+    btn.classList.remove('active');
+  }
+}
+
+async function tnSelectCustomDate() {
+  const val = document.getElementById('tnCustomDate').value;
+  if (!val) return;
+  _tnCustomDate = val;
+  _tnOffset = null;
+  tnStopPlay();
+
+  _tnLive = false;
+  document.querySelectorAll('.tn-day-btn[data-offset]').forEach(b => b.classList.remove('active'));
+  document.getElementById('tnNowBtn').classList.remove('active');
+  document.getElementById('tnCustomBtn').classList.add('active');
+
+  stopLiveRefresh();
+  document.getElementById('tnHourRow').style.display = 'block';
+  const [start, end] = tnDayBounds(null, val);
+  // Determine if the custom date is in the future and how much forecast is needed
+  const customDayStart = new Date(val + 'T00:00:00Z');
+  const daysAhead = Math.ceil((customDayStart - new Date()) / 86400000);
+  const fh = tnForecastHours(daysAhead);
+  const loadParams = fh > 0
+    ? { start, end, forecast_hours: fh }
+    : { start, end, include_forecast: false };
+  try { await _mapReplay.load(loadParams); } catch(err) { console.error('Time nav load error:', err); }
+  tnSeekToHour(12);
+}
+
+function tnDayBounds(offset, dateStr) {
+  let d;
+  if (dateStr) {
+    d = new Date(dateStr + 'T00:00:00Z');
+  } else {
+    const now = new Date();
+    d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) + offset * 86400000);
+  }
+  return [d.toISOString(), new Date(d.getTime() + 86400000 - 1000).toISOString()];
+}
+
+// -- Hour navigation ---------------------------------------------------------
+function tnSeekToHour(hour) {
+  const ts = _mapReplay._timestamps;
+  if (!ts || ts.length === 0) return;
+  let dayMs;
+  if (_tnCustomDate) {
+    dayMs = new Date(_tnCustomDate + 'T00:00:00Z').getTime();
+  } else if (_tnOffset) {
+    const now = new Date();
+    dayMs = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) + _tnOffset * 86400000;
+  } else {
+    dayMs = new Date(new Date(ts[0]).setUTCHours(0, 0, 0, 0)).getTime();
+  }
+  const target = dayMs + hour * 3600000;
+  let bestIdx = 0, bestDiff = Infinity;
+  for (let i = 0; i < ts.length; i++) {
+    const diff = Math.abs(new Date(ts[i]).getTime() - target);
+    if (diff < bestDiff) { bestDiff = diff; bestIdx = i; }
+    if (new Date(ts[i]).getTime() > target + 3600000) break;
+  }
+  _mapReplay.seekTo(bestIdx);
+}
+
+function tnSelectHour(hour) {
+  _tnPlayHour = hour;
+  document.querySelectorAll('.tn-hour-btn').forEach(b =>
+    b.classList.toggle('active', +b.dataset.hour === hour));
+  tnSeekToHour(hour);
+}
+
+// -- Day play animation ------------------------------------------------------
+function tnTogglePlay() {
+  if (_tnPlayActive) tnStopPlay(); else tnStartPlay();
+}
+
+function tnStartPlay() {
+  _tnPlayActive = true;
+  const btn = document.getElementById('tnPlayDayBtn');
+  btn.textContent = '⏸ Stop';
+  btn.classList.add('playing');
+  let h = (_tnPlayHour >= 7 && _tnPlayHour < 19) ? _tnPlayHour : 7;
+  function step() {
+    if (!_tnPlayActive || h > 19) { tnStopPlay(); return; }
+    tnSelectHour(h++);
+    _tnPlayTimer = setTimeout(step, 600);
+  }
+  step();
+}
+
+function tnStopPlay() {
+  _tnPlayActive = false;
+  if (_tnPlayTimer) { clearTimeout(_tnPlayTimer); _tnPlayTimer = null; }
+  const btn = document.getElementById('tnPlayDayBtn');
+  if (btn) { btn.textContent = '▶ Play day'; btn.classList.remove('playing'); }
+}
+
+// Initialise day labels
+tnInitLabels();
 </script>
 <script type="module">
   import { renderNavAuth, isLoggedIn, fetchAuth } from '/static/auth.js';

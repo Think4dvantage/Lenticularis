@@ -125,6 +125,7 @@ function _windArrow(deg) {
 function _ageLabel(ts) {
   if (!ts) return null;
   const mins = Math.round((Date.now() - new Date(ts).getTime()) / 60000);
+  if (mins < -1)  return '📡 Forecast';
   if (mins < 2)   return 'just now';
   if (mins < 60)  return `${mins} min ago`;
   const hrs = Math.floor(mins / 60);
@@ -135,6 +136,7 @@ function _ageLabel(ts) {
 function _ageCssClass(ts) {
   if (!ts) return 'unknown';
   const mins = (Date.now() - new Date(ts).getTime()) / 60000;
+  if (mins < -1)  return 'forecast';
   if (mins < 30)  return 'fresh';
   if (mins < 120) return 'recent';
   return 'stale';

@@ -50,6 +50,8 @@ class ReplayEngine {
     } else {
       url += 'hours=24';
     }
+    if (params.forecast_hours != null) url += `&forecast_hours=${params.forecast_hours}`;
+    if (params.include_forecast === false) url += '&include_forecast=false';
 
     const res = await fetch(url);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);

@@ -353,6 +353,95 @@ from(bucket: "{self._cfg.bucket}")
                 })
         return rows
 
+    def query_extremes_for_period(
+        self,
+        start: datetime,
+        end: datetime,
+        measurement: str = MEASUREMENT_WEATHER,
+    ) -> tuple[list[dict], list[dict]]:
+        """
+        Return per-(station, field) max and min records for a time range.
+
+        Uses Flux ``max()`` / ``min()`` aggregations so only aggregate rows
+        are returned — not the full raw time-series.
+
+        Returns ``(max_records, min_records)`` where each is a list of::
+
+            {station_id, network, field, value, timestamp}
+        """
+        _FIELDS = [
+            "wind_speed", "wind_gust", "temperature",
+            "pressure_qnh", "humidity", "precipitation", "snow_depth",
+        ]
+        field_filter = " or ".join(f'r._field == "{f}"' for f in _FIELDS)
+        start_str = start.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        end_str = end.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        def _run(agg_fn: str) -> list[dict]:
+            flux = f"""
+from(bucket: "{self._cfg.bucket}")
+  |> range(start: {start_str}, stop: {end_str})
+  |> filter(fn: (r) => r._measurement == "{measurement}")
+  |> filter(fn: (r) => {field_filter})
+  |> {agg_fn}()
+"""
+            records: list[dict] = []
+            try:
+                for table in self._query_api.query(flux, org=self._cfg.org):
+                    for record in table.records:
+                        val = record.get_value()
+                        if val is None:
+                            continue
+                        records.append({
+                            "station_id": record.values.get("station_id", ""),
+                            "network": record.values.get("network", ""),
+                            "field": record.get_field(),
+                            "value": float(val),
+                            "timestamp": record.get_time().isoformat() if record.get_time() else None,
+                        })
+            except Exception as exc:
+                logger.error("InfluxDB %s extremes query error (%s): %s", agg_fn, measurement, exc)
+            return records
+
+        return _run("max"), _run("min")
+
+    def query_decision_history_multi(
+        self, ruleset_ids: list[str], hours: int = 24
+    ) -> dict[str, list[dict]]:
+        """
+        Return decision history for multiple rulesets in one Flux query.
+
+        Returns ``{ruleset_id: [{"timestamp", "decision", "condition_results_json"}, …]}``.
+        """
+        if not ruleset_ids:
+            return {}
+
+        id_filter = " or ".join(f'r.ruleset_id == "{rid}"' for rid in ruleset_ids)
+        flux = f"""
+from(bucket: "{self._cfg.bucket}")
+  |> range(start: -{hours}h)
+  |> filter(fn: (r) => r._measurement == "rule_decisions")
+  |> filter(fn: (r) => {id_filter})
+  |> pivot(rowKey: ["_time", "ruleset_id"], columnKey: ["_field"], valueColumn: "_value")
+  |> sort(columns: ["_time"])
+"""
+        try:
+            tables = self._query_api.query(flux, org=self._cfg.org)
+        except Exception as exc:
+            logger.error("InfluxDB decision_history_multi error: %s", exc)
+            return {}
+
+        results: dict[str, list[dict]] = {}
+        for table in tables:
+            for record in table.records:
+                rid = record.values.get("ruleset_id", "")
+                results.setdefault(rid, []).append({
+                    "timestamp": record.get_time().isoformat(),
+                    "decision": record.values.get("decision"),
+                    "condition_results_json": record.values.get("condition_results"),
+                })
+        return results
+
     # ------------------------------------------------------------------
     # Forecast — write
     # ------------------------------------------------------------------
@@ -546,6 +635,119 @@ from(bucket: "{self._cfg.bucket}")
             sid: {vt: {k: v for k, v in row.items() if k != "_init_time"} for vt, row in by_vt.items()}
             for sid, by_vt in raw.items()
         }
+
+    # ------------------------------------------------------------------
+    # Storage / ingestion stats
+    # ------------------------------------------------------------------
+
+    def query_measurement_count(self, measurement: str, days: int = 365) -> int:
+        """
+        Return the approximate number of records in ``measurement`` over the
+        last ``days`` days.  Counts the ``wind_speed`` field as a proxy
+        (present in virtually all weather and forecast rows).
+        """
+        flux = f"""
+from(bucket: "{self._cfg.bucket}")
+  |> range(start: -{days}d)
+  |> filter(fn: (r) => r._measurement == "{measurement}" and r._field == "wind_speed")
+  |> group()
+  |> count()
+"""
+        try:
+            tables = self._query_api.query(flux, org=self._cfg.org)
+            for table in tables:
+                for record in table.records:
+                    return int(record.get_value() or 0)
+        except Exception as exc:
+            logger.error("InfluxDB count error (%s): %s", measurement, exc)
+        return 0
+
+    def query_daily_ingestion(self, measurement: str, days: int = 30) -> list[dict]:
+        """
+        Return daily record counts for ``measurement`` over the last ``days`` days.
+
+        Returns ``[{"date": "YYYY-MM-DD", "count": int}, ...]`` sorted chronologically.
+        """
+        flux = f"""
+from(bucket: "{self._cfg.bucket}")
+  |> range(start: -{days}d)
+  |> filter(fn: (r) => r._measurement == "{measurement}" and r._field == "wind_speed")
+  |> group()
+  |> aggregateWindow(every: 1d, fn: count, createEmpty: true)
+"""
+        result = []
+        try:
+            tables = self._query_api.query(flux, org=self._cfg.org)
+            for table in tables:
+                for record in table.records:
+                    ts = record.get_time()
+                    if ts is None:
+                        continue
+                    result.append({
+                        "date": ts.strftime("%Y-%m-%d"),
+                        "count": int(record.get_value() or 0),
+                    })
+        except Exception as exc:
+            logger.error("InfluxDB daily ingestion error (%s): %s", measurement, exc)
+        return sorted(result, key=lambda x: x["date"])
+
+    def query_storage_bytes(self) -> int | None:
+        """
+        Return the total on-disk storage used by InfluxDB (all shards) in bytes,
+        by scraping the Prometheus ``/metrics`` endpoint.
+
+        InfluxDB 2.x labels shards with a ``bucket_id`` UUID, not the bucket name,
+        so we sum *all* ``storage_shard_disk_size_bytes`` lines — accurate for a
+        dedicated Lenticularis InfluxDB instance.
+
+        Tries with the configured token first; falls back to no auth (some setups
+        expose ``/metrics`` without authentication for Prometheus scraping).
+
+        Returns ``None`` when the endpoint is unreachable or the metric is absent.
+        """
+        import urllib.request
+        import urllib.error
+
+        url = self._cfg.url.rstrip("/") + "/metrics"
+        # InfluxDB 2.x uses this metric name; some builds prefix it with influxdb_
+        _METRIC_NAMES = (
+            "storage_shard_disk_size_bytes{",
+            "influxdb_storage_shard_disk_size_bytes{",
+        )
+
+        def _fetch(auth: bool) -> str | None:
+            headers = {"Authorization": f"Token {self._cfg.token}"} if auth else {}
+            req = urllib.request.Request(url, headers=headers)
+            try:
+                with urllib.request.urlopen(req, timeout=5) as resp:
+                    return resp.read().decode("utf-8")
+            except urllib.error.HTTPError as exc:
+                if exc.code in (401, 403) and auth:
+                    return None  # signal to retry without auth
+                logger.warning("InfluxDB /metrics HTTP %s", exc.code)
+                return ""
+            except Exception as exc:
+                logger.warning("Could not fetch InfluxDB /metrics: %s", exc)
+                return ""
+
+        body = _fetch(auth=True)
+        if body is None:           # 401/403 — retry without auth
+            body = _fetch(auth=False)
+        if not body:
+            return None
+
+        total = 0
+        found = False
+        for line in body.splitlines():
+            if not any(line.startswith(m) for m in _METRIC_NAMES):
+                continue
+            try:
+                value = float(line.split("}")[-1].strip())
+                total += int(value)
+                found = True
+            except (ValueError, IndexError):
+                continue
+        return total if found else None
 
     # ------------------------------------------------------------------
     # Lifecycle
