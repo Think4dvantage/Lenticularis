@@ -37,7 +37,7 @@ _HOURLY_VARS = [
     "wind_direction_10m",
     "temperature_2m",
     "relative_humidity_2m",
-    "surface_pressure",
+    "pressure_msl",
     "precipitation",
 ]
 
@@ -111,7 +111,7 @@ class ForecastOpenMeteoCollector(BaseForecastCollector):
                 wind_direction=int(wind_dir_raw) if wind_dir_raw is not None else None,
                 temperature=_get_val("temperature_2m"),
                 humidity=_get_val("relative_humidity_2m"),
-                pressure_qnh=_get_val("surface_pressure"),
+                pressure_qnh=_get_val("pressure_msl"),
                 precipitation=_get_val("precipitation"),
             ))
 

@@ -131,17 +131,28 @@ And comment out the InfluxDB service in `docker-compose.yml`.
 - Rulesets list (`/rulesets`): live GREEN/ORANGE/RED decision badges + landing decision badges per card
 - Map auto-refresh; Ecovitt collector
 
-### v0.8 — ✅ Deployed (current)
+### v0.8 — ✅ Deployed
 - **Weather data replay**: time-range selector (6h / 24h / 7d / custom), speed multipliers (10× 50× 100× 200× 500×), play/pause/scrub controls on both map and station table; `GET /api/stations/data-bounds` + `GET /api/stations/replay` endpoints; `replay.js` `ReplayEngine` class
 - **Ruleset analysis page** (`/ruleset-analysis`): current evaluation table (Station / Field / Condition / Actual / Status), decision history with timeline strip, Chart.js scatter chart, grouped state-change table (click to expand condition detail at transition point)
 - **Map popup condition breakdown**: clicking a launch/landing marker shows per-condition evaluation with thresholds, actual values, and coloured status
 - **Decision history API**: `GET /api/rulesets/{id}/history?hours=N` backed by `rule_decisions` InfluxDB measurement; `ConditionResult` extended with `operator`, `value_a`, `value_b`
 - Rulesets list cards navigate to analysis page on click
 
-### Next — v0.9 — Statistics Dashboard
-- `services/stats.py` — Flux queries: flyable days, hourly pattern, monthly/seasonal breakdown, condition trigger rate, site comparison, best windows
-- All `GET /api/stats/…` endpoints
-- `static/stats.html` + Chart.js charts
+### v0.9 — ✅ Deployed (current)
+- **Statistics Dashboard** (`/stats`, `static/stats.html`): three-tab page — Ruleset Stats, Weather Stats, Service Stats
+  - *Ruleset Stats*: aggregate green/orange/red % overview, site comparison bars, hourly pattern chart, flyable days; period selector 7d / 30d / 90d / 1y
+  - *Weather Stats*: extremes leaderboard (highest wind/gust, hottest/coldest, highest/lowest pressure, most precipitation, deepest snow, humidity) with period selector (Now / Today / Yesterday / Last 7 Days / Tomorrow / Choose Date); network coverage table; station freshness table
+  - *Service Stats*: user/ruleset/collector summary cards, collector health table, InfluxDB storage section (weather record count 365d, forecast record count 30d, total InfluxDB disk size via `/metrics`, daily ingestion line chart 30d)
+- **New backend**: `services/stats.py`, `services/weather_stats.py`, `api/routers/stats.py`
+- **New InfluxDB methods**: `query_decision_history_multi`, `query_extremes_for_period`, `query_measurement_count`, `query_daily_ingestion`, `query_storage_bytes`
+- **Map time navigation bar** (replaces old hidden replay bar): always-visible two-row bar at bottom of map
+  - *Day row*: −3 Days through +5 Days + custom date picker; past days neutral, future days amber-tinted, Now green (live auto-refresh)
+  - *Hour row*: appears for any day except Now; 07:00–19:00 buttons + "Play day" button animating through hours at 600 ms each
+  - Future days request appropriate `forecast_hours` (up to 120 h); station popups show "📡 Forecast" (amber) for future-timestamped data
+  - `replay.js`: added `forecast_hours` and `include_forecast` params to `load()`
+- **Station detail forecast overlay** (`station-detail.html`): "📡 + Forecast" toggle shows last 48 h observations as solid line + 120 h forecast as dashed amber line; amber background zone + "Now" boundary line; `GET /api/stations/{id}/forecast` endpoint
+- **Forecast pressure fix**: Open-Meteo collector now requests `pressure_msl` (sea-level reduced QNH) instead of `surface_pressure` (terrain-level QFE) — values now match station QNH observations regardless of elevation
+- **Cursor guide fix** (`station-detail.js`): guide line now tracks raw mouse position via `afterEvent` hook instead of snapping to nearest data point — moves freely across observations and forecast zone
 
 ### Planned — v0.10 — Launchsite Registry + Clubs + Ruleset Types
 - Separate `launch_sites` table; clubs with GeoJSON area polygons; map overlays for both

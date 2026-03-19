@@ -455,26 +455,65 @@ All time-range endpoints accept `?from=&to=` parameters. Best-windows also accep
 
 ---
 
-### v0.9 — Statistics Dashboard
-**Goal:** users can view historical site condition patterns.
+### v0.9 — Statistics Dashboard + Map Time Navigation ✅
+**Goal:** users can view historical site condition patterns, weather extremes, and service health; map gains a full time navigation bar replacing the hidden replay bar.
 
-- `services/stats.py` — Flux queries for all 7 metrics; best-windows algorithm server-side
-- All 7 `GET /api/stats/…` endpoints
-- `static/stats.html` + `static/stats.js`:
-  - Status Ok days card
-  - Hourly heatmap (Chart.js)
-  - Monthly bar chart
-  - Seasonal breakdown
-  - Condition trigger leaderboard (with station attribution)
-  - Site comparison chart
-  - Best windows list
-- Time-range filter (`?from=&to=`) on all charts
+#### Statistics Dashboard (`/stats`, `static/stats.html`) — three-tab page
 
-#### Implementation steps for v0.9
-1. Implement `services/stats.py` with all 7 Flux queries and best-windows algorithm
-2. Add `api/routers/stats.py` with all 7 endpoints
-3. Create `static/stats.html` page shell
-4. Create `static/stats.js` with Chart.js charts for all 7 metrics
+**Ruleset Stats tab**
+- Aggregate overview (no per-ruleset dropdown) — green/orange/red % breakdown
+- Site comparison bar chart
+- Hourly pattern chart (Chart.js)
+- Flyable days count
+- Period selector: 7d / 30d / 90d / 1y (default 7 days)
+
+**Weather Stats tab**
+- Extremes leaderboard: highest wind, highest gust, hottest, coldest, highest pressure, lowest pressure, most precipitation, deepest snow, highest humidity
+- Period selector: Now / Today / Yesterday / Last 7 Days / Tomorrow (forecast) / Choose Date
+- Network coverage table
+- Station freshness table
+
+**Service Stats tab**
+- Summary cards: user count, ruleset count, collector count
+- Collector health table
+- InfluxDB storage section: weather record count (365d window), forecast record count (30d window), total InfluxDB disk size (via `/metrics`), daily ingestion line chart (30d)
+
+#### New backend files
+- `services/stats.py` — ruleset decision aggregation + service health queries
+- `services/weather_stats.py` — weather extremes + coverage + freshness queries
+- `api/routers/stats.py` — all stats endpoints
+
+#### New InfluxDB methods (`database/influx.py`)
+- `query_decision_history_multi` — multi-ruleset decision history for aggregate stats
+- `query_extremes_for_period` — extremes leaderboard per period
+- `query_measurement_count` — record counts by measurement + window
+- `query_daily_ingestion` — per-day ingestion counts (30d)
+- `query_storage_bytes` — total InfluxDB on-disk size from `/metrics`
+
+#### Map Time Navigation Bar (replaces old hidden replay bar)
+Always-visible two-row bar at the bottom of the map:
+
+**Day row**: −3 Days, −2 Days, Yesterday, Today, Now (live), Tomorrow, +2d through +5d, custom date picker
+- Past days: neutral styling
+- Future days: amber-tinted
+- Now: green; activates live auto-refresh mode
+
+**Hour row**: appears when any day except Now is selected; 07:00–19:00 hour buttons + "Play day" button
+- Play day animates through all hours at 600 ms per frame
+- Future days request `forecast_hours` up to 120 h from `replay.js load()`
+- Station popups show "📡 Forecast" label (amber) for future-timestamped data
+
+**`replay.js` changes**: added `forecast_hours` and `include_forecast` params to `load()`
+
+#### Implementation steps completed for v0.9
+1. Implemented `services/stats.py` and `services/weather_stats.py`
+2. Added `api/routers/stats.py` with all stats endpoints
+3. Created `static/stats.html` three-tab page with Chart.js charts
+4. Replaced hidden replay bar with always-visible two-row map time navigation bar
+5. Extended `replay.js` `load()` with `forecast_hours` and `include_forecast` params
+6. Added `GET /api/stations/{id}/forecast` endpoint (declared before `/{station_id}` to avoid FastAPI shadowing)
+7. Added forecast overlay to `station-detail.html/js`: "📡 + Forecast" toggle; last 48 h solid + 120 h dashed amber; `forecastZonePlugin` amber background + "Now" boundary; cursor guide uses `afterEvent` for raw mouse tracking across full chart width
+8. Fixed forecast pressure: `forecast_openmeteo.py` now requests `pressure_msl` (QNH) instead of `surface_pressure` (QFE)
 
 ---
 

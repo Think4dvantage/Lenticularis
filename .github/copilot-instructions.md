@@ -7,7 +7,8 @@ Lenticularis is a weather decision-support system for Switzerland. It collects d
 Key capabilities (current and planned):
 - **Rule engine**: condition builder with per-row station picker, AND groups, combination logic, 5-day forecast evaluation
 - **Decision history**: every evaluation stored in InfluxDB `rule_decisions`; analysis page with timeline and condition breakdown
-- **Weather replay**: scrub through historical + forecast data on map and station table
+- **Weather replay / time navigation**: always-visible two-row map bar; day buttons (−3d to +5d + custom), hour buttons (07–19) + "Play day"; live Now mode; forecast-aware (amber tint for future days)
+- **Statistics dashboard** (`/stats`): three-tab page — Ruleset Stats (aggregate overview, site comparison, hourly pattern, flyable days), Weather Stats (extremes leaderboard, network coverage, station freshness), Service Stats (collector health, InfluxDB storage, daily ingestion)
 - **Launchsite registry** (v0.10): separate `launch_sites` table; linked to clubs, rulesets, XContest/OGN stats
 - **Clubs** (v0.10): paragliding clubs with GeoJSON area polygons shown as map overlay
 - **Ruleset types** (v0.10): `'risk'` (red = stop) or `'opportunity'` (green = conditions are good)
@@ -52,6 +53,7 @@ src/lenticularis/
 │       ├── auth.py          # register, login, refresh, /me
 │       ├── stations.py      # weather station endpoints + replay
 │       ├── rulesets.py      # ruleset CRUD, evaluate, history, forecast
+│       ├── stats.py         # statistics endpoints (ruleset, weather, service)
 │       ├── launch_sites.py  # launchsite registry CRUD (v0.10)
 │       ├── clubs.py         # club CRUD (v0.10)
 │       ├── ai.py            # AI ruleset generation (v0.11)
@@ -84,12 +86,15 @@ src/lenticularis/
 │   └── evaluator.py         # Live evaluator (run_evaluation) + forecast evaluator (run_forecast_evaluation)
 ├── services/
 │   ├── auth.py              # JWT helpers
-│   └── notifications.py     # Email + Pushover dispatch on status transitions
+│   ├── notifications.py     # Email + Pushover dispatch on status transitions
+│   ├── stats.py             # Ruleset decision aggregation + service health queries
+│   └── weather_stats.py     # Weather extremes, network coverage, station freshness queries
 ├── config.py                # YAML loader + Pydantic config models (incl. ai, xcontest, ogn sections)
 └── scheduler.py             # APScheduler wiring all collectors (weather + daily stats jobs)
 static/
-├── index.html / map.js          # Map: station markers, launch/landing markers, launchsite layer, club polygon layer, OGN layer, replay bar, popup condition breakdown
-├── replay.js                    # ReplayEngine class
+├── index.html / map.js          # Map: station markers, launch/landing markers, launchsite layer, club polygon layer, OGN layer, time navigation bar, popup condition breakdown
+├── replay.js                    # ReplayEngine class; load() accepts forecast_hours + include_forecast params
+├── stats.html                   # Statistics dashboard: Ruleset Stats / Weather Stats / Service Stats tabs
 ├── rulesets.html                # Rule set cards: ruleset_type badge, live decision, landing decisions, forecast strip
 ├── ruleset-analysis.html        # Per-ruleset analysis: current eval table, decision history, forecast
 ├── ruleset-editor.html          # Condition builder + AI generation panel + site type + ruleset type toggle
@@ -103,7 +108,7 @@ static/
 │   ├── clubs.html           # Club CRUD
 │   ├── organizations.html   # Org + member + ruleset management
 │   └── station-groups.html  # Station dedup groups
-├── stations.html / station-detail.html  # Station browser + detail charts + replay bar
+├── stations.html / station-detail.html  # Station browser + detail charts; station-detail has forecast overlay toggle (📡 + Forecast: last 48h solid + 120h dashed amber, amber background zone)
 └── auth.js / login.html / register.html # Auth UI
 ```
 
@@ -205,11 +210,24 @@ This means landing statistics are populated whenever the parent launch is evalua
 
 ## Statistics — Critical Design
 
-All statistics are derived from the `rule_decisions` InfluxDB measurement, not from raw `weather_data`. This is intentional — the `condition_results` field already contains per-condition, per-station actual values and result colours.
+All ruleset statistics are derived from the `rule_decisions` InfluxDB measurement, not from raw `weather_data`. This is intentional — the `condition_results` field already contains per-condition, per-station actual values and result colours.
 
-Statistics service (`services/stats.py`) implements 7 metrics via Flux queries:
-- Status Ok days, hourly pattern, monthly breakdown, seasonal breakdown, condition trigger rate, site comparison, best windows
-- Best windows (longest consecutive Status Ok streaks) is computed server-side after fetching the decision time series
+### Ruleset Stats (`services/stats.py`)
+- Aggregate green/orange/red % breakdown, site comparison, hourly pattern, flyable days
+- Period selector: 7d / 30d / 90d / 1y
+- Multi-ruleset query: `query_decision_history_multi` (new InfluxDB method)
+- Best windows (longest consecutive Status Ok streaks) computed server-side after fetching the decision time series
+
+### Weather Stats (`services/weather_stats.py`)
+- Extremes leaderboard: highest wind/gust, hottest/coldest, highest/lowest pressure, most precipitation, deepest snow, highest humidity
+- Period selector maps to absolute time ranges: Now (latest per station), Today, Yesterday, Last 7 Days, Tomorrow (forecast), Choose Date
+- Network coverage table and station freshness table
+- New InfluxDB methods: `query_extremes_for_period`
+
+### Service Stats (`services/stats.py`)
+- User/ruleset/collector summary counts (SQLite)
+- Collector health table (last run, record count, status)
+- InfluxDB storage: `query_measurement_count` (weather 365d, forecast 30d), `query_daily_ingestion` (30d line chart), `query_storage_bytes` (total disk size via `/metrics` Prometheus endpoint)
 
 ---
 
@@ -243,6 +261,7 @@ Statistics service (`services/stats.py`) implements 7 metrics via Flux queries:
 - **No retention policy** — kept indefinitely to enable forecast-vs-actual accuracy analysis
 - One row per `(station_id, model, init_time, valid_time)` — model runs are never overwritten; query layer selects latest `init_time` per `valid_time` when evaluating
 - All networks get forecast coverage (ICON grid covers all of Switzerland); stations without lat/lon in DB are skipped
+- `pressure_qnh` is sourced from Open-Meteo's `pressure_msl` variable (already sea-level reduced by the NWP model) — **not** `surface_pressure` (which is terrain-level QFE and would need a barometric reduction formula per station elevation)
 
 ---
 
@@ -269,10 +288,11 @@ Admins do **not** build or edit rulesets, or configure individual pilot rule set
 
 ## Replay & Decision History
 
-### Weather data replay
+### Weather data replay / map time navigation
 - `GET /api/stations/data-bounds` and `GET /api/stations/replay` are declared **before** `GET /api/stations/{station_id}` in `routers/stations.py` — literal-path routes must precede path-parameter routes in FastAPI
-- `replay.js` exports a `ReplayEngine` class: `load({hours}|{start,end})`, `play()`, `pause()`, `setSpeed(n)`, `seekTo(idx)`; calls `onFrame(snapshot, ts, idx, total)` and `onStateChange(state)` callbacks
+- `replay.js` exports a `ReplayEngine` class: `load({hours, forecast_hours, include_forecast}|{start,end})`, `play()`, `pause()`, `setSpeed(n)`, `seekTo(idx)`; calls `onFrame(snapshot, ts, idx, total)` and `onStateChange(state)` callbacks
 - Replay data is loaded once upfront; per-frame snapshots are built by scanning each station's history for the latest measurement ≤ current timestamp
+- The map bottom bar is always visible (two rows): day row (−3d to +5d + custom date picker) + hour row (07:00–19:00 + "Play day"); Now = live mode, future days = amber tint + forecast data; station popups show "📡 Forecast" for future-timestamped readings
 
 ### Decision history
 - `GET /api/rulesets/{id}/evaluate` also calls `write_decision(rs, result, influx)` which persists `decision` + `condition_results` JSON string to the `rule_decisions` InfluxDB measurement

@@ -5,7 +5,8 @@ Endpoints:
   GET /api/stations               — list all stations with their latest measurement
   GET /api/stations/{station_id}  — single station metadata
   GET /api/stations/{station_id}/latest  — latest measurement for a station
-  GET /api/stations/{station_id}/history — time-series for last N hours
+  GET /api/stations/{station_id}/history  — time-series for last N hours
+  GET /api/stations/{station_id}/forecast — forecast data for next N hours (default 120)
 """
 
 from __future__ import annotations
@@ -215,6 +216,29 @@ async def get_replay(
         "station_count": len(result),
         "data": result,
     }
+
+
+@router.get("/{station_id}/forecast")
+async def get_station_forecast(
+    station_id: str,
+    request: Request,
+    hours: int = Query(default=120, ge=1, le=120, description="Forecast horizon in hours"),
+):
+    """
+    Return forecast data for a single station as a flat time-series list,
+    same shape as the history endpoint.
+    """
+    influx = _get_influx(request)
+    raw = influx.query_forecast_for_stations([station_id], horizon_hours=hours)
+    station_fc = raw.get(station_id, {})
+
+    rows = []
+    for ts_iso, fields in sorted(station_fc.items()):
+        row = {"timestamp": ts_iso}
+        row.update({k: v for k, v in fields.items() if v is not None})
+        rows.append(row)
+
+    return {"station_id": station_id, "hours": hours, "data": rows}
 
 
 @router.get("/{station_id}", response_model=StationResponse)

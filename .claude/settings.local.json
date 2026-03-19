@@ -15,7 +15,8 @@
       "WebSearch",
       "Bash(.venv/Scripts/python -c \":*)",
       "Bash(.venv/Scripts/python -m lenticularis.scheduler)",
-      "Bash(.venv/Scripts/python -c \"import sqlalchemy; print\\(''sqlalchemy OK:'', sqlalchemy.__version__\\)\")"
+      "Bash(.venv/Scripts/python -c \"import sqlalchemy; print\\(''sqlalchemy OK:'', sqlalchemy.__version__\\)\")",
+      "Bash(grep:*)"
     ]
   }
 }

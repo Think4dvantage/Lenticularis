@@ -21,22 +21,24 @@ const CHART_COLORS = {
 
 const cursorGuidePlugin = {
   id: 'cursorGuide',
+  afterEvent(chart, args) {
+    if (args.event.type === 'mousemove') {
+      chart._cursorX = args.event.x;
+      args.changed = true;
+    } else if (args.event.type === 'mouseout') {
+      chart._cursorX = null;
+      args.changed = true;
+    }
+  },
   afterDraw(chart) {
-    const xScale = chart.scales?.x;
-    const yScale = chart.scales?.y;
-    const tooltip = chart.tooltip;
-    const active = tooltip?.getActiveElements?.() || [];
-
-    if (!xScale || !yScale || active.length === 0) return;
-
-    const x = active[0].element?.x;
-    if (typeof x !== 'number') return;
-
-    const { ctx } = chart;
+    const x = chart._cursorX;
+    if (x == null) return;
+    const { chartArea, ctx } = chart;
+    if (x < chartArea.left || x > chartArea.right) return;
     ctx.save();
     ctx.beginPath();
-    ctx.moveTo(x, yScale.top);
-    ctx.lineTo(x, yScale.bottom);
+    ctx.moveTo(x, chartArea.top);
+    ctx.lineTo(x, chartArea.bottom);
     ctx.lineWidth = 1;
     ctx.strokeStyle = 'rgba(226, 232, 240, 0.45)';
     ctx.setLineDash([4, 4]);
@@ -45,25 +47,72 @@ const cursorGuidePlugin = {
   },
 };
 
-Chart.register(cursorGuidePlugin);
+// Draws a vertical "Now" line + amber shading for the forecast zone
+const forecastZonePlugin = {
+  id: 'forecastZone',
+  beforeDraw(chart) {
+    if (!chart.config.options?.plugins?.forecastZone?.enabled) return;
+    const xScale = chart.scales?.x;
+    if (!xScale) return;
+    const { ctx, chartArea } = chart;
+    const nowX = xScale.getPixelForValue(Date.now());
+    if (nowX >= chartArea.left && nowX <= chartArea.right) {
+      // Amber background for forecast area
+      ctx.save();
+      ctx.fillStyle = 'rgba(246, 173, 85, 0.06)';
+      ctx.fillRect(nowX, chartArea.top, chartArea.right - nowX, chartArea.bottom - chartArea.top);
+      ctx.restore();
+    }
+  },
+  afterDraw(chart) {
+    if (!chart.config.options?.plugins?.forecastZone?.enabled) return;
+    const xScale = chart.scales?.x;
+    if (!xScale) return;
+    const { ctx, chartArea } = chart;
+    const nowX = xScale.getPixelForValue(Date.now());
+    if (nowX < chartArea.left || nowX > chartArea.right) return;
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(nowX, chartArea.top);
+    ctx.lineTo(nowX, chartArea.bottom);
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = 'rgba(246, 173, 85, 0.8)';
+    ctx.setLineDash([]);
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(246, 173, 85, 0.9)';
+    ctx.font = '10px sans-serif';
+    ctx.fillText('Now', nowX + 4, chartArea.top + 12);
+    ctx.restore();
+  },
+};
+
+Chart.register(cursorGuidePlugin, forecastZonePlugin);
 
 if (Chart.Tooltip?.positioners) {
-  Chart.Tooltip.positioners.topCursor = function topCursor(items) {
-    if (!items || items.length === 0) {
-      return false;
-    }
-
-    // Keep tooltip aligned to hovered timestamp (x) but pinned near chart top.
-    let x = 0;
-    for (const item of items) {
-      x += item.element.x;
-    }
-    x /= items.length;
-
+  // eventPosition is the raw mouse {x, y} — use it directly instead of
+  // averaging item.element.x values which snap to data point positions.
+  Chart.Tooltip.positioners.topCursor = function topCursor(items, eventPosition) {
+    if (!items || items.length === 0) return false;
     return {
-      x,
+      x: eventPosition.x,
       y: this.chart.chartArea.top + 8,
     };
+  };
+}
+
+const FORECAST_COLOR = '#f6ad55'; // amber — visually distinct from all obs colors
+
+function fcDataset(label, points, baseColor) {
+  return {
+    label,
+    data: points,
+    borderColor: FORECAST_COLOR,
+    backgroundColor: hexToRgba(FORECAST_COLOR, 0.10),
+    fill: false,
+    borderWidth: 1.5,
+    borderDash: [6, 4],
+    pointRadius: 0,
+    tension: 0.3,
   };
 }
 
@@ -83,9 +132,8 @@ const CHART_DEFAULTS = {
       titleColor: '#a0aec0',
       bodyColor: '#e2e8f0',
     },
-    cursorGuide: {
-      enabled: true,
-    },
+    cursorGuide: { enabled: true },
+    forecastZone: { enabled: false },
   },
   scales: {
     x: {
@@ -106,6 +154,7 @@ const CHART_DEFAULTS = {
 // ---------------------------------------------------------------------------
 let _stationId = null;
 let _currentHours = 24;
+let _showForecast = false;
 const _charts = {};
 
 // ---------------------------------------------------------------------------
@@ -144,12 +193,18 @@ async function loadHistory() {
   hideError();
 
   try {
-    const res = await fetch(
-      `/api/stations/${encodeURIComponent(_stationId)}/history?hours=${_currentHours}`
-    );
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const json = await res.json();
-    renderCharts(json.data || []);
+    // In forecast mode always show last 48 h of observations
+    const obsHours = _showForecast ? 48 : _currentHours;
+    const [histRes, fcRes] = await Promise.all([
+      fetch(`/api/stations/${encodeURIComponent(_stationId)}/history?hours=${obsHours}`),
+      _showForecast
+        ? fetch(`/api/stations/${encodeURIComponent(_stationId)}/forecast?hours=120`)
+        : Promise.resolve(null),
+    ]);
+    if (!histRes.ok) throw new Error(`HTTP ${histRes.status}`);
+    const histJson = await histRes.json();
+    const fcJson   = fcRes?.ok ? await fcRes.json() : null;
+    renderCharts(histJson.data || [], fcJson?.data || []);
     setRefreshLabel();
     setDbDot(true);
   } catch (err) {
@@ -165,8 +220,20 @@ async function loadHistory() {
 // ---------------------------------------------------------------------------
 function setRange(hours) {
   _currentHours = hours;
-  document.querySelectorAll('.range-btn').forEach(btn => {
+  document.querySelectorAll('.range-btn[data-hours]').forEach(btn => {
     btn.classList.toggle('active', +btn.dataset.hours === hours);
+  });
+  loadHistory();
+}
+
+function toggleForecast() {
+  _showForecast = !_showForecast;
+  const btn = document.getElementById('forecastBtn');
+  btn.classList.toggle('active', _showForecast);
+  // Disable/enable range buttons while in forecast mode
+  document.querySelectorAll('.range-btn[data-hours]').forEach(b => {
+    b.disabled = _showForecast;
+    b.style.opacity = _showForecast ? '0.4' : '';
   });
   loadHistory();
 }
@@ -191,63 +258,61 @@ function renderHeader(station) {
 }
 
 // ---------------------------------------------------------------------------
-// Render all charts from history data
+// Render all charts from history data (+ optional forecast rows)
 // ---------------------------------------------------------------------------
-function renderCharts(rows) {
-  const xMax = new Date();
-  const xMin = new Date(xMax.getTime() - _currentHours * 60 * 60 * 1000);
+function renderCharts(rows, fcRows = []) {
+  const obsHours = _showForecast ? 48 : _currentHours;
+  const now   = new Date();
+  const xMin  = new Date(now.getTime() - obsHours * 3600000);
+  const xMax  = _showForecast
+    ? new Date(now.getTime() + 120 * 3600000)
+    : now;
 
-  // Build per-field arrays
-  const fields = {
-    wind_speed:      [],
-    wind_gust:       [],
-    wind_direction:  [],
-    temperature:     [],
-    humidity:        [],
-    pressure_qnh:    [],
-    precipitation:   [],
-    snow_depth:      [],
-  };
-
-  for (const row of rows) {
-    const t = row.timestamp;
-    for (const field of Object.keys(fields)) {
-      if (row[field] != null) {
-        fields[field].push({ x: t, y: row[field] });
+  function buildFields(data) {
+    const f = { wind_speed:[], wind_gust:[], wind_direction:[], temperature:[],
+                humidity:[], pressure_qnh:[], precipitation:[], snow_depth:[] };
+    for (const row of data) {
+      const t = row.timestamp;
+      for (const field of Object.keys(f)) {
+        if (row[field] != null) f[field].push({ x: t, y: row[field] });
       }
     }
+    return f;
   }
 
-  const rangeOpts = { xMin, xMax };
+  const fields   = buildFields(rows);
+  const fcFields = buildFields(fcRows);
+
+  const rangeOpts = { xMin, xMax, forecast: _showForecast };
 
   // Wind speed + gust (combined card)
-  const hasWind = fields.wind_speed.length > 0 || fields.wind_gust.length > 0;
+  const hasWind = fields.wind_speed.length > 0 || fields.wind_gust.length > 0
+               || fcFields.wind_speed.length > 0 || fcFields.wind_gust.length > 0;
   showCard('wind', hasWind);
-  if (hasWind) {
-    renderWindChart(fields.wind_speed, fields.wind_gust, rangeOpts);
-  }
+  if (hasWind) renderWindChart(fields.wind_speed, fields.wind_gust, rangeOpts, fcFields.wind_speed, fcFields.wind_gust);
 
   // Wind direction — polar area heatmap rose + time-series line
   renderWindRoseChart(fields.wind_direction);
-  renderWindDirLineChart(fields.wind_direction, rangeOpts);
+  renderWindDirLineChart(fields.wind_direction, rangeOpts, fcFields.wind_direction);
 
   // Temperature
-  renderSimpleChart('temperature', fields.temperature, rangeOpts);
+  renderSimpleChart('temperature', fields.temperature, rangeOpts, fcFields.temperature);
 
   // Humidity
-  renderSimpleChart('humidity', fields.humidity, { ...rangeOpts, yMin: 0, yMax: 100 });
+  renderSimpleChart('humidity', fields.humidity, { ...rangeOpts, yMin: 0, yMax: 100 }, fcFields.humidity);
 
   // Pressure
-  renderSimpleChart('pressure', fields.pressure_qnh, rangeOpts);
+  renderSimpleChart('pressure', fields.pressure_qnh, rangeOpts, fcFields.pressure_qnh);
 
   // Precipitation (bar + cumulative line)
-  renderPrecipitationChart(fields.precipitation, rangeOpts);
+  renderPrecipitationChart(fields.precipitation, rangeOpts, fcFields.precipitation);
 
   // Snow depth
-  renderSimpleChart('snow_depth', fields.snow_depth, { ...rangeOpts, yMin: 0 });
+  renderSimpleChart('snow_depth', fields.snow_depth, { ...rangeOpts, yMin: 0 }, fcFields.snow_depth);
 
   // Show/hide the grid and no-data note
-  const anyData = Object.values(fields).some(arr => arr.length > 0);
+  const anyData = Object.values(fields).some(arr => arr.length > 0)
+               || Object.values(fcFields).some(arr => arr.length > 0);
   document.getElementById('chartsGrid').style.display = anyData ? 'grid' : 'none';
   document.getElementById('noDataNote').style.display = anyData ? 'none' : 'block';
 }
@@ -321,48 +386,42 @@ function renderWindRoseChart(points) {
 // ---------------------------------------------------------------------------
 // Wind direction — time-series line chart
 // ---------------------------------------------------------------------------
-function renderWindDirLineChart(points, opts = {}) {
+function renderWindDirLineChart(points, opts = {}, fcPoints = []) {
   const canvasId = 'chart-wind_direction_line';
   const card = document.getElementById('card-wind_direction_line');
-  if (card) card.style.display = points.length > 0 ? '' : 'none';
-  if (points.length === 0) { destroyChart(canvasId); return; }
+  const hasData = points.length > 0 || fcPoints.length > 0;
+  if (card) card.style.display = hasData ? '' : 'none';
+  if (!hasData) { destroyChart(canvasId); return; }
 
   destroyChart(canvasId);
   const color = CHART_COLORS.wind_direction;
-
   const compassLabels = { 0:'N', 45:'NO', 90:'O', 135:'SO', 180:'S', 225:'SW', 270:'W', 315:'NW', 360:'N' };
+
+  const datasets = [{
+    label: 'Wind direction (°)',
+    data: points,
+    borderColor: color,
+    backgroundColor: 'transparent',
+    borderWidth: 1.5,
+    pointRadius: 1.5,
+    pointBackgroundColor: color,
+    tension: 0,
+    spanGaps: false,
+  }];
+  if (fcPoints.length) datasets.push({ ...fcDataset('Forecast direction (°)', fcPoints), pointRadius: 0, tension: 0 });
 
   const ctx = document.getElementById(canvasId).getContext('2d');
   _charts[canvasId] = new Chart(ctx, {
     type: 'line',
-    data: {
-      datasets: [{
-        label: 'Wind direction (°)',
-        data: points,
-        borderColor: color,
-        backgroundColor: 'transparent',
-        borderWidth: 1.5,
-        pointRadius: 1.5,
-        pointBackgroundColor: color,
-        tension: 0,
-        spanGaps: false,
-      }],
-    },
+    data: { datasets },
     options: {
       ...CHART_DEFAULTS,
+      plugins: { ...CHART_DEFAULTS.plugins, forecastZone: { enabled: !!opts.forecast } },
       scales: {
-        x: {
-          ...CHART_DEFAULTS.scales.x,
-          ...(opts.xMin !== undefined ? { min: opts.xMin, max: opts.xMax } : {}),
-        },
+        x: { ...CHART_DEFAULTS.scales.x, ...(opts.xMin !== undefined ? { min: opts.xMin, max: opts.xMax } : {}) },
         y: {
-          min: 0,
-          max: 360,
-          ticks: {
-            color: '#718096',
-            stepSize: 45,
-            callback: val => compassLabels[val] ?? val,
-          },
+          min: 0, max: 360,
+          ticks: { color: '#718096', stepSize: 45, callback: val => compassLabels[val] ?? val },
           grid: { color: '#1e2533' },
         },
       },
@@ -373,43 +432,46 @@ function renderWindDirLineChart(points, opts = {}) {
 // ---------------------------------------------------------------------------
 // Wind speed + gust — combined chart
 // ---------------------------------------------------------------------------
-function renderWindChart(speedPts, gustPts, opts = {}) {
+function renderWindChart(speedPts, gustPts, opts = {}, fcSpeedPts = [], fcGustPts = []) {
   const canvasId = 'chart-wind';
   destroyChart(canvasId);
+
+  const datasets = [
+    {
+      label: 'Wind speed (km/h)',
+      data: speedPts,
+      borderColor: CHART_COLORS.wind_speed,
+      backgroundColor: 'transparent',
+      borderWidth: 1.5,
+      pointRadius: 0,
+      tension: 0.2,
+    },
+    {
+      label: 'Gust (km/h)',
+      data: gustPts,
+      borderColor: CHART_COLORS.wind_gust,
+      backgroundColor: hexToRgba(CHART_COLORS.wind_gust, 0.12),
+      fill: '-1',
+      borderWidth: 1,
+      borderDash: [4, 3],
+      pointRadius: 0,
+      tension: 0.2,
+    },
+  ];
+  if (fcSpeedPts.length) datasets.push({ ...fcDataset('Forecast wind (km/h)', fcSpeedPts), fill: false });
+  if (fcGustPts.length)  datasets.push({ ...fcDataset('Forecast gust (km/h)', fcGustPts), fill: false });
 
   const ctx = document.getElementById(canvasId).getContext('2d');
   _charts[canvasId] = new Chart(ctx, {
     type: 'line',
-    data: {
-      datasets: [
-        {
-          label: 'Wind speed (km/h)',
-          data: speedPts,
-          borderColor: CHART_COLORS.wind_speed,
-          backgroundColor: 'transparent',
-          borderWidth: 1.5,
-          pointRadius: 0,
-          tension: 0.2,
-        },
-        {
-          label: 'Gust (km/h)',
-          data: gustPts,
-          borderColor: CHART_COLORS.wind_gust,
-          backgroundColor: hexToRgba(CHART_COLORS.wind_gust, 0.12),
-          fill: '-1',
-          borderWidth: 1,
-          borderDash: [4, 3],
-          pointRadius: 0,
-          tension: 0.2,
-        },
-      ],
-    },
+    data: { datasets },
     options: {
       ...CHART_DEFAULTS,
       plugins: {
         ...CHART_DEFAULTS.plugins,
         legend: { display: true, labels: { color: '#a0aec0', boxWidth: 12, font: { size: 11 } } },
         tooltip: CHART_DEFAULTS.plugins.tooltip,
+        forecastZone: { enabled: !!opts.forecast },
       },
       scales: {
         x: { ...CHART_DEFAULTS.scales.x, ...(opts.xMin !== undefined ? { min: opts.xMin, max: opts.xMax } : {}) },
@@ -422,10 +484,11 @@ function renderWindChart(speedPts, gustPts, opts = {}) {
 // ---------------------------------------------------------------------------
 // Precipitation — bars for individual readings + right-axis cumulative line
 // ---------------------------------------------------------------------------
-function renderPrecipitationChart(points, opts = {}) {
+function renderPrecipitationChart(points, opts = {}, fcPoints = []) {
   const canvasId = 'chart-precipitation';
-  showCard('precipitation', points.length > 0);
-  if (points.length === 0) return;
+  const hasData = points.length > 0 || fcPoints.length > 0;
+  showCard('precipitation', hasData);
+  if (!hasData) return;
 
   destroyChart(canvasId);
 
@@ -439,61 +502,60 @@ function renderPrecipitationChart(points, opts = {}) {
     return { x: pt.x, y: Math.round(cumSum * 10) / 10 };
   });
 
+  const datasets = [
+    {
+      type: 'bar',
+      label: 'Precipitation (mm)',
+      data: points,
+      borderColor: barColor,
+      backgroundColor: hexToRgba(barColor, 0.5),
+      borderWidth: 0,
+      barThickness: 'flex',
+      yAxisID: 'y',
+      order: 2,
+    },
+    {
+      type: 'line',
+      label: 'Cumulative (mm)',
+      data: cumPoints,
+      borderColor: cumColor,
+      backgroundColor: 'transparent',
+      borderWidth: 2,
+      pointRadius: 0,
+      tension: 0.2,
+      yAxisID: 'y1',
+      order: 1,
+    },
+  ];
+  if (fcPoints.length) {
+    datasets.push({
+      type: 'bar',
+      label: 'Forecast precip (mm)',
+      data: fcPoints,
+      borderColor: FORECAST_COLOR,
+      backgroundColor: hexToRgba(FORECAST_COLOR, 0.35),
+      borderWidth: 0,
+      barThickness: 'flex',
+      yAxisID: 'y',
+      order: 3,
+    });
+  }
+
   const ctx = document.getElementById(canvasId).getContext('2d');
   _charts[canvasId] = new Chart(ctx, {
-    data: {
-      datasets: [
-        {
-          type: 'bar',
-          label: 'Precipitation (mm)',
-          data: points,
-          borderColor: barColor,
-          backgroundColor: hexToRgba(barColor, 0.5),
-          borderWidth: 0,
-          barThickness: 'flex',
-          yAxisID: 'y',
-          order: 2,
-        },
-        {
-          type: 'line',
-          label: 'Cumulative (mm)',
-          data: cumPoints,
-          borderColor: cumColor,
-          backgroundColor: 'transparent',
-          borderWidth: 2,
-          pointRadius: 0,
-          tension: 0.2,
-          yAxisID: 'y1',
-          order: 1,
-        },
-      ],
-    },
+    data: { datasets },
     options: {
       ...CHART_DEFAULTS,
       plugins: {
         ...CHART_DEFAULTS.plugins,
         legend: { display: true, labels: { color: '#a0aec0', boxWidth: 12, font: { size: 11 } } },
         tooltip: CHART_DEFAULTS.plugins.tooltip,
+        forecastZone: { enabled: !!opts.forecast },
       },
       scales: {
-        x: {
-          ...CHART_DEFAULTS.scales.x,
-          ...(opts.xMin !== undefined ? { min: opts.xMin, max: opts.xMax } : {}),
-        },
-        y: {
-          type: 'linear',
-          position: 'left',
-          min: 0,
-          ticks: { color: '#718096' },
-          grid: { color: '#1e2533' },
-        },
-        y1: {
-          type: 'linear',
-          position: 'right',
-          min: 0,
-          ticks: { color: cumColor },
-          grid: { drawOnChartArea: false },
-        },
+        x: { ...CHART_DEFAULTS.scales.x, ...(opts.xMin !== undefined ? { min: opts.xMin, max: opts.xMax } : {}) },
+        y:  { type: 'linear', position: 'left',  min: 0, ticks: { color: '#718096' }, grid: { color: '#1e2533' } },
+        y1: { type: 'linear', position: 'right', min: 0, ticks: { color: cumColor }, grid: { drawOnChartArea: false } },
       },
     },
   });
@@ -502,52 +564,46 @@ function renderPrecipitationChart(points, opts = {}) {
 // ---------------------------------------------------------------------------
 // Generic simple chart renderer
 // ---------------------------------------------------------------------------
-function renderSimpleChart(fieldName, points, opts = {}) {
-  const cardId = `card-${fieldName}`;
+function renderSimpleChart(fieldName, points, opts = {}, fcPoints = []) {
   const canvasId = `chart-${fieldName}`;
-  showCard(fieldName, points.length > 0);
-  if (points.length === 0) return;
+  const hasData = points.length > 0 || fcPoints.length > 0;
+  showCard(fieldName, hasData);
+  if (!hasData) return;
 
   destroyChart(canvasId);
 
   const chartType = opts.type || 'line';
   const isScatter = chartType === 'scatter';
-  const isBar = chartType === 'bar';
+  const isBar     = chartType === 'bar';
+  const color     = CHART_COLORS[fieldName] || '#a0aec0';
 
-  const yScale = {
-    ticks: { color: '#718096' },
-    grid: { color: '#1e2533' },
-  };
+  const yScale = { ticks: { color: '#718096' }, grid: { color: '#1e2533' } };
   if (opts.yMin !== undefined) yScale.min = opts.yMin;
   if (opts.yMax !== undefined) yScale.max = opts.yMax;
   if (opts.yTickLabels) {
-    yScale.ticks = {
-      ...yScale.ticks,
-      callback: val => opts.yTickLabels[val] ?? val,
-      stepSize: opts.yTickStep ?? 90,
-    };
+    yScale.ticks = { ...yScale.ticks, callback: val => opts.yTickLabels[val] ?? val, stepSize: opts.yTickStep ?? 90 };
   }
 
-  const color = CHART_COLORS[fieldName] || '#a0aec0';
+  const datasets = [{
+    label: fieldName,
+    data: points,
+    borderColor: color,
+    backgroundColor: isBar ? hexToRgba(color, 0.5) : 'transparent',
+    borderWidth: isScatter ? 0 : (isBar ? 0 : 1.5),
+    pointRadius: isScatter ? 2 : 0,
+    pointBackgroundColor: isScatter ? color : undefined,
+    tension: isScatter || isBar ? 0 : 0.2,
+    ...(opts.barThickness ? { barThickness: opts.barThickness } : {}),
+  }];
+  if (fcPoints.length) datasets.push(fcDataset(`Forecast ${fieldName}`, fcPoints, color));
 
   const ctx = document.getElementById(canvasId).getContext('2d');
   _charts[canvasId] = new Chart(ctx, {
     type: chartType,
-    data: {
-      datasets: [{
-        label: fieldName,
-        data: points,
-        borderColor: color,
-        backgroundColor: isBar ? hexToRgba(color, 0.5) : 'transparent',
-        borderWidth: isScatter ? 0 : (isBar ? 0 : 1.5),
-        pointRadius: isScatter ? 2 : 0,
-        pointBackgroundColor: isScatter ? color : undefined,
-        tension: isScatter || isBar ? 0 : 0.2,
-        ...(opts.barThickness ? { barThickness: opts.barThickness } : {}),
-      }],
-    },
+    data: { datasets },
     options: {
       ...CHART_DEFAULTS,
+      plugins: { ...CHART_DEFAULTS.plugins, forecastZone: { enabled: !!opts.forecast } },
       scales: {
         x: { ...CHART_DEFAULTS.scales.x, ...(opts.xMin !== undefined ? { min: opts.xMin, max: opts.xMax } : {}) },
         y: yScale,
