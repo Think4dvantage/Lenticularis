@@ -64,6 +64,19 @@
     .badge-red    { background: #3a1a1a; color: #fc8181; border: 1px solid #7b2020; }
     .badge-loading { background: #1a1f2e; color: #4a5568; border: 1px solid #2d3748; font-weight: 400; font-size: 0.72rem; }
 
+    /* ── Forecast strip ── */
+    .forecast-strip { display: flex; gap: 2px; margin-top: 10px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: thin; }
+    .forecast-strip::-webkit-scrollbar { height: 4px; }
+    .forecast-strip::-webkit-scrollbar-thumb { background: #2d3748; border-radius: 2px; }
+    .fc-cell {
+      flex-shrink: 0; width: 14px; height: 22px; border-radius: 3px; cursor: default;
+      position: relative;
+    }
+    .fc-cell.green  { background: #276749; }
+    .fc-cell.orange { background: #c05621; }
+    .fc-cell.red    { background: #7b2020; }
+    .fc-pending { font-size: 0.72rem; color: #4a5568; padding-top: 4px; }
+
     .empty-state { text-align: center; padding: 60px 20px; color: #4a5568; }
     .empty-state .big { font-size: 2.5rem; margin-bottom: 14px; }
     .empty-state p { margin-bottom: 20px; }
@@ -160,6 +173,9 @@
             <span>${new Date(rs.created_at).toLocaleDateString()}</span>
           </div>
           ${rs.description ? `<div style="margin-top:7px;font-size:0.82rem;color:#a0aec0">${esc(rs.description)}</div>` : ''}
+          <div class="forecast-strip" id="forecast-${rs.id}">
+            <span class="fc-pending">Loading forecast…</span>
+          </div>
         </a>
         <div class="card-actions">
           <a href="/ruleset-editor?id=${rs.id}" class="btn btn-ghost">Edit</a>
@@ -168,8 +184,11 @@
       </div>`;
     }).join('');
 
-    // Fire evaluation calls in parallel — update badges as results arrive
-    sets.forEach(rs => evaluateCard(rs.id));
+    // Fire evaluation + forecast calls in parallel — update as results arrive
+    sets.forEach(rs => {
+      evaluateCard(rs.id);
+      loadForecast(rs.id);
+    });
   }
 
   async function evaluateCard(id) {
@@ -196,6 +215,28 @@
       }
     } catch {
       badge.remove();
+    }
+  }
+
+  async function loadForecast(id) {
+    const strip = document.getElementById(`forecast-${id}`);
+    if (!strip) return;
+    try {
+      const res = await fetchAuth(`/api/rulesets/${id}/forecast?hours=120`);
+      if (!res.ok) { strip.innerHTML = ''; return; }
+      const { steps } = await res.json();
+      if (!steps || steps.length === 0) {
+        strip.innerHTML = '<span class="fc-pending">Forecast pending…</span>';
+        return;
+      }
+      const labels = { green: 'Status Ok', orange: 'Warning', red: 'Stop' };
+      strip.innerHTML = steps.map(s => {
+        const dt = new Date(s.valid_time);
+        const label = `${dt.toUTCString().slice(0, 22)} — ${labels[s.decision] || s.decision}`;
+        return `<div class="fc-cell ${s.decision}" title="${label}"></div>`;
+      }).join('');
+    } catch {
+      strip.innerHTML = '';
     }
   }
 

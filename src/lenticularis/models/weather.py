@@ -10,6 +10,7 @@ from datetime import datetime
 from typing import Optional
 
 
+
 class WeatherStation(BaseModel):
     """
     Represents a weather station from any network.
@@ -94,3 +95,33 @@ class WeatherMeasurement(BaseModel):
             }
         }
     }
+
+
+class ForecastPoint(BaseModel):
+    """
+    A single hourly forecast value for one station from one model run.
+
+    Multiple ForecastPoints for the same (station_id, valid_time) may exist
+    when collected across different model runs (different init_times). The
+    query layer picks the latest init_time per valid_time for evaluation.
+    """
+
+    station_id: str = Field(..., description="Network-prefixed station identifier")
+    network: str = Field(..., description="Station network (e.g. 'meteoswiss')")
+    source: str = Field(..., description="Forecast data source (e.g. 'open-meteo')")
+    model: str = Field(..., description="NWP model name (e.g. 'icon-seamless')")
+    init_time: datetime = Field(..., description="Model run initialisation time (UTC)")
+    valid_time: datetime = Field(..., description="Forecast valid time (UTC) — the future moment this applies to")
+
+    # Wind
+    wind_speed: Optional[float] = Field(None, description="Wind speed in km/h")
+    wind_direction: Optional[int] = Field(None, ge=0, le=360, description="Wind direction in degrees")
+    wind_gust: Optional[float] = Field(None, description="Wind gust in km/h")
+
+    # Atmosphere
+    temperature: Optional[float] = Field(None, description="Temperature in °C")
+    humidity: Optional[float] = Field(None, description="Relative humidity in %")
+    pressure_qnh: Optional[float] = Field(None, description="Pressure (QNH) in hPa")
+
+    # Precipitation
+    precipitation: Optional[float] = Field(None, description="Precipitation in mm")

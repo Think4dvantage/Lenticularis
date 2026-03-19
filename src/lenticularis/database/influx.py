@@ -18,12 +18,13 @@ from influxdb_client import InfluxDBClient, Point
 from influxdb_client.client.write_api import SYNCHRONOUS
 
 from lenticularis.config import InfluxDBConfig
-from lenticularis.models.weather import WeatherMeasurement
+from lenticularis.models.weather import ForecastPoint, WeatherMeasurement
 
 logger = logging.getLogger(__name__)
 
 # InfluxDB measurement names
 MEASUREMENT_WEATHER = "weather_data"
+MEASUREMENT_FORECAST = "weather_forecast"
 
 
 class InfluxClient:
@@ -351,6 +352,200 @@ from(bucket: "{self._cfg.bucket}")
                     "condition_results_json": record.values.get("condition_results"),
                 })
         return rows
+
+    # ------------------------------------------------------------------
+    # Forecast — write
+    # ------------------------------------------------------------------
+
+    def write_forecast(self, points: list[ForecastPoint]) -> None:
+        """
+        Write a batch of ForecastPoint objects to the ``weather_forecast`` measurement.
+
+        Tags:   ``station_id``, ``network``, ``source``, ``model``
+        Time:   ``valid_time`` (the future moment the forecast applies to)
+        Fields: weather fields + ``init_time`` (ISO string) for deduplication
+
+        Every model run is stored independently — old runs are never overwritten.
+        The query layer picks the latest ``init_time`` per ``valid_time`` for
+        live evaluation, while all runs remain available for accuracy analysis.
+        """
+        if not points:
+            return
+
+        influx_points: list[Point] = []
+        for fp in points:
+            p = (
+                Point(MEASUREMENT_FORECAST)
+                .tag("station_id", fp.station_id)
+                .tag("network", fp.network)
+                .tag("source", fp.source)
+                .tag("model", fp.model)
+                .time(int(fp.valid_time.timestamp()), "s")
+            )
+            field_map = {
+                "wind_speed":     fp.wind_speed,
+                "wind_gust":      fp.wind_gust,
+                "wind_direction": fp.wind_direction,
+                "temperature":    fp.temperature,
+                "humidity":       fp.humidity,
+                "pressure_qnh":   fp.pressure_qnh,
+                "precipitation":  fp.precipitation,
+            }
+            for field_name, value in field_map.items():
+                if value is not None:
+                    p = p.field(field_name, float(value))
+            # Store init_time as a field so Python can deduplicate per valid_time
+            p = p.field("init_time", fp.init_time.astimezone(timezone.utc).isoformat())
+            influx_points.append(p)
+
+        try:
+            self._write_api.write(
+                bucket=self._cfg.bucket, org=self._cfg.org, record=influx_points
+            )
+            logger.debug("Wrote %d forecast points to InfluxDB", len(influx_points))
+        except Exception as exc:
+            logger.error("InfluxDB forecast write error: %s", exc)
+            raise
+
+    # ------------------------------------------------------------------
+    # Forecast — query
+    # ------------------------------------------------------------------
+
+    def query_forecast_replay(
+        self, start_dt: datetime, end_dt: datetime
+    ) -> dict[str, list[dict]]:
+        """
+        Return forecast data for **all** stations between ``start_dt`` and ``end_dt``,
+        in the same shape as ``query_history_all_stations``:
+
+            { station_id: [ {"timestamp": ISO_str, field: value, ...}, ... ] }
+
+        Deduplicates to the latest ``init_time`` per ``valid_time`` per station.
+        Timestamps are returned as ISO strings (matching the observation replay format).
+        """
+        start_str = start_dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        end_str = end_dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        flux = f"""
+from(bucket: "{self._cfg.bucket}")
+  |> range(start: {start_str}, stop: {end_str})
+  |> filter(fn: (r) => r._measurement == "{MEASUREMENT_FORECAST}")
+  |> pivot(rowKey: ["_time", "station_id", "network", "source", "model"], columnKey: ["_field"], valueColumn: "_value")
+  |> sort(columns: ["_time"])
+"""
+        try:
+            tables = self._query_api.query(flux, org=self._cfg.org)
+        except Exception as exc:
+            logger.error("InfluxDB forecast_replay query error: %s", exc)
+            return {}
+
+        # raw[station_id][valid_time_iso] = {fields..., "_init_time": str}
+        raw: dict[str, dict[str, dict]] = {}
+        for table in tables:
+            for record in table.records:
+                sid = record.values.get("station_id", "")
+                vt_iso = record.get_time().isoformat()
+                init_time_str = record.values.get("init_time", "")
+
+                fields = {
+                    k: v
+                    for k, v in record.values.items()
+                    if not k.startswith("_")
+                    and k not in ("result", "table", "station_id", "network", "source", "model", "init_time")
+                }
+                fields["_init_time"] = init_time_str
+
+                raw.setdefault(sid, {})
+                existing = raw[sid].get(vt_iso)
+                if existing is None or init_time_str > existing.get("_init_time", ""):
+                    raw[sid][vt_iso] = fields
+
+        # Convert to sorted measurement lists, stripping internal key
+        result: dict[str, list[dict]] = {}
+        for sid, by_vt in raw.items():
+            measurements = [
+                {"timestamp": vt_iso, **{k: v for k, v in row.items() if k != "_init_time"}}
+                for vt_iso, row in sorted(by_vt.items())
+            ]
+            result[sid] = measurements
+
+        return result
+
+    def query_forecast_for_stations(
+        self, station_ids: list[str], horizon_hours: int = 120
+    ) -> dict[str, dict[str, dict]]:
+        """
+        Return forecast data for the given station IDs from now to ``+horizon_hours``.
+
+        For each station, deduplicates to the latest ``init_time`` per ``valid_time``
+        in Python (all model runs are stored; we pick the most recent one for evaluation).
+
+        Returns::
+
+            {
+                station_id: {
+                    valid_time_iso: {
+                        "wind_speed": float | None,
+                        "wind_gust":  float | None,
+                        ...
+                    }
+                }
+            }
+        """
+        if not station_ids:
+            return {}
+
+        now = datetime.now(timezone.utc)
+        start_str = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+        end_str = (now + __import__("datetime").timedelta(hours=horizon_hours)).strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        )
+
+        station_filter = " or ".join(
+            f'r.station_id == "{sid}"' for sid in station_ids
+        )
+
+        flux = f"""
+from(bucket: "{self._cfg.bucket}")
+  |> range(start: {start_str}, stop: {end_str})
+  |> filter(fn: (r) => r._measurement == "{MEASUREMENT_FORECAST}")
+  |> filter(fn: (r) => {station_filter})
+  |> pivot(rowKey: ["_time", "station_id", "network", "source", "model"], columnKey: ["_field"], valueColumn: "_value")
+  |> sort(columns: ["_time"])
+"""
+        try:
+            tables = self._query_api.query(flux, org=self._cfg.org)
+        except Exception as exc:
+            logger.error("InfluxDB forecast query error: %s", exc)
+            return {}
+
+        # raw[station_id][valid_time_iso] = {fields..., "_init_time": str}
+        raw: dict[str, dict[str, dict]] = {}
+        for table in tables:
+            for record in table.records:
+                sid = record.values.get("station_id", "")
+                valid_time_iso = record.get_time().isoformat()
+                init_time_str = record.values.get("init_time", "")
+
+                fields = {
+                    k: v
+                    for k, v in record.values.items()
+                    if not k.startswith("_")
+                    and k not in ("result", "table", "station_id", "network", "source", "model", "init_time")
+                }
+                fields["_init_time"] = init_time_str
+
+                raw.setdefault(sid, {})
+                existing = raw[sid].get(valid_time_iso)
+                # Keep row with the latest init_time (lexicographic compare of ISO strings)
+                if existing is None or init_time_str > existing.get("_init_time", ""):
+                    raw[sid][valid_time_iso] = fields
+
+        # Strip internal tracking key
+        return {
+            sid: {vt: {k: v for k, v in row.items() if k != "_init_time"} for vt, row in by_vt.items()}
+            for sid, by_vt in raw.items()
+        }
 
     # ------------------------------------------------------------------
     # Lifecycle

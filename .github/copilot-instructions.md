@@ -2,9 +2,22 @@
 
 ## What this project is
 
-Lenticularis is a paragliding weather decision-support system for Switzerland. It collects data from multiple weather networks (currently MeteoSwiss, SLF, METAR, plus planned Holfuy, Windline, Ecovitt), stores it in InfluxDB, and lets each pilot build graphical rule sets that evaluate weather conditions across multiple stations to produce GREEN/ORANGE/RED traffic light decisions per launch site. It also computes flyability statistics from historical decision data.
+Lenticularis is a weather decision-support system for Switzerland. It collects data from multiple weather networks (currently MeteoSwiss, SLF, METAR, Windline, Ecovitt; Holfuy pending), stores it in InfluxDB, and lets each user build graphical rule sets that evaluate weather conditions across multiple stations to produce traffic light decisions (Status Ok / Warning / Stop) per site.
 
-The full product spec is in `plan-lenticularisStructure.prompt.md`. Read it before making significant changes.
+Key capabilities (current and planned):
+- **Rule engine**: condition builder with per-row station picker, AND groups, combination logic, 5-day forecast evaluation
+- **Decision history**: every evaluation stored in InfluxDB `rule_decisions`; analysis page with timeline and condition breakdown
+- **Weather replay**: scrub through historical + forecast data on map and station table
+- **Launchsite registry** (v0.10): separate `launch_sites` table; linked to clubs, rulesets, XContest/OGN stats
+- **Clubs** (v0.10): paragliding clubs with GeoJSON area polygons shown as map overlay
+- **Ruleset types** (v0.10): `'risk'` (red = stop) or `'opportunity'` (green = conditions are good)
+- **AI ruleset generation** (v0.11): natural language → condition JSON via Claude API
+- **Station deduplication** (v0.12): admin-defined station groups; API shows only freshest source
+- **Organisations** (v1.0): commercial customer orgs (VKPI, Jungfraubahn); customer role; admin backend
+- **XContest stats** (v1.2): flight statistics per launchsite via XContest API
+- **OGN integration** (v1.3): live glider map overlay + historical launch counts per launchsite
+
+The full product spec and milestone plan is in `plan-lenticularisStructure.prompt.md`. Read it before making significant changes.
 
 ---
 
@@ -34,35 +47,62 @@ The full product spec is in `plan-lenticularisStructure.prompt.md`. Read it befo
 src/lenticularis/
 ├── api/
 │   ├── main.py              # FastAPI app, startup/shutdown lifecycle
-│   ├── dependencies.py      # get_current_user, require_admin FastAPI deps
-│   └── routers/             # One file per router (auth, stations, rulesets, etc.)
+│   ├── dependencies.py      # get_current_user, require_admin, get_current_user_optional FastAPI deps
+│   └── routers/
+│       ├── auth.py          # register, login, refresh, /me
+│       ├── stations.py      # weather station endpoints + replay
+│       ├── rulesets.py      # ruleset CRUD, evaluate, history, forecast
+│       ├── launch_sites.py  # launchsite registry CRUD (v0.10)
+│       ├── clubs.py         # club CRUD (v0.10)
+│       ├── ai.py            # AI ruleset generation (v0.11)
+│       ├── admin.py         # admin-only: users, orgs, station groups, launchsite approval
+│       ├── organizations.py # org dashboard endpoint (v1.0)
+│       ├── ogn.py           # OGN live overlay (v1.3)
+│       └── health.py        # collector health
 ├── collectors/
 │   ├── base.py              # Abstract BaseCollector
+│   ├── forecast_base.py     # Abstract BaseForecastCollector
 │   ├── meteoswiss.py        # Live 10-min observation data
 │   ├── slf.py               # Live 30-min snow/wind observations
 │   ├── metar.py             # Live METAR observations (AviationWeather)
-│   └── forecast_meteoswiss.py  # ICON-CH1/CH2 NWP forecast collector (GRIB2)
+│   ├── windline.py          # Windline sport weather
+│   ├── ecovitt.py           # Personal weather stations
+│   ├── forecast_openmeteo.py  # Open-Meteo ICON-seamless forecast (current)
+│   ├── xcontest.py          # XContest flight stats per launchsite (v1.2)
+│   └── ogn.py               # OGN historical launch-track stats (v1.3)
 ├── database/
-│   ├── models.py            # SQLAlchemy ORM models (RuleSet, RuleCondition, LaunchLandingLink, …)
-│   ├── db.py                # SQLAlchemy session + get_db dependency + _run_column_migrations()
-│   └── influx.py            # InfluxDB client (write + query, both weather_data and weather_forecast)
+│   ├── models.py            # SQLAlchemy ORM models (all tables)
+│   ├── db.py                # SQLAlchemy session + _run_column_migrations()
+│   └── influx.py            # InfluxDB client (weather_data, weather_forecast, rule_decisions)
 ├── models/
-│   ├── weather.py           # WeatherStation, WeatherMeasurement
-│   ├── auth.py              # User, UserCreate, Token
-│   └── rules.py             # RuleSet, Condition, EvaluationResult, LandingDecision, ForecastStep, ForecastResult
+│   ├── weather.py           # WeatherStation, WeatherMeasurement, ForecastPoint
+│   ├── auth.py              # UserCreate, UserOut (role + subscription), Token
+│   ├── rules.py             # RuleSet (incl. ruleset_type), Condition, EvaluationResult, LandingDecision
+│   ├── launch_sites.py      # LaunchSite schemas (v0.10)
+│   └── clubs.py             # Club schemas (v0.10)
 ├── rules/
 │   └── evaluator.py         # Live evaluator (run_evaluation) + forecast evaluator (run_forecast_evaluation)
 ├── services/
 │   ├── auth.py              # JWT helpers
 │   └── notifications.py     # Email + Pushover dispatch on status transitions
-├── config.py                # YAML loader + Pydantic config models
-└── scheduler.py             # APScheduler wiring all collectors
+├── config.py                # YAML loader + Pydantic config models (incl. ai, xcontest, ogn sections)
+└── scheduler.py             # APScheduler wiring all collectors (weather + daily stats jobs)
 static/
-├── index.html / map.js          # Map dashboard (Leaflet.js) — station markers, launch/landing markers, replay bar, popup condition breakdown
-├── replay.js                    # ReplayEngine class — load history, play/pause/scrub, per-frame snapshots
-├── rulesets.html                # Rule set card list + live decision badge + landing decision badges (cards link to analysis page)
-├── ruleset-analysis.html        # Per-ruleset analysis: current evaluation table, decision history timeline/chart, grouped state-change table with expandable condition detail
-├── ruleset-editor.html          # Condition builder + site type toggle (launch/landing) + landing picker
+├── index.html / map.js          # Map: station markers, launch/landing markers, launchsite layer, club polygon layer, OGN layer, replay bar, popup condition breakdown
+├── replay.js                    # ReplayEngine class
+├── rulesets.html                # Rule set cards: ruleset_type badge, live decision, landing decisions, forecast strip
+├── ruleset-analysis.html        # Per-ruleset analysis: current eval table, decision history, forecast
+├── ruleset-editor.html          # Condition builder + AI generation panel + site type + ruleset type toggle
+├── launch-sites.html            # Launchsite list + map (v0.10)
+├── launch-site-detail.html      # Launchsite detail: linked rulesets, XContest/OGN stats (v0.10+)
+├── dashboard.html               # Customer org dashboard (v1.0)
+├── admin/
+│   ├── index.html           # Admin home
+│   ├── users.html           # User management
+│   ├── launch-sites.html    # Launchsite approval
+│   ├── clubs.html           # Club CRUD
+│   ├── organizations.html   # Org + member + ruleset management
+│   └── station-groups.html  # Station dedup groups
 ├── stations.html / station-detail.html  # Station browser + detail charts + replay bar
 └── auth.js / login.html / register.html # Auth UI
 ```
@@ -119,18 +159,31 @@ The station picker is **per condition row** — a single rule set can reference 
 
 ## Launch / Landing Design
 
-Every `RuleSet` has a `site_type` field: `"launch"` (default) or `"landing"`. There is **no separate `launch_sites` table** — site coordinates and name are embedded in the ruleset.
+Every `RuleSet` has a `site_type` field (`'launch'` | `'landing'`) and a `ruleset_type` field (`'risk'` | `'opportunity'`, default `'risk'`):
+
+- **`site_type`** — structural role: launch or landing
+- **`ruleset_type`** — semantic direction: `'risk'` means red = dangerous (current default); `'opportunity'` means green = conditions are good (e.g. mountain is soarable). Affects how the UI labels and explains colours.
+
+A ruleset can also optionally carry a `launch_site_id` FK pointing to a `launch_sites` table entry (introduced v0.10). This link is not required — rulesets remain usable standalone with their embedded lat/lon.
+
+### LaunchSite Registry (v0.10+)
+
+`launch_sites` is a separate table managed independently from rulesets. It is the stable anchor for XContest/OGN statistics and club area assignments. Key fields: `id`, `name`, `lat`, `lon`, `altitude_m`, `club_id` (FK → clubs), `is_approved`. The many-to-many `launch_site_rulesets` table links launchsites to rulesets.
+
+### Clubs (v0.10+)
+
+`clubs` table stores paragliding clubs with an `area_geojson` polygon. Displayed as a toggle layer on the map. Admin-managed.
 
 ### Linking
 
-A launch ruleset can be linked to one or more landing rulesets via the `launch_landing_links` join table. Manage links with `PUT /api/rulesets/{id}/landings` (`{"landing_ids": [...]}`). Each landing ID must be owned by the same user and have `site_type == "landing"`.
+A `launch` ruleset can be linked to one or more `landing` rulesets via the `launch_landing_links` join table. Manage links with `PUT /api/rulesets/{id}/landings` (`{"landing_ids": [...]}`). Each landing ID must be owned by the same user and have `site_type == 'landing'`.
 
 ### Evaluation
 
 `GET /api/rulesets/{id}/evaluate` on a **launch** ruleset:
 1. Evaluates the launch conditions normally → writes to `rule_decisions`
 2. For each linked landing: evaluates its conditions → writes to `rule_decisions`
-3. Returns `landing_decisions: [{ruleset_id, name, decision}]` and `best_landing_decision` (best_wins: green > orange > red)
+3. Returns `landing_decisions: [{ruleset_id, name, decision}]` and `best_landing_decision` (best_wins: Status Ok > Warning > Stop)
 
 This means landing statistics are populated whenever the parent launch is evaluated — no separate evaluation call needed.
 
@@ -138,13 +191,15 @@ This means landing statistics are populated whenever the parent launch is evalua
 
 - **Launch marker**: filled circle (colour = launch decision) + optional halo ring (colour = `best_landing_decision`). No halo if no landings are linked.
 - **Landing marker**: flag icon (colour = landing decision).
-- Halo uses **best_wins**: if any linked landing is green the halo is green, regardless of others.
+- **Launchsite toggle layer** (v0.10+): paraglider icon markers for official launchsites; popup shows name, club, linked ruleset decisions.
+- **Club polygon toggle layer** (v0.10+): GeoJSON polygons from `/api/clubs`.
+- Halo uses **best_wins**: Status Ok > Warning > Stop.
 
 ### Key invariants
 
-- A landing ruleset can be linked to multiple launches (shared landing field).
+- A `landing` ruleset can be linked to multiple `launch` rulesets (shared landing field).
 - Cloning a launch ruleset does **not** copy landing links — they are location-specific.
-- `site_type` can be changed after creation; changing a launch to landing does not auto-remove existing links (they become inactive until type is changed back).
+- `site_type` can be changed after creation; changing a launch to another type does not auto-remove existing links (they become inactive until type is changed back).
 
 ---
 
@@ -153,17 +208,21 @@ This means landing statistics are populated whenever the parent launch is evalua
 All statistics are derived from the `rule_decisions` InfluxDB measurement, not from raw `weather_data`. This is intentional — the `condition_results` field already contains per-condition, per-station actual values and result colours.
 
 Statistics service (`services/stats.py`) implements 7 metrics via Flux queries:
-- Flyable days, hourly pattern, monthly breakdown, seasonal breakdown, condition trigger rate, site comparison, best windows
-- Best windows (longest consecutive GREEN streaks) is computed server-side after fetching the decision time series
+- Status Ok days, hourly pattern, monthly breakdown, seasonal breakdown, condition trigger rate, site comparison, best windows
+- Best windows (longest consecutive Status Ok streaks) is computed server-side after fetching the decision time series
 
 ---
 
-## Authentication
+## Authentication & Roles
 
 - JWT bearer tokens (access + refresh)
 - `get_current_user` FastAPI dependency — required on all user-facing endpoints
 - `require_admin` dependency — required on all `/api/admin/*` endpoints
-- Pilots can only read/write their own launch sites, rulesets, and notification configs (enforce `owner_id == current_user.id`)
+- Three roles: `'pilot'` (default), `'customer'`, `'admin'`
+- Two subscription tiers: `'free'` (default), `'premium'`
+- Pilots can only read/write their own rulesets, launchsites, and notification configs (enforce `owner_id == current_user.id`)
+- Customers are restricted to org dashboard views — no ruleset editor access; enforced in frontend redirect and backend org membership check
+- Customers belong to one or more `organizations`; org dashboard endpoint requires org membership or admin
 
 ---
 
@@ -175,7 +234,7 @@ Statistics service (`services/stats.py`) implements 7 metrics via Flux queries:
 
 ### `rule_decisions`
 - Tags: `ruleset_id`, `owner_id`
-- Fields: `decision` (string: green/orange/red), `condition_results` (JSON string)
+- Fields: `decision` (string: `green` = Status Ok / `orange` = Warning / `red` = Stop), `condition_results` (JSON string)
 
 ### `weather_forecast`
 - Tags: `station_id`, `network`, `model` (`icon-ch1` / `icon-ch2`), `init_time` (ISO: model run initialization timestamp)
@@ -189,9 +248,13 @@ Statistics service (`services/stats.py`) implements 7 metrics via Flux queries:
 
 ## What the Admin role does NOT do
 
-Admins do **not** manage launch sites, rule sets, or station-to-site assignments. Those are fully pilot-owned and self-served. Admin scope is limited to:
+Admins do **not** build or edit rulesets, or configure individual pilot rule sets. Those are fully pilot-owned and self-served. Admin scope is limited to:
 - Enabling/disabling collectors and changing their collection intervals
-- Managing user accounts (roles, deactivation)
+- Managing user accounts (roles, subscription, deactivation)
+- Approving official launchsite entries
+- Managing clubs (CRUD + GeoJSON polygon)
+- Managing organisations and their ruleset assignments
+- Managing station deduplication groups
 
 ---
 

@@ -3,16 +3,19 @@
  *
  * Loads historical data for all stations via GET /api/stations/replay
  * and steps through time frames at a configurable speed multiplier.
+ * When the window extends past "now", forecast data is appended
+ * seamlessly so replay continues into the future.
  *
  * Usage:
  *   const engine = new ReplayEngine(onFrame, onStateChange);
  *   await engine.load({ hours: 24 });
  *   engine.play();
  *
- * onFrame(stationsSnapshot, isoTimestamp)
- *   stationsSnapshot is an array in the same shape as GET /api/stations,
- *   with each station's `latest` field set to its most-recent measurement
- *   at or before the current replay time.
+ * onFrame(stationsSnapshot, isoTimestamp, index, total, isForecast)
+ *   stationsSnapshot — array in the same shape as GET /api/stations,
+ *     each station's `latest` set to its most-recent measurement ≤ current ts.
+ *   isForecast — true when the current frame comes from forecast data
+ *     (timestamp ≥ forecastFrom boundary returned by the API).
  *
  * onStateChange(state)  — 'idle' | 'loading' | 'playing' | 'paused'
  */
@@ -26,6 +29,7 @@ class ReplayEngine {
     this._onStateChange = onStateChange;
     this._data = null;        // raw response data dict
     this._timestamps = [];    // sorted unique ISO strings
+    this._forecastFrom = null; // ISO string — boundary between observations and forecast
     this._currentIndex = 0;
     this._playing = false;
     this._speed = 10;
@@ -51,6 +55,7 @@ class ReplayEngine {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const json = await res.json();
     this._data = json.data || {};
+    this._forecastFrom = json.forecast_from || null;
 
     // Collect and sort all unique timestamps across all stations
     const tsSet = new Set();
@@ -103,6 +108,13 @@ class ReplayEngine {
   get currentIndex()   { return this._currentIndex; }
   get isPlaying()      { return this._playing; }
   get hasData()        { return this._data !== null && this._timestamps.length > 0; }
+  get forecastFrom()   { return this._forecastFrom; }
+  /** True when the current frame is a forecast (past the observation/forecast boundary). */
+  get isForecastFrame() {
+    if (!this._forecastFrom) return false;
+    const ts = this._timestamps[this._currentIndex];
+    return ts != null && ts >= this._forecastFrom;
+  }
 
   destroy() { this.pause(); this._data = null; this._timestamps = []; this._setState('idle'); }
 
@@ -124,7 +136,7 @@ class ReplayEngine {
 
   _emitFrame() {
     const ts = this._timestamps[this._currentIndex];
-    this._onFrame(this._buildSnapshot(ts), ts, this._currentIndex, this._timestamps.length);
+    this._onFrame(this._buildSnapshot(ts), ts, this._currentIndex, this._timestamps.length, this.isForecastFrame);
   }
 
   /**

@@ -199,7 +199,79 @@ def get_evaluation_history(
             row["condition_results"] = _json.loads(raw) if raw else []
         except Exception:
             row["condition_results"] = []
-    return {"ruleset_id": ruleset_id, "hours": hours, "count": len(rows), "data": rows}
+
+    # Annotate each row with whether it falls inside the sunrise active window.
+    # Only applies when the ruleset has a location; otherwise all rows are active.
+    active_window_hours: float | None = None
+    if rs.lat is not None and rs.lon is not None:
+        from lenticularis.utils.sunrise import is_in_active_window
+        active_window_hours = 1.0
+        for row in rows:
+            try:
+                ts = datetime.fromisoformat(row["timestamp"])
+            except (KeyError, ValueError):
+                row["in_active_window"] = True
+                continue
+            row["in_active_window"] = is_in_active_window(
+                ts, rs.lat, rs.lon, active_window_hours
+            )
+    else:
+        for row in rows:
+            row["in_active_window"] = True
+
+    return {
+        "ruleset_id": ruleset_id,
+        "hours": hours,
+        "count": len(rows),
+        "active_window_hours": active_window_hours,
+        "data": rows,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Forecast — evaluate against weather_forecast data (declared before /{id})
+# ---------------------------------------------------------------------------
+
+@router.get("/{ruleset_id}/forecast")
+def get_forecast(
+    ruleset_id: str,
+    request: Request,
+    hours: int = Query(default=120, ge=1, le=240),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Return an hourly traffic-light forecast for the next ``hours`` hours.
+
+    Evaluates the ruleset's conditions against ``weather_forecast`` InfluxDB data
+    (collected by the forecast collector) using the identical condition/group/
+    combination logic as the live evaluator.
+
+    Returns an empty ``steps`` list when no forecast data is available yet
+    (i.e. before the first forecast collector run).
+    """
+    rs = db.get(RuleSet, ruleset_id)
+    if rs is None:
+        raise HTTPException(status_code=404, detail="Rule set not found")
+    if rs.owner_id != current_user.id and not rs.is_public:
+        raise HTTPException(status_code=403, detail="Not your rule set")
+
+    influx = getattr(request.app.state, "influx", None)
+    if influx is None:
+        raise HTTPException(status_code=503, detail="InfluxDB not available")
+
+    from lenticularis.rules.evaluator import run_forecast_evaluation
+
+    steps = run_forecast_evaluation(
+        rs, influx, horizon_hours=hours,
+        lat=rs.lat, lon=rs.lon,
+    )
+    return {
+        "ruleset_id": ruleset_id,
+        "hours": hours,
+        "active_window_hours": 1.0 if (rs.lat is not None and rs.lon is not None) else None,
+        "steps": steps,
+    }
 
 
 # ---------------------------------------------------------------------------

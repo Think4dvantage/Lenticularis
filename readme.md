@@ -1,11 +1,11 @@
 ```markdown
 # Lenticularis
 
-Weather data tracking and analysis system for paragliding decision support.
+Weather data aggregation and rule-based decision support for outdoor activities in Switzerland.
 
 ## Overview
 
-Lenticularis collects weather data from multiple weather networks (MeteoSwiss, SLF, METAR, Holfuy, Windline, Ecovitt), normalizes the data, stores it in InfluxDB, and applies customizable rule-based analysis to create traffic light decisions (GREEN/ORANGE/RED) for paragliding launch sites.
+Lenticularis collects weather data from multiple Swiss weather networks (MeteoSwiss, SLF, METAR, Holfuy, Windline, Ecovitt), normalizes the data, stores it in InfluxDB, and applies customizable rule-based analysis to produce traffic light decisions (Status Ok / Warning / Stop) for user-defined sites. The system supports multiple site types — starting with paragliding launches and landing zones, with more types to follow.
 
 ## Features
 
@@ -13,7 +13,7 @@ Lenticularis collects weather data from multiple weather networks (MeteoSwiss, S
 - **Automated scheduling**: Periodic data collection (currently MeteoSwiss 10 min, SLF 30 min, METAR 15 min in dev)
 - **Time-series storage**: InfluxDB integration for historical weather data
 - **Rule-based analysis**: Customizable rules for wind speed, direction, pressure deltas, etc.
-- **Traffic light decisions**: GREEN (go), ORANGE (caution), RED (no-go) for launch sites
+- **Traffic light decisions**: Status Ok (green), Warning (orange), Stop (red) per site
 - **Web interface**: Interactive Switzerland map with station visualization
 - **REST API**: Full API with automatic documentation (FastAPI)
 - **Docker deployment**: Easy deployment with docker-compose
@@ -142,6 +142,22 @@ And comment out the InfluxDB service in `docker-compose.yml`.
 - `services/stats.py` — Flux queries: flyable days, hourly pattern, monthly/seasonal breakdown, condition trigger rate, site comparison, best windows
 - All `GET /api/stats/…` endpoints
 - `static/stats.html` + Chart.js charts
+
+### Planned — v0.10 — Launchsite Registry + Clubs + Ruleset Types
+- Separate `launch_sites` table; clubs with GeoJSON area polygons; map overlays for both
+- `ruleset_type` field: `'risk'` (default) vs `'opportunity'` (green = good conditions)
+
+### Planned — v0.11 — AI-Assisted Ruleset Creation
+- Natural language → condition JSON via Claude API; preview in editor before saving
+
+### Planned — v0.12 — Station Deduplication
+- Admin-defined station groups; API surfaces only the freshest data source per group
+
+### Planned — v1.0 — Organisations + Admin Backend
+- Commercial customer organisations (VKPI, Jungfraubahn); customer role + subscription tiers; full admin UI
+
+### Planned — v1.2 / v1.3 — XContest + OGN Integration
+- Flight statistics per launchsite from XContest API; live OGN glider overlay on map
 
 ## Contributing
 

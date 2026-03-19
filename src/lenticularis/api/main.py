@@ -97,8 +97,8 @@ async def lifespan(app: FastAPI):
         finally:
             await tmp.close()
 
-    # Scheduler
-    scheduler = CollectorScheduler(cfg, influx)
+    # Scheduler — pass station_registry so forecast collectors can discover station coordinates
+    scheduler = CollectorScheduler(cfg, influx, station_registry=app.state.station_registry)
     app.state.scheduler = scheduler
 
     # Patch scheduler to update station registry after each collect run
@@ -142,7 +142,7 @@ def _patch_scheduler_registry(scheduler: CollectorScheduler, registry: dict) -> 
 def create_app() -> FastAPI:
     app = FastAPI(
         title="Lenticularis",
-        description="Paragliding weather decision-support system for Switzerland",
+        description="Weather decision-support system for Switzerland",
         version="0.1.0",
         lifespan=lifespan,
     )

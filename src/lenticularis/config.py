@@ -19,6 +19,15 @@ class CollectorConfig(BaseModel):
     interval_minutes: int = 10
     config: Optional[dict] = None
 
+
+class ForecastCollectorConfig(BaseModel):
+    name: str = "open-meteo"
+    enabled: bool = True
+    interval_minutes: int = 60
+    horizon_hours: int = 120
+    config: Optional[dict] = None
+
+
 class DatabaseConfig(BaseModel):
     path: str = "data/lenticularis.db"
 
@@ -41,6 +50,7 @@ class APIConfig(BaseModel):
 class MainConfig(BaseModel):
     influxdb: InfluxDBConfig
     collectors: list[CollectorConfig]
+    forecast_collectors: list[ForecastCollectorConfig] = []
     database: DatabaseConfig
     auth: AuthConfig = AuthConfig()
     logging: LoggingConfig

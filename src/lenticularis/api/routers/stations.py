@@ -123,13 +123,17 @@ async def get_replay(
     hours: Optional[int] = Query(default=None, ge=1, le=168, description="Relative range in hours (1–168)"),
     start: Optional[str] = Query(default=None, description="ISO 8601 start datetime"),
     end: Optional[str] = Query(default=None, description="ISO 8601 end datetime"),
+    include_forecast: bool = Query(default=True, description="Append forecast data beyond the observation window"),
+    forecast_hours: int = Query(default=24, ge=1, le=120, description="How many hours of forecast to append when include_forecast=true"),
 ):
     """
-    Return historical measurements for **all** stations within a time window,
-    suitable for client-side replay.
+    Return measurements for **all** stations within a time window, suitable for
+    client-side replay.
 
-    Either supply ``hours`` for a relative window ending now, or both ``start``
-    and ``end`` for an absolute window (max 7 days).
+    When ``include_forecast=true`` (default), forecast data from the
+    ``weather_forecast`` measurement is appended seamlessly after the observation
+    window ends, so the replay can play continuously into the future.
+    The response includes a ``forecast_from`` ISO timestamp marking the boundary.
     """
     influx = _get_influx(request)
     registry = _get_station_registry(request)
@@ -152,7 +156,9 @@ async def get_replay(
         end_dt = now
         start_dt = now - timedelta(hours=24)
 
-    raw = influx.query_history_all_stations(start_dt, end_dt)
+    # Observation data (past)
+    obs_end = min(end_dt, now)
+    raw = influx.query_history_all_stations(start_dt, obs_end)
 
     result: dict[str, Any] = {}
     for sid, measurements in raw.items():
@@ -174,9 +180,38 @@ async def get_replay(
             "measurements": serialised,
         }
 
+    # Forecast data (future) — merged into the same per-station structure
+    forecast_from: Optional[str] = None
+    if include_forecast:
+        forecast_start = now
+        forecast_end = now + timedelta(hours=forecast_hours)
+        fc_raw = influx.query_forecast_replay(forecast_start, forecast_end)
+        forecast_from = now.isoformat()
+
+        for sid, fc_measurements in fc_raw.items():
+            if not fc_measurements:
+                continue
+            station = registry.get(sid)
+            if sid not in result:
+                result[sid] = {
+                    "station": {
+                        "station_id": sid,
+                        "name": station.name if station else sid,
+                        "network": station.network if station else "",
+                        "latitude": station.latitude if station else None,
+                        "longitude": station.longitude if station else None,
+                        "elevation": station.elevation if station else None,
+                        "canton": station.canton if station else None,
+                    },
+                    "measurements": [],
+                }
+            # Forecast measurements are already ISO strings from query_forecast_replay
+            result[sid]["measurements"].extend(fc_measurements)
+
     return {
         "start": start_dt.isoformat(),
-        "end": end_dt.isoformat(),
+        "end": (now + timedelta(hours=forecast_hours)).isoformat() if include_forecast else end_dt.isoformat(),
+        "forecast_from": forecast_from,
         "station_count": len(result),
         "data": result,
     }

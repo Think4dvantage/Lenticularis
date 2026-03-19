@@ -356,12 +356,14 @@ let _mapReplaySpeed  = 10;
 
 const _mapReplay = new ReplayEngine(
   // onFrame
-  (snapshot, ts, idx, total) => {
+  (snapshot, ts, idx, total, isForecast) => {
     applyReplaySnapshot(snapshot);
     // Update UI
     const d = new Date(ts);
-    document.getElementById('mapReplayTime').textContent =
+    const timeEl = document.getElementById('mapReplayTime');
+    timeEl.textContent = (isForecast ? '📡 ' : '') +
       d.toLocaleString([], { month:'short', day:'2-digit', hour:'2-digit', minute:'2-digit', timeZoneName:'short' });
+    timeEl.style.color = isForecast ? '#f6ad55' : '';
     const scrubber = document.getElementById('mapScrubber');
     scrubber.max = total - 1;
     scrubber.value = idx;

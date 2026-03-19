@@ -302,6 +302,148 @@ def run_evaluation(ruleset: RuleSet, influx: InfluxClient) -> dict:
     }
 
 
+def run_forecast_evaluation(
+    ruleset: RuleSet,
+    influx: InfluxClient,
+    horizon_hours: int = 120,
+    lat: Optional[float] = None,
+    lon: Optional[float] = None,
+    active_window_hours: float = 1.0,
+) -> list[dict]:
+    """
+    Evaluate ruleset conditions against forecast data for the next ``horizon_hours``.
+
+    Reuses the identical condition/group/combination logic as ``run_evaluation``
+    but iterates over hourly ``valid_time`` steps from the ``weather_forecast``
+    InfluxDB measurement instead of fetching the single latest ``weather_data`` value.
+
+    Returns a time-ordered list of forecast steps::
+
+        [
+            {
+                "valid_time":        ISO8601 string,
+                "decision":          "green" | "orange" | "red",
+                "condition_results": [...],
+            },
+            ...
+        ]
+
+    Does **not** write to InfluxDB — results are ephemeral and returned on demand.
+    Returns an empty list when no forecast data is available yet.
+
+    When *lat* and *lon* are provided, each step is annotated with
+    ``in_active_window`` (±*active_window_hours* around sunrise).
+    """
+    from lenticularis.utils.sunrise import is_in_active_window as _in_window
+
+    conditions: list[RuleCondition] = ruleset.conditions
+    if not conditions:
+        return []
+
+    station_ids: list[str] = list(
+        {c.station_id for c in conditions}
+        | {c.station_b_id for c in conditions if c.station_b_id}
+    )
+
+    forecast_by_station = influx.query_forecast_for_stations(station_ids, horizon_hours)
+    if not forecast_by_station:
+        return []
+
+    all_valid_times: set[str] = set()
+    for vt_map in forecast_by_station.values():
+        all_valid_times.update(vt_map.keys())
+    sorted_valid_times = sorted(all_valid_times)
+
+    groups: dict[str, list[RuleCondition]] = {}
+    standalone: list[RuleCondition] = []
+    for c in conditions:
+        if c.group_id:
+            groups.setdefault(c.group_id, []).append(c)
+        else:
+            standalone.append(c)
+
+    steps: list[dict] = []
+    for vt_iso in sorted_valid_times:
+        station_data: dict[str, dict] = {
+            sid: vt_map[vt_iso]
+            for sid, vt_map in forecast_by_station.items()
+            if vt_iso in vt_map
+        }
+
+        condition_results: list[dict] = []
+        triggered_colours: list[str] = []
+
+        for cond in standalone:
+            matched, actual = _eval_condition(cond, station_data)
+            condition_results.append({
+                "condition_id":      cond.id,
+                "station_id":        cond.station_id,
+                "station_b_id":      cond.station_b_id,
+                "field":             cond.field,
+                "operator":          cond.operator,
+                "value_a":           cond.value_a,
+                "value_b":           cond.value_b,
+                "actual_value":      actual,
+                "matched":           matched,
+                "result_colour":     cond.result_colour,
+                "group_id":          None,
+                "group_all_matched": None,
+            })
+            if matched:
+                triggered_colours.append(cond.result_colour)
+
+        for group_id, group_conds in groups.items():
+            evals = [_eval_condition(c, station_data) for c in group_conds]
+            all_matched = all(m for m, _ in evals)
+            for (matched, actual), cond in zip(evals, group_conds):
+                condition_results.append({
+                    "condition_id":      cond.id,
+                    "station_id":        cond.station_id,
+                    "station_b_id":      cond.station_b_id,
+                    "field":             cond.field,
+                    "operator":          cond.operator,
+                    "value_a":           cond.value_a,
+                    "value_b":           cond.value_b,
+                    "actual_value":      actual,
+                    "matched":           matched,
+                    "result_colour":     cond.result_colour,
+                    "group_id":          group_id,
+                    "group_all_matched": all_matched,
+                })
+            if all_matched:
+                triggered_colours.append(_worst([c.result_colour for c in group_conds]))
+
+        if not triggered_colours:
+            decision = "green"
+        elif ruleset.combination_logic == "worst_wins":
+            decision = _worst(triggered_colours)
+        else:
+            counter: dict[str, int] = {"green": 0, "orange": 0, "red": 0}
+            for colour in triggered_colours:
+                counter[colour] = counter.get(colour, 0) + 1
+            decision = max(counter, key=lambda k: (counter[k], COLOUR_RANK[k]))
+
+        step: dict = {
+            "valid_time":        vt_iso,
+            "decision":          decision,
+            "condition_results": condition_results,
+        }
+        if lat is not None and lon is not None:
+            try:
+                vt_dt = datetime.fromisoformat(vt_iso)
+            except ValueError:
+                vt_dt = None
+            step["in_active_window"] = (
+                _in_window(vt_dt, lat, lon, active_window_hours)
+                if vt_dt is not None else True
+            )
+        else:
+            step["in_active_window"] = True
+        steps.append(step)
+
+    return steps
+
+
 def write_decision(ruleset: RuleSet, result: dict, influx: InfluxClient) -> None:
     """
     Persist an evaluation result to the ``rule_decisions`` InfluxDB measurement.

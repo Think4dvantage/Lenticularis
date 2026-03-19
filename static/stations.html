@@ -424,11 +424,13 @@ let _tblReplaySpeed  = 10;
 
 const _tblReplay = new ReplayEngine(
   // onFrame
-  (snapshot, ts, idx, total) => {
+  (snapshot, ts, idx, total, isForecast) => {
     applyReplaySnapshot(snapshot);
     const d = new Date(ts);
-    document.getElementById('tblReplayTime').textContent =
+    const timeEl = document.getElementById('tblReplayTime');
+    timeEl.textContent = (isForecast ? '📡 ' : '') +
       d.toLocaleString([], { month:'short', day:'2-digit', hour:'2-digit', minute:'2-digit', timeZoneName:'short' });
+    timeEl.style.color = isForecast ? '#f6ad55' : '';
     const scrubber = document.getElementById('tblScrubber');
     scrubber.max = total - 1;
     scrubber.value = idx;
