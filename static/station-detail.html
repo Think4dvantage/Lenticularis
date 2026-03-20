@@ -105,21 +105,6 @@
     }
     .range-btn:hover { background: #3a4a5e; color: #e2e8f0; }
     .range-btn.active { background: #2b6cb0; border-color: #3182ce; color: #fff; }
-    .range-btn:disabled { cursor: not-allowed; }
-
-    .forecast-btn {
-      background: #2d3748;
-      border: 1px solid #744210;
-      border-radius: 6px;
-      color: #f6ad55;
-      padding: 5px 12px;
-      font-size: 0.82rem;
-      cursor: pointer;
-      transition: background 0.15s, color 0.15s;
-      margin-left: 8px;
-    }
-    .forecast-btn:hover { background: #3a2e1a; }
-    .forecast-btn.active { background: #744210; border-color: #f6ad55; color: #fefcbf; }
 
     .charts-grid {
       padding: 20px 24px;
@@ -232,6 +217,7 @@
     <a href="/stations" class="nav-link">Stations</a>
     <a href="/rulesets" class="nav-link">Rule Sets</a>
     <a href="/stats" class="nav-link">Statistics</a>
+    <a href="/foehn" class="nav-link">Föhn</a>
   </div>
   <div class="nav-user" id="navUser"></div>
 </nav>
@@ -261,7 +247,6 @@
   <button class="range-btn" data-hours="48"  onclick="setRange(48)">48 h</button>
   <button class="range-btn" data-hours="168" onclick="setRange(168)">7 days</button>
   <button class="range-btn" data-hours="720" onclick="setRange(720)">30 days</button>
-  <button class="forecast-btn" id="forecastBtn" onclick="toggleForecast()">📡 + Forecast</button>
 </div>
 
 <div id="loadingOverlay" class="loading-overlay">

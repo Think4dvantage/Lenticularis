@@ -19,18 +19,20 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Optional
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
 from lenticularis.collectors.ecowitt import EcowittCollector
+from lenticularis.collectors.foehn import FoehnCollector
 from lenticularis.collectors.forecast_openmeteo import ForecastOpenMeteoCollector
 from lenticularis.collectors.metar import MetarCollector
 from lenticularis.collectors.meteoswiss import MeteoSwissCollector
 from lenticularis.collectors.slf import SlfCollector
 from lenticularis.collectors.windline import WindlineCollector
+from lenticularis.collectors.wunderground import WundergroundCollector
 from lenticularis.config import MainConfig
 
 if TYPE_CHECKING:
@@ -46,6 +48,7 @@ _COLLECTOR_REGISTRY = {
     "metar": MetarCollector,
     "windline": WindlineCollector,
     "ecowitt": EcowittCollector,
+    "wunderground": WundergroundCollector,
 }
 
 # Registry: forecast collector name → class
@@ -193,6 +196,34 @@ class CollectorScheduler:
                 fc_cfg.horizon_hours,
             )
 
+        # ---- föhn status collector -----------------------------------------
+        self._foehn_collector = FoehnCollector()
+        self._collector_health["foehn"] = {
+            "collector": "foehn",
+            "type": "derived",
+            "enabled": True,
+            "interval_minutes": 10,
+            "status": "scheduled",
+            "last_started_at": None,
+            "last_finished_at": None,
+            "last_success_at": None,
+            "last_error_at": None,
+            "last_error": None,
+            "last_measurement_count": None,
+            "consecutive_failures": 0,
+        }
+        self._scheduler.add_job(
+            func=self._run_foehn_collector,
+            trigger=IntervalTrigger(minutes=10),
+            id="collector_foehn",
+            name="foehn status collector",
+            misfire_grace_time=180,
+            coalesce=True,
+            max_instances=1,
+            next_run_time=None,
+        )
+        logger.info("Registered foehn status collector with 10-minute interval")
+
         self._scheduler.start()
 
         # Trigger first runs with jitter
@@ -218,8 +249,14 @@ class CollectorScheduler:
                     ),
                 )
 
+        # Foehn collector starts after observation collectors have populated data
+        asyncio.get_event_loop().call_later(
+            random.uniform(_JITTER_SECONDS, _JITTER_SECONDS * 2),
+            lambda: asyncio.ensure_future(self._trigger_now("collector_foehn")),
+        )
+
         logger.info(
-            "Scheduler started — %d observation collector(s), %d forecast collector(s)",
+            "Scheduler started — %d observation collector(s), %d forecast collector(s), föhn collector",
             len(self._collectors),
             len(self._forecast_collectors),
         )
@@ -229,6 +266,34 @@ class CollectorScheduler:
         job = self._scheduler.get_job(job_id)
         if job:
             job.modify(next_run_time=datetime.now(timezone.utc))
+
+    async def _run_foehn_collector(self) -> None:
+        """Evaluate föhn regions and write results to InfluxDB."""
+        health = self._collector_health["foehn"]
+        health["status"] = "running"
+        health["last_started_at"] = datetime.now(timezone.utc)
+        try:
+            count = await self._foehn_collector.run(self._influx, self._station_registry)
+            finished_at = datetime.now(timezone.utc)
+            health.update({
+                "status": "ok",
+                "last_finished_at": finished_at,
+                "last_success_at": finished_at,
+                "last_error": None,
+                "last_measurement_count": count,
+                "consecutive_failures": 0,
+            })
+            logger.info("FoehnCollector: wrote %d points", count)
+        except Exception as exc:
+            finished_at = datetime.now(timezone.utc)
+            health.update({
+                "status": "error",
+                "last_finished_at": finished_at,
+                "last_error_at": finished_at,
+                "last_error": str(exc),
+                "consecutive_failures": int(health.get("consecutive_failures", 0)) + 1,
+            })
+            logger.error("FoehnCollector failed: %s", exc)
 
     async def _run_collector(self, collector) -> None:
         """Execute a single observation collector run and write results to InfluxDB."""

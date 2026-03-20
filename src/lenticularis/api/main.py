@@ -31,8 +31,10 @@ from lenticularis.api.routers import stations as stations_router
 from lenticularis.api.routers import auth as auth_router
 from lenticularis.api.routers import rulesets as rulesets_router
 from lenticularis.api.routers import health as health_router
+from lenticularis.api.routers import foehn as foehn_router
 from lenticularis.api.routers import stats as stats_router
 from lenticularis.database.db import init_db
+from lenticularis.collectors.foehn import _VIRTUAL_WEATHER_STATIONS
 
 
 # ---------------------------------------------------------------------------
@@ -98,8 +100,14 @@ async def lifespan(app: FastAPI):
         finally:
             await tmp.close()
 
-    # Scheduler — pass station_registry so forecast collectors can discover station coordinates
-    scheduler = CollectorScheduler(cfg, influx, station_registry=app.state.station_registry)
+    # Pre-seed föhn virtual stations so they appear on the map immediately at startup
+    # (the FoehnCollector also adds them after its first run, but that has jitter delay)
+    for ws in _VIRTUAL_WEATHER_STATIONS:
+        app.state.station_registry[ws.station_id] = ws
+    logger.info("Station registry primed with %d foehn virtual stations", len(_VIRTUAL_WEATHER_STATIONS))
+
+    # Scheduler
+    scheduler = CollectorScheduler(cfg, influx, app.state.station_registry)
     app.state.scheduler = scheduler
 
     # Patch scheduler to update station registry after each collect run
@@ -143,7 +151,7 @@ def _patch_scheduler_registry(scheduler: CollectorScheduler, registry: dict) -> 
 def create_app() -> FastAPI:
     app = FastAPI(
         title="Lenticularis",
-        description="Weather decision-support system for Switzerland",
+        description="Paragliding weather decision-support system for Switzerland",
         version="0.1.0",
         lifespan=lifespan,
     )
@@ -153,6 +161,7 @@ def create_app() -> FastAPI:
     app.include_router(auth_router.router)
     app.include_router(rulesets_router.router)
     app.include_router(health_router.router)
+    app.include_router(foehn_router.router)
     app.include_router(stats_router.router)
 
     # Static files (frontend)
@@ -208,9 +217,9 @@ def create_app() -> FastAPI:
         async def serve_stats():
             return FileResponse(str(static_dir / "stats.html"))
 
-        @app.get("/stats.html", include_in_schema=False)
-        async def serve_stats_html():
-            return FileResponse(str(static_dir / "stats.html"))
+        @app.get("/foehn", include_in_schema=False)
+        async def serve_foehn():
+            return FileResponse(str(static_dir / "foehn.html"))
     else:
         @app.get("/", include_in_schema=False)
         async def root():

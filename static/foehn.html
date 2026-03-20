@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lenticularis — Föhn Tracker</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: #0f1117;
+      color: #e2e8f0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Nav ─────────────────────────────────────────────────────────── */
+    .top-nav {
+      background: #1a1f2e; border-bottom: 1px solid #2d3748;
+      padding: 0 24px; display: flex; align-items: center; height: 48px; flex-shrink: 0;
+    }
+    .nav-brand { font-size: 1.1rem; font-weight: 600; color: #90cdf4; margin-right: 24px; }
+    .nav-links { display: flex; gap: 2px; flex: 1; }
+    .nav-link { color: #718096; text-decoration: none; font-size: 0.85rem; padding: 6px 14px; border-radius: 6px; transition: background 0.15s, color 0.15s; }
+    .nav-link:hover  { background: #2d3748; color: #e2e8f0; }
+    .nav-link.active { background: #2d4a6e; color: #90cdf4; font-weight: 500; }
+    .nav-user { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+    .nav-btn { background: transparent; border: 1px solid #4a5568; color: #a0aec0; font-size: 0.8rem; padding: 4px 10px; border-radius: 5px; cursor: pointer; }
+    .nav-btn:hover { background: #2d3748; color: #e2e8f0; }
+
+    /* ── Layout ──────────────────────────────────────────────────────── */
+    .page-content { flex: 1; padding: 20px 28px; max-width: 1400px; margin: 0 auto; width: 100%; }
+
+    .page-header {
+      display: flex; align-items: baseline; gap: 16px; margin-bottom: 16px;
+    }
+    .page-header h1 { font-size: 1.5rem; font-weight: 600; }
+    .page-meta { font-size: 0.8rem; color: #4a5568; }
+    .page-meta span { color: #718096; }
+
+    /* ── Time navigation ─────────────────────────────────────────────── */
+    .time-nav-wrap {
+      background: #111827;
+      border: 1px solid #1e2535;
+      border-radius: 10px;
+      padding: 10px 14px;
+      margin-bottom: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .time-nav-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .time-nav-label { font-size: 0.72rem; color: #4a5568; width: 40px; flex-shrink: 0; }
+
+    .tn-btn {
+      background: #1a1f2e;
+      border: 1px solid #2d3748;
+      color: #718096;
+      font-size: 0.78rem;
+      padding: 5px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+      white-space: nowrap;
+    }
+    .tn-btn:hover { background: #2d3748; color: #e2e8f0; }
+    .tn-btn.selected {
+      background: #2d4a6e; color: #90cdf4; border-color: #4a7bab; font-weight: 600;
+    }
+    .tn-btn.live-btn.selected { background: #1a3a22; color: #68d391; border-color: #276749; }
+
+    .forecast-badge {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-size: 0.72rem; color: #f6ad55;
+      background: #2d2010; border: 1px solid #744210;
+      border-radius: 5px; padding: 3px 9px;
+    }
+
+    /* ── Status banner ───────────────────────────────────────────────── */
+    .status-banner {
+      border-radius: 10px; padding: 14px 20px; margin-bottom: 18px;
+      display: flex; align-items: center; gap: 14px; border: 1px solid transparent;
+    }
+    /* Color = impact on pilots: green = safe, red = föhn is danger */
+    .status-banner.inactive { background: #0d1f15; border-color: #276749; }
+    .status-banner.active   { background: #2d1515; border-color: #fc8181; }
+    .status-banner.risk     { background: #2d2010; border-color: #f6ad55; }
+    .status-banner.partial  { background: #2d2810; border-color: #f6e05e; }
+
+    .banner-icon { font-size: 1.9rem; flex-shrink: 0; }
+    .banner-title { font-size: 1.05rem; font-weight: 700; }
+    .banner-sub   { font-size: 0.82rem; color: #a0aec0; margin-top: 3px; }
+    .banner-title.inactive { color: #68d391; }
+    .banner-title.active   { color: #fc8181; }
+    .banner-title.risk     { color: #f6ad55; }
+    .banner-title.partial  { color: #f6e05e; }
+
+    /* ── Two-column top row ──────────────────────────────────────────── */
+    .top-row {
+      display: grid; grid-template-columns: 280px 1fr; gap: 18px;
+      margin-bottom: 20px; align-items: start;
+    }
+    @media (max-width: 800px) { .top-row { grid-template-columns: 1fr; } }
+
+    /* ── Cards ───────────────────────────────────────────────────────── */
+    .card { background: #1a1f2e; border: 1px solid #2d3748; border-radius: 10px; padding: 16px 18px; }
+    .card-title {
+      font-size: 0.73rem; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.07em; color: #718096; margin-bottom: 14px;
+    }
+
+    /* ── Pressure card ───────────────────────────────────────────────── */
+    .pressure-stations {
+      display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 10px;
+    }
+    .pres-side { text-align: center; }
+    .pres-station-label { font-size: 0.68rem; color: #718096; }
+    .pres-value { font-size: 1.3rem; font-weight: 700; font-variant-numeric: tabular-nums; margin: 3px 0; }
+    .pres-value.no-data { color: #4a5568; font-size: 1rem; }
+    .pres-unit  { font-size: 0.68rem; color: #718096; }
+    .pres-delta-wrap { text-align: center; flex-shrink: 0; }
+    .pres-delta { font-size: 1.1rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+    /* Color = föhn risk level (green=safe, red=risk) */
+    .pres-delta.safe   { color: #68d391; }
+    .pres-delta.caution{ color: #f6ad55; }
+    .pres-delta.danger { color: #fc8181; }
+
+    .pres-direction { font-size: 0.7rem; color: #718096; margin-top: 2px; }
+
+    .gradient-track { height: 8px; background: #2d3748; border-radius: 4px; overflow: hidden; position: relative; margin-bottom: 8px; }
+    .gradient-fill { position: absolute; right: 0; top: 0; height: 100%; border-radius: 4px; transition: width 0.4s ease; }
+    .gradient-fill.safe   { background: #48bb78; right: auto; left: 0; }
+    .gradient-fill.caution{ background: #f6ad55; }
+    .gradient-fill.danger { background: #fc8181; }
+
+    .pres-threshold { font-size: 0.7rem; color: #4a5568; margin-bottom: 10px; }
+
+    .pres-badge {
+      display: block; text-align: center;
+      font-size: 0.72rem; font-weight: 600;
+      padding: 4px 10px; border-radius: 20px;
+    }
+    .pres-badge.safe   { background: #0d2a1a; color: #68d391; border: 1px solid #276749; }
+    .pres-badge.caution{ background: #2d2010; color: #f6ad55; border: 1px solid #744210; }
+    .pres-badge.danger { background: #2d1515; color: #fc8181; border: 1px solid #742a2a; }
+
+    /* ── Chart ───────────────────────────────────────────────────────── */
+    .chart-wrap { height: 200px; position: relative; }
+
+    /* ── Region grid ─────────────────────────────────────────────────── */
+    .region-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+      gap: 14px; margin-bottom: 28px;
+    }
+
+    .region-card {
+      background: #1a1f2e; border-radius: 10px; overflow: hidden;
+      border: 1px solid #2d3748; transition: border-color 0.2s;
+    }
+    /* Color = danger level: green=clear, red=föhn */
+    .region-card.inactive { border-color: #276749; }
+    .region-card.partial  { border-color: #744210; }
+    .region-card.active   { border-color: #742a2a; }
+    .region-card.no_data  { border-color: #2d3748; }
+
+    .region-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 16px 10px; border-bottom: 1px solid #1e2535; gap: 10px;
+    }
+    .region-name { font-size: 0.95rem; font-weight: 600; }
+    .region-desc { font-size: 0.7rem; color: #718096; margin-top: 2px; }
+
+    .region-badge {
+      font-size: 0.67rem; font-weight: 700; padding: 3px 9px;
+      border-radius: 20px; white-space: nowrap; text-transform: uppercase;
+      letter-spacing: 0.05em; flex-shrink: 0;
+    }
+    /* Colors reflect safety: green=safe, red=danger */
+    .region-badge.inactive { background: #0d2a1a; color: #68d391; border: 1px solid #276749; }
+    .region-badge.partial  { background: #2d2010; color: #f6ad55; border: 1px solid #744210; }
+    .region-badge.active   { background: #2d1515; color: #fc8181; border: 1px solid #742a2a; }
+    .region-badge.no_data  { background: #1a202c; color: #4a5568; border: 1px solid #2d3748; }
+
+    /* ── Condition rows ──────────────────────────────────────────────── */
+    .cond-list { padding: 8px 0 4px; }
+    .cond-row {
+      display: grid; grid-template-columns: 14px 1fr auto;
+      align-items: center; gap: 8px;
+      padding: 6px 16px; font-size: 0.79rem;
+      border-bottom: 1px solid #111827;
+    }
+    .cond-row:last-child { border-bottom: none; }
+    .cond-row:hover { background: #1e2535; }
+
+    /* Dot: green = no föhn signal (good); red/orange = föhn signal (concern) */
+    .cond-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+    .cond-dot.clear   { background: #48bb78; }   /* green  — not showing föhn */
+    .cond-dot.caution { background: #f6ad55; }   /* orange — showing signal, not confirmed */
+    .cond-dot.danger  { background: #fc8181; }   /* red    — confirmed föhn */
+    .cond-dot.no-data { background: #4a5568; }   /* grey   — no data */
+
+    .cond-body { min-width: 0; }
+    .cond-station { color: #e2e8f0; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .cond-rule    { font-size: 0.7rem; color: #718096; margin-top: 1px; }
+
+    .cond-actual { text-align: right; white-space: nowrap; }
+    /* Value color: red = value is in föhn range (concern); green = not in föhn range (good) */
+    .v-ok  { color: #68d391; }   /* value is NOT supporting föhn → green */
+    .v-bad { color: #f6ad55; }   /* value IS in föhn range → orange (caution, not confirmed) */
+    .v-none{ color: #4a5568; font-style: italic; }
+
+    /* ── Info footer ─────────────────────────────────────────────────── */
+    .info-box {
+      background: #111827; border: 1px solid #1e2535; border-radius: 8px;
+      padding: 12px 16px; font-size: 0.77rem; color: #718096; line-height: 1.7;
+      margin-bottom: 28px;
+    }
+    .info-box strong { color: #a0aec0; }
+
+    .loading { color: #4a5568; font-style: italic; padding: 40px 0; text-align: center; }
+    .error-msg { color: #fc8181; padding: 20px 0; }
+  </style>
+</head>
+<body>
+
+<!-- ── Navigation ──────────────────────────────────────────────────────── -->
+<nav class="top-nav">
+  <span class="nav-brand">Lenticularis</span>
+  <div class="nav-links">
+    <a href="/" class="nav-link">Map</a>
+    <a href="/stations" class="nav-link">Stations</a>
+    <a href="/rulesets" class="nav-link">Rule Sets</a>
+    <a href="/stats" class="nav-link">Statistics</a>
+    <a href="/foehn" class="nav-link active">Föhn</a>
+  </div>
+  <div class="nav-user" id="navUser"></div>
+</nav>
+
+<!-- ── Content ─────────────────────────────────────────────────────────── -->
+<div class="page-content">
+
+  <div class="page-header">
+    <h1>Föhn Tracker</h1>
+    <div class="page-meta">
+      Updated: <span id="lastUpdated">—</span>
+      &nbsp;·&nbsp; auto-refresh 5 min
+    </div>
+  </div>
+
+  <!-- Time navigation -->
+  <div class="time-nav-wrap">
+    <div class="time-nav-row">
+      <span class="time-nav-label">Mode</span>
+      <button class="tn-btn live-btn selected" id="btnLive">● Live</button>
+      <!-- day buttons filled by JS -->
+    </div>
+    <div class="time-nav-row" id="hourRow" style="display:none">
+      <span class="time-nav-label">Hour</span>
+      <!-- hour buttons filled by JS -->
+    </div>
+  </div>
+
+  <!-- Status banner -->
+  <div id="statusBanner" class="status-banner inactive">
+    <div class="banner-icon">✓</div>
+    <div>
+      <div class="banner-title inactive">Loading…</div>
+      <div class="banner-sub"></div>
+    </div>
+  </div>
+
+  <!-- Pressure + chart row -->
+  <div class="top-row">
+    <div class="card">
+      <div class="card-title">Pressure Gradient (Föhn Risk Indicator)</div>
+      <div id="pressurePanel"><p class="loading" style="font-size:0.8rem">…</p></div>
+    </div>
+    <div class="card">
+      <div class="card-title" id="chartTitle">48h Pressure Gradient OTL − JUN</div>
+      <div class="chart-wrap"><canvas id="gradientChart"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Region cards -->
+  <div class="region-grid" id="regionGrid">
+    <p class="loading">Loading…</p>
+  </div>
+
+  <div class="info-box">
+    <strong>Color coding:</strong>
+    Green = no föhn signal (safe) · Orange = partial föhn indicators (caution) · Red = föhn confirmed (danger).
+    &nbsp;<strong>Region logic:</strong> a corridor is <em>Active</em> only when <strong>all</strong> its station
+    conditions are met simultaneously. Partial = some conditions met, not all.
+    &nbsp;<strong>Pressure:</strong> OTL (south) − JUN (alpine crest) ≥ 4 hPa = föhn risk, but wind conditions must
+    also be met for confirmation.
+    &nbsp;<strong>Forecast:</strong> uses Open-Meteo ICON forecast per station — coverage may be incomplete for some SLF stations.
+  </div>
+
+</div>
+
+<script src="/static/auth.js"></script>
+<script>
+// ────────────────────────────────────────────────────────────────────────────
+// Föhn Tracker — frontend
+// ────────────────────────────────────────────────────────────────────────────
+
+const REGION_LABELS = {
+  haslital: 'Haslital', beo: 'BEO Föhn', wallis: 'Wallis',
+  reussthal: 'Reussthal', rheintal: 'Rheintal', guggi: 'Guggiföhn',
+};
+
+const PAST_OFFSETS   = [-2, -1];
+const FUTURE_OFFSETS = [0, 1, 2, 3, 4];   // Today … +4d
+const FORECAST_HOURS = [6, 9, 12, 15, 18];
+
+// ── State ────────────────────────────────────────────────────────────────────
+let _mode   = 'live';   // 'live' | 'forecast'
+let _dayOff = 0;
+let _hour   = 12;
+
+// ── Build time nav ───────────────────────────────────────────────────────────
+function buildTimeNav() {
+  const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const row  = document.querySelector('.time-nav-row');
+
+  function dayLabel(off) {
+    const d = new Date();
+    d.setDate(d.getDate() + off);
+    if (off === -2) return `${DAYS[d.getDay()]} ${d.getDate()}`;
+    if (off === -1) return 'Yesterday';
+    if (off ===  0) return 'Today';
+    if (off ===  1) return 'Tomorrow';
+    return `+${off}d ${DAYS[d.getDay()]} ${d.getDate()}`;
+  }
+
+  function addDayBtn(off) {
+    const btn = document.createElement('button');
+    btn.className = 'tn-btn';
+    btn.dataset.off = off;
+    btn.textContent = dayLabel(off);
+    btn.onclick = () => selectDay(off);
+    row.appendChild(btn);
+  }
+
+  // Past days → Live → Future days
+  for (const off of PAST_OFFSETS)   addDayBtn(off);
+  document.getElementById('btnLive').onclick = () => selectLive();
+  row.appendChild(document.getElementById('btnLive'));
+  for (const off of FUTURE_OFFSETS) addDayBtn(off);
+
+  // Hour buttons
+  const hourRow = document.getElementById('hourRow');
+  for (const h of FORECAST_HOURS) {
+    const btn = document.createElement('button');
+    btn.className = 'tn-btn' + (h === 12 ? ' selected' : '');
+    btn.dataset.hour = h;
+    btn.textContent = `${String(h).padStart(2,'0')}:00`;
+    btn.onclick = () => selectHour(h);
+    hourRow.appendChild(btn);
+  }
+}
+
+function selectLive() {
+  _mode = 'live';
+  document.getElementById('btnLive').classList.add('selected');
+  document.querySelectorAll('[data-off]').forEach(b => b.classList.remove('selected'));
+  document.getElementById('hourRow').style.display = 'none';
+  load();
+}
+
+function selectDay(off) {
+  _mode   = 'forecast';
+  _dayOff = off;
+  document.getElementById('btnLive').classList.remove('selected');
+  document.querySelectorAll('[data-off]').forEach(b =>
+    b.classList.toggle('selected', +b.dataset.off === off));
+  document.getElementById('hourRow').style.display = 'flex';
+  load();
+}
+
+function selectHour(h) {
+  _hour = h;
+  document.querySelectorAll('[data-hour]').forEach(b =>
+    b.classList.toggle('selected', +b.dataset.hour === h));
+  load();
+}
+
+function getValidTime() {
+  const d = new Date();
+  d.setDate(d.getDate() + _dayOff);
+  d.setHours(_hour, 0, 0, 0);   // local browser time
+  return d;
+}
+
+function getFoehnUrl() {
+  if (_mode === 'live') return '/api/foehn/status';
+  const vt = getValidTime();
+  const iso = encodeURIComponent(vt.toISOString());
+  // Past snapshots use actual observations; future uses forecast
+  return vt <= new Date()
+    ? `/api/foehn/observation?valid_time=${iso}`
+    : `/api/foehn/forecast?valid_time=${iso}`;
+}
+
+// ── Banner ───────────────────────────────────────────────────────────────────
+
+function renderBanner(overall, isForecast, isSnapshot) {
+  const el = document.getElementById('statusBanner');
+  const { status, active_regions, partial_regions, pressure_risk } = overall;
+  const fc = isSnapshot ? ' (Historical)' : isForecast ? ' (Forecast)' : '';
+
+  let icon, title, sub;
+  if (status === 'active') {
+    const names = active_regions.map(k => REGION_LABELS[k] || k).join(', ');
+    icon  = '▲';
+    title = `South Föhn Active${fc} — ${names}`;
+    sub   = pressure_risk
+      ? 'Pressure gradient confirms the föhn setup.'
+      : 'Wind conditions confirmed. No strong pressure gradient.';
+  } else if (status === 'risk') {
+    icon  = '⚠';
+    title = `Föhn Risk${fc} — Pressure ≥ 4 hPa`;
+    sub   = 'No valley wind confirmed yet — föhn has not broken through.';
+  } else if (status === 'partial') {
+    const names = partial_regions.map(k => REGION_LABELS[k] || k).join(', ');
+    icon  = '↗';
+    title = `Föhn Developing${fc} — ${names}`;
+    sub   = 'Some station conditions met, not all — monitor closely.';
+  } else {
+    icon  = '✓';
+    title = `No Föhn${fc} — All corridors clear`;
+    sub   = 'All station conditions are below föhn thresholds.';
+  }
+
+  el.className = `status-banner ${status}`;
+  el.innerHTML = `
+    <div class="banner-icon">${icon}</div>
+    <div class="banner-body">
+      <div class="banner-title ${status}">${title}</div>
+      <div class="banner-sub">${sub}</div>
+    </div>`;
+}
+
+// ── Pressure panel ───────────────────────────────────────────────────────────
+
+function renderPressure(p) {
+  const d = p.delta_hpa;
+  let cls = 'safe', badgeText = 'No Risk';
+  if (d != null && d >= 4)  { cls = 'danger';  badgeText = 'Föhn Risk'; }
+  else if (d != null && d >= 1) { cls = 'caution'; badgeText = 'Building'; }
+
+  const fillPct = d != null ? Math.min(Math.abs(d) / 8 * 100, 100) : 0;
+  const fmt = v => v != null ? v.toFixed(1) : '—';
+  const deltaStr = d != null ? (d > 0 ? '+' : '') + d.toFixed(1) + ' hPa' : '—';
+
+  document.getElementById('pressurePanel').innerHTML = `
+    <div class="pressure-stations">
+      <div class="pres-side">
+        <div class="pres-station-label">${p.north_label}</div>
+        <div class="pres-value ${p.north_hpa == null ? 'no-data' : ''}">${fmt(p.north_hpa)}</div>
+        <div class="pres-unit">hPa</div>
+      </div>
+      <div class="pres-delta-wrap">
+        <div class="pres-delta ${cls}">${deltaStr}</div>
+        <div class="pres-direction">OTL − JUN</div>
+      </div>
+      <div class="pres-side">
+        <div class="pres-station-label">${p.south_label}</div>
+        <div class="pres-value ${p.south_hpa == null ? 'no-data' : ''}">${fmt(p.south_hpa)}</div>
+        <div class="pres-unit">hPa</div>
+      </div>
+    </div>
+    <div class="gradient-track">
+      <div class="gradient-fill ${cls}" style="width:${fillPct}%"></div>
+    </div>
+    <div class="pres-threshold">Threshold: ≥ ${p.threshold_hpa} hPa</div>
+    <span class="pres-badge ${cls}">${badgeText}</span>`;
+}
+
+// ── Region cards ─────────────────────────────────────────────────────────────
+
+// dot color: cleared = green (no föhn), signalling = red/orange (föhn concern)
+function dotCls(cond, regionStatus) {
+  if (!cond.data_available) return 'no-data';
+  if (!cond.met)            return 'clear';           // not contributing to föhn → green
+  if (regionStatus === 'active')  return 'danger';    // confirmed föhn → red
+  return 'caution';                                   // partial signal → orange
+}
+
+// Value classes: green = not in föhn range; red = in föhn range
+function fmtDir(deg) {
+  if (deg == null) return null;
+  const n = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+  return `${n[Math.round(deg / 22.5) % 16]} ${Math.round(deg)}°`;
+}
+
+function renderCondActual(cond) {
+  if (!cond.data_available) return '<span class="v-none">no data</span>';
+
+  const noDir = cond.dir_desc === 'beliebig';
+  const dirStr = fmtDir(cond.actual_direction);
+  const spdStr = cond.actual_speed != null ? Math.round(cond.actual_speed) + ' km/h' : null;
+
+  // Red = this value is in the "föhn" zone (concern); green = safe zone
+  const dirSpan = dirStr
+    ? `<span class="${noDir ? 'v-ok' : (cond.dir_ok ? 'v-bad' : 'v-ok')}">${dirStr}</span>` : '';
+  const spdSpan = spdStr
+    ? `<span class="${cond.speed_ok ? 'v-bad' : 'v-ok'}">${spdStr}</span>` : '';
+  const sep = dirStr && spdStr ? ' / ' : '';
+
+  return dirSpan + sep + spdSpan;
+}
+
+function renderRegionCard(r) {
+  const badgeText = {
+    active:   `Active ${r.conditions_met}/${r.conditions_total}`,
+    partial:  `Partial ${r.conditions_met}/${r.conditions_total}`,
+    inactive: 'Clear',
+    no_data:  'No Data',
+  }[r.status] || r.status;
+
+  const condRows = r.conditions.map(c => {
+    const rule = c.dir_desc !== 'beliebig'
+      ? `${c.dir_desc} / >${c.speed_min} km/h`
+      : `>${c.speed_min} km/h`;
+    return `
+      <div class="cond-row">
+        <span class="cond-dot ${dotCls(c, r.status)}"></span>
+        <div class="cond-body">
+          <div class="cond-station">${c.label}</div>
+          <div class="cond-rule">${rule}</div>
+        </div>
+        <div class="cond-actual">${renderCondActual(c)}</div>
+      </div>`;
+  }).join('');
+
+  return `
+    <div class="region-card ${r.status}">
+      <div class="region-header">
+        <div>
+          <div class="region-name">${r.label}</div>
+          <div class="region-desc">${r.description}</div>
+        </div>
+        <span class="region-badge ${r.status}">${badgeText}</span>
+      </div>
+      <div class="cond-list">${condRows}</div>
+    </div>`;
+}
+
+// ── Chart ─────────────────────────────────────────────────────────────────────
+
+let _chart = null;
+
+async function loadChart(centerTime) {
+  let url = '/api/foehn/history?hours=48';
+  if (centerTime) {
+    url += `&center_time=${encodeURIComponent(centerTime.toISOString())}`;
+  }
+  let data;
+  try {
+    const res = await fetch(url);
+    data = await res.json();
+  } catch { return; }
+
+  const { south_station_id, north_station_id, rows } = data;
+
+  const byHour = {};
+  for (const r of rows) {
+    const ts = new Date(r.timestamp);
+    ts.setMinutes(0, 0, 0);
+    const key = ts.toISOString();
+    if (!byHour[key]) byHour[key] = { south: [], north: [] };
+    if (r.station_id === south_station_id) byHour[key].south.push(r.pressure_qnh);
+    if (r.station_id === north_station_id) byHour[key].north.push(r.pressure_qnh);
+  }
+
+  const labels = [], deltas = [];
+  for (const [ts, { south, north }] of Object.entries(byHour).sort()) {
+    const sA = south.length ? south.reduce((a,b) => a+b) / south.length : null;
+    const nA = north.length ? north.reduce((a,b) => a+b) / north.length : null;
+    if (sA != null && nA != null) {
+      const d = new Date(ts);
+      labels.push(
+        d.toLocaleDateString('en-CH', { weekday: 'short', month: 'numeric', day: 'numeric' }) + ' '
+        + d.toLocaleTimeString('en-CH', { hour: '2-digit', minute: '2-digit' })
+      );
+      deltas.push(+(sA - nA).toFixed(2));
+    }
+  }
+
+  const ctx = document.getElementById('gradientChart');
+  if (!ctx) return;
+  if (_chart) _chart.destroy();
+
+  // Green = safe (<1 hPa), amber = building (1–4), red = risk (≥4)
+  const pointColors = deltas.map(d => d >= 4 ? '#fc8181' : d >= 1 ? '#f6ad55' : '#68d391');
+
+  _chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'OTL − JUN (hPa)',
+        data: deltas,
+        borderColor: '#718096',
+        backgroundColor: 'rgba(113,128,150,0.06)',
+        pointBackgroundColor: pointColors,
+        pointRadius: 3,
+        borderWidth: 1.5,
+        tension: 0.3,
+        fill: true,
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: c => `Δ ${c.parsed.y >= 0 ? '+' : ''}${c.parsed.y.toFixed(2)} hPa`,
+          },
+        },
+      },
+      scales: {
+        x: { ticks: { color: '#718096', maxTicksLimit: 8, font: { size: 10 } }, grid: { color: '#1a2035' } },
+        y: {
+          ticks: { color: '#718096', font: { size: 11 } }, grid: { color: '#1a2035' },
+          title: { display: true, text: 'Δ hPa (OTL − JUN)', color: '#4a5568', font: { size: 10 } },
+        },
+      },
+    },
+  });
+}
+
+// ── Main ──────────────────────────────────────────────────────────────────────
+
+async function load() {
+  let data;
+  try {
+    const url = getFoehnUrl();
+    const res = await fetch(url);
+    data = await res.json();
+  } catch (e) {
+    document.getElementById('regionGrid').innerHTML =
+      `<p class="error-msg">Error loading data: ${e.message}</p>`;
+    return;
+  }
+
+  const isForecast = !!data.is_forecast;
+  const isSnapshot = !!data.is_snapshot;
+
+  // Update chart title
+  let chartSuffix = ' (last 48h)';
+  if (_mode !== 'live') {
+    const noon = new Date();
+    noon.setDate(noon.getDate() + _dayOff);
+    const label = noon.toLocaleDateString('en-CH', { weekday: 'short', month: 'numeric', day: 'numeric' });
+    chartSuffix = ` (±24h around ${label} 12:00)`;
+  }
+  document.getElementById('chartTitle').textContent = `48h Pressure Gradient OTL − JUN${chartSuffix}`;
+
+  // Update meta
+  let ts;
+  if (isSnapshot) {
+    ts = `Historical — ${new Date(data.valid_time).toLocaleString('en-CH', {weekday:'short', month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'})}`;
+  } else if (isForecast) {
+    ts = `Forecast for ${new Date(data.valid_time).toLocaleString('en-CH', {weekday:'short', month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'})}`;
+  } else {
+    ts = `Live — ${new Date(data.assessed_at).toLocaleTimeString('en-CH', { hour: '2-digit', minute: '2-digit' })}`;
+  }
+  document.getElementById('lastUpdated').textContent = ts;
+
+  renderBanner(data.overall, isForecast || isSnapshot, isSnapshot);
+  renderPressure(data.pressure);
+  document.getElementById('regionGrid').innerHTML = data.regions.map(renderRegionCard).join('');
+
+  // Chart always centers on noon of the selected day (or now for live)
+  if (_mode === 'live') {
+    loadChart(null);
+  } else {
+    const noon = new Date();
+    noon.setDate(noon.getDate() + _dayOff);
+    noon.setHours(12, 0, 0, 0);
+    loadChart(noon);
+  }
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+
+buildTimeNav();
+load();
+setInterval(() => { if (_mode === 'live') load(); }, 5 * 60 * 1000);
+</script>
+
+</body>
+</html>

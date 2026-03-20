@@ -245,13 +245,15 @@
       letter-spacing: 0.05em;
       vertical-align: middle;
     }
-    .network-meteoswiss { background: #2a4365; color: #90cdf4; }
-    .network-metar      { background: #2f855a; color: #c6f6d5; }
-    .network-holfuy     { background: #22543d; color: #9ae6b4; }
-    .network-slf        { background: #44337a; color: #d6bcfa; }
-    .network-windline   { background: #1f4e5f; color: #b2f5ea; }
-    .network-ecovitt    { background: #7b341e; color: #fbd38d; }
-    .network-unknown    { background: #2d3748; color: #a0aec0; }
+    .network-meteoswiss  { background: #2a4365; color: #90cdf4; }
+    .network-metar       { background: #2f855a; color: #c6f6d5; }
+    .network-holfuy      { background: #22543d; color: #9ae6b4; }
+    .network-slf         { background: #44337a; color: #d6bcfa; }
+    .network-windline    { background: #1f4e5f; color: #b2f5ea; }
+    .network-ecovitt     { background: #7b341e; color: #fbd38d; }
+    .network-wunderground{ background: #5c3a00; color: #f6ad55; }
+    .network-foehn       { background: #44271a; color: #f6ad55; }
+    .network-unknown     { background: #2d3748; color: #a0aec0; }
 
     /* Condition breakdown in ruleset popups */
     .popup-cond-header {
@@ -283,6 +285,7 @@
     <a href="/stations" class="nav-link">Stations</a>
     <a href="/rulesets" class="nav-link">Rule Sets</a>
     <a href="/stats" class="nav-link">Statistics</a>
+    <a href="/foehn" class="nav-link">Föhn</a>
   </div>
   <div class="nav-status">
     <span class="dot grey" id="dbDot"></span>
@@ -385,9 +388,7 @@ function tnInitLabels() {
   const now = new Date();
   for (let off = -3; off <= 5; off++) {
     const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) + off * 86400000);
-    const label = off === 0
-      ? `${DOW[d.getUTCDay()]} ${d.getUTCDate()} ${MON[d.getUTCMonth()]}`
-      : `${DOW[d.getUTCDay()]} ${d.getUTCDate()} ${MON[d.getUTCMonth()]}`;
+    const label = `${DOW[d.getUTCDay()]} ${d.getUTCDate()} ${MON[d.getUTCMonth()]}`;
     const key = off < 0 ? `m${-off}` : `${off}`;
     const el = document.getElementById(`tnLabel_${key}`);
     if (el) el.textContent = label;
@@ -411,11 +412,10 @@ function tnGoLive() {
 }
 
 // Returns the forecast_hours needed to cover a given day offset from today.
-// Past days don't need forecast; today and future days do.
 function tnForecastHours(offset) {
-  if (offset === null || offset < 0) return 0;    // past days: no forecast needed
-  if (offset === 0) return 36;                    // today: cover rest of today + buffer
-  return Math.min(120, (offset + 1) * 24 + 12);  // future: +12h buffer to cover full day
+  if (offset === null || offset < 0) return 0;
+  if (offset === 0) return 36;
+  return Math.min(120, (offset + 1) * 24 + 12);
 }
 
 // -- Day selection -----------------------------------------------------------
@@ -442,16 +442,7 @@ async function tnSelectDay(offset) {
     : { start, end, include_forecast: false };
   try { await _mapReplay.load(loadParams); } catch(err) { console.error('Time nav load error:', err); }
 
-  if (offset === 0) {
-    // "Now" — default to the most recent (latest) frame
-    _mapReplay.seekLast();
-  } else if (offset > 0) {
-    // Future day — default to noon
-    tnSeekToHour(12);
-  } else {
-    // Past day — default to noon
-    tnSeekToHour(12);
-  }
+  tnSeekToHour(12);
 }
 
 function tnToggleCustom() {
@@ -485,7 +476,6 @@ async function tnSelectCustomDate() {
   stopLiveRefresh();
   document.getElementById('tnHourRow').style.display = 'block';
   const [start, end] = tnDayBounds(null, val);
-  // Determine if the custom date is in the future and how much forecast is needed
   const customDayStart = new Date(val + 'T00:00:00Z');
   const daysAhead = Math.ceil((customDayStart - new Date()) / 86400000);
   const fh = tnForecastHours(daysAhead);
@@ -577,13 +567,6 @@ tnInitLabels();
 
   function decisionColor(d) { return DC[d] ?? DC.null; }
 
-  function bestLanding(landingDecisions) {
-    for (const c of ['green', 'orange', 'red']) {
-      if (landingDecisions.some(d => d.decision === c)) return c;
-    }
-    return null;
-  }
-
   // ── Marker icons ────────────────────────────────────────────────────────
   function launchIcon(launchColor, haloColor) {
     const lc = decisionColor(launchColor);
@@ -627,8 +610,8 @@ tnInitLabels();
 
   function condThreshold(cr) {
     const u = FIELD_UNIT[cr.field] || '';
-    if (cr.operator === 'between')           return `${cr.value_a}–${cr.value_b} ${u}`;
-    if (cr.operator === 'not_between')       return `not ${cr.value_a}–${cr.value_b} ${u}`;
+    if (cr.operator === 'between')            return `${cr.value_a}–${cr.value_b} ${u}`;
+    if (cr.operator === 'not_between')        return `not ${cr.value_a}–${cr.value_b} ${u}`;
     if (cr.operator === 'in_direction_range') return `${cr.value_a}°–${cr.value_b}°`;
     return `${cr.operator} ${cr.value_a} ${u}`;
   }
@@ -645,7 +628,6 @@ tnInitLabels();
   function buildConditionRows(condResults) {
     if (!condResults || condResults.length === 0) return '';
 
-    // Group conditions by group_id
     const groups = {};
     const standalone = [];
     for (const cr of condResults) {
@@ -734,7 +716,6 @@ tnInitLabels();
       const positioned = rulesets.filter(rs => rs.lat != null && rs.lon != null);
       if (positioned.length === 0) return;
 
-      // Evaluate all in parallel
       const evaluations = await Promise.allSettled(
         positioned.map(rs => fetchAuth(`/api/rulesets/${rs.id}/evaluate`).then(r => r.ok ? r.json() : null))
       );

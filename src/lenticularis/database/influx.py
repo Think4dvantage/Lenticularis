@@ -11,7 +11,7 @@ Provides:
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from influxdb_client import InfluxDBClient, Point
@@ -176,6 +176,214 @@ from(bucket: "{self._cfg.bucket}")
                     if k not in results[sid] or (results[sid][k] is None and v is not None):
                         results[sid][k] = v
         return results
+
+    # ------------------------------------------------------------------
+    # Query — latest measurements for a specific set of stations (föhn)
+    # ------------------------------------------------------------------
+
+    def query_latest_for_stations(self, station_ids: list[str]) -> dict[str, dict]:
+        """Return the most-recent measurement for each station in ``station_ids``.
+
+        Returns a dict keyed by ``station_id``. Only stations that have written
+        data in the last 2 hours are included.
+        """
+        if not station_ids:
+            return {}
+        ids_literal = '["' + '", "'.join(station_ids) + '"]'
+        flux = f"""
+from(bucket: "{self._cfg.bucket}")
+  |> range(start: -2h)
+  |> filter(fn: (r) => r._measurement == "{MEASUREMENT_WEATHER}")
+  |> filter(fn: (r) => contains(value: r.station_id, set: {ids_literal}))
+  |> last()
+  |> pivot(rowKey: ["_time", "station_id", "network"], columnKey: ["_field"], valueColumn: "_value")
+"""
+        try:
+            tables = self._query_api.query(flux, org=self._cfg.org)
+        except Exception as exc:
+            logger.error("InfluxDB query_latest_for_stations error: %s", exc)
+            return {}
+
+        results: dict[str, dict] = {}
+        for table in tables:
+            for record in table.records:
+                sid = record.values.get("station_id", "")
+                if not sid:
+                    continue
+                entry: dict = {
+                    "station_id": sid,
+                    "timestamp": record.get_time(),
+                }
+                entry.update({
+                    k: v for k, v in record.values.items()
+                    if not k.startswith("_") and k not in ("result", "table", "station_id", "network")
+                })
+                results[sid] = entry
+        return results
+
+    def query_observation_snapshot_for_stations(self, station_ids: list[str], valid_time: datetime) -> dict[str, dict]:
+        """Fetch observed weather for specific stations at ``valid_time``.
+
+        Scans ±30 minutes around ``valid_time`` in ``weather_data`` and returns
+        the last record per station (closest to the requested time).
+        """
+        if not station_ids:
+            return {}
+        ids_literal = '["' + '", "'.join(station_ids) + '"]'
+        start = (valid_time - timedelta(minutes=30)).isoformat()
+        stop  = (valid_time + timedelta(minutes=31)).isoformat()
+        flux = f"""
+from(bucket: "{self._cfg.bucket}")
+  |> range(start: {start}, stop: {stop})
+  |> filter(fn: (r) => r._measurement == "{MEASUREMENT_WEATHER}")
+  |> filter(fn: (r) => contains(value: r.station_id, set: {ids_literal}))
+  |> last()
+  |> pivot(rowKey: ["_time", "station_id", "network"], columnKey: ["_field"], valueColumn: "_value")
+"""
+        try:
+            tables = self._query_api.query(flux, org=self._cfg.org)
+        except Exception as exc:
+            logger.error("InfluxDB query_observation_snapshot_for_stations error: %s", exc)
+            return {}
+
+        results: dict[str, dict] = {}
+        for table in tables:
+            for record in table.records:
+                sid = record.values.get("station_id", "")
+                if not sid:
+                    continue
+                entry: dict = {
+                    "station_id": sid,
+                    "timestamp": record.get_time(),
+                }
+                entry.update({
+                    k: v for k, v in record.values.items()
+                    if not k.startswith("_") and k not in ("result", "table", "station_id", "network")
+                })
+                results[sid] = entry
+        return results
+
+    def query_forecast_snapshot_for_stations(self, station_ids: list[str], valid_time: datetime) -> dict[str, dict]:
+        """Fetch the most recent forecast for specific stations at ``valid_time``.
+
+        Scans ±30 minutes around ``valid_time`` in ``weather_forecast`` and returns
+        the last written record per station (= newest init_time = freshest model run).
+        Returns a dict keyed by ``station_id`` with the same field shape as
+        ``query_latest_for_stations``.
+        """
+        if not station_ids:
+            return {}
+        ids_literal = '["' + '", "'.join(station_ids) + '"]'
+        start = (valid_time - timedelta(minutes=30)).isoformat()
+        stop  = (valid_time + timedelta(minutes=31)).isoformat()
+        flux = f"""
+from(bucket: "{self._cfg.bucket}")
+  |> range(start: {start}, stop: {stop})
+  |> filter(fn: (r) => r._measurement == "{MEASUREMENT_FORECAST}")
+  |> filter(fn: (r) => contains(value: r.station_id, set: {ids_literal}))
+  |> last()
+  |> pivot(rowKey: ["_time", "station_id", "network", "model"],
+           columnKey: ["_field"], valueColumn: "_value")
+"""
+        try:
+            tables = self._query_api.query(flux, org=self._cfg.org)
+        except Exception as exc:
+            logger.error("InfluxDB query_forecast_snapshot_for_stations error: %s", exc)
+            return {}
+
+        results: dict[str, dict] = {}
+        for table in tables:
+            for record in table.records:
+                sid = record.values.get("station_id", "")
+                if not sid:
+                    continue
+                entry: dict = {
+                    "station_id":  sid,
+                    "timestamp":   record.get_time(),
+                    "is_forecast": True,
+                }
+                entry.update({
+                    k: v for k, v in record.values.items()
+                    if not k.startswith("_")
+                    and k not in ("result", "table", "station_id", "network", "model", "init_time")
+                })
+                # Keep the entry with the most fields (newest init_time written last)
+                if sid not in results or len(entry) > len(results[sid]):
+                    results[sid] = entry
+        return results
+
+    def query_foehn_pressure_history(
+        self, station_ids: list[str], hours: int = 48, center_time: Optional[datetime] = None
+    ) -> list[dict]:
+        """Return hourly-averaged ``pressure_qnh`` per station for a ±(hours/2) window.
+
+        ``center_time=None`` → live mode: show the last ``hours`` hours ending now.
+        ``center_time`` set   → show ``hours/2`` before and after that moment,
+                                using observed data for the past half and forecast
+                                data (``weather_forecast``) for any future half.
+        Each row: ``{station_id, timestamp, pressure_qnh}``.
+        """
+        if not station_ids:
+            return []
+        ids_literal = '["' + '", "'.join(station_ids) + '"]'
+        now = datetime.now(timezone.utc)
+        half = hours // 2
+
+        if center_time is None:
+            obs_start = now - timedelta(hours=hours)
+            obs_stop  = now
+            fc_start  = None
+            fc_stop   = None
+        else:
+            window_start = center_time - timedelta(hours=half)
+            window_stop  = center_time + timedelta(hours=half)
+            # Observations cover the past portion of the window
+            obs_start = window_start
+            obs_stop  = min(window_stop, now)
+            # Forecasts cover the future portion of the window (if any)
+            if window_stop > now:
+                fc_start = max(window_start, now)
+                fc_stop  = window_stop
+            else:
+                fc_start = None
+                fc_stop  = None
+
+        def _flux_pressure(measurement: str, start: datetime, stop: datetime) -> str:
+            s = start.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            e = stop.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            return f"""
+from(bucket: "{self._cfg.bucket}")
+  |> range(start: {s}, stop: {e})
+  |> filter(fn: (r) => r._measurement == "{measurement}")
+  |> filter(fn: (r) => contains(value: r.station_id, set: {ids_literal}))
+  |> filter(fn: (r) => r._field == "pressure_qnh")
+  |> aggregateWindow(every: 1h, fn: mean, createEmpty: false)
+  |> sort(columns: ["_time"])
+"""
+
+        rows: list[dict] = []
+
+        def _run(flux: str, label: str) -> None:
+            try:
+                for table in self._query_api.query(flux, org=self._cfg.org):
+                    for record in table.records:
+                        sid = record.values.get("station_id", "")
+                        val = record.get_value()
+                        if sid and val is not None:
+                            rows.append({
+                                "station_id":   sid,
+                                "timestamp":    record.get_time(),
+                                "pressure_qnh": val,
+                            })
+            except Exception as exc:
+                logger.error("InfluxDB query_foehn_pressure_history %s error: %s", label, exc)
+
+        if obs_start < obs_stop:
+            _run(_flux_pressure(MEASUREMENT_WEATHER, obs_start, obs_stop), "obs")
+        if fc_start:
+            _run(_flux_pressure(MEASUREMENT_FORECAST, fc_start, fc_stop), "fc")
+
+        return sorted(rows, key=lambda r: r["timestamp"])
 
     # ------------------------------------------------------------------
     # Query — history (last N hours)
@@ -748,6 +956,57 @@ from(bucket: "{self._cfg.bucket}")
             except (ValueError, IndexError):
                 continue
         return total if found else None
+
+    # ------------------------------------------------------------------
+    # Föhn status — write & query
+    # ------------------------------------------------------------------
+
+    def write_foehn_status(self, regions: list[dict], pressure: dict) -> None:
+        """Write evaluated föhn region statuses to ``weather_data`` as virtual stations.
+
+        Each region becomes one Point with station_id ``foehn-<key>`` and
+        field ``foehn_active`` (1.0=active, 0.5=partial, 0.0=inactive, -1.0=no_data).
+
+        An ``foehn-overall`` point is also written with the aggregate status.
+        These virtual stations behave like real stations in the rule evaluator —
+        pilots select them by name and use field ``foehn_active`` in conditions.
+        """
+        from lenticularis.foehn_detection import STATUS_TO_NUMERIC
+
+        now_ts = int(datetime.now(timezone.utc).timestamp())
+        points: list[Point] = []
+
+        for r in regions:
+            active_val = STATUS_TO_NUMERIC.get(r["status"], -1.0)
+            points.append(
+                Point(MEASUREMENT_WEATHER)
+                .tag("station_id", f"foehn-{r['key']}")
+                .tag("network", "foehn")
+                .field("foehn_active", active_val)
+                .time(now_ts, "s")
+            )
+
+        # Overall point
+        if any(r["status"] == "active" for r in regions):
+            overall_val = 1.0
+        elif any(r["status"] == "partial" for r in regions):
+            overall_val = 0.5
+        else:
+            overall_val = 0.0
+        points.append(
+            Point(MEASUREMENT_WEATHER)
+            .tag("station_id", "foehn-overall")
+            .tag("network", "foehn")
+            .field("foehn_active", overall_val)
+            .time(now_ts, "s")
+        )
+
+        try:
+            self._write_api.write(bucket=self._cfg.bucket, org=self._cfg.org, record=points)
+            logger.debug("Wrote %d foehn virtual-station points", len(points))
+        except Exception as exc:
+            logger.error("InfluxDB write_foehn_status error: %s", exc)
+            raise
 
     # ------------------------------------------------------------------
     # Lifecycle

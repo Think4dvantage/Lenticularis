@@ -27,6 +27,12 @@ L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
 }).addTo(map);
 
 // ---------------------------------------------------------------------------
+// Networks considered "personal" (community/hobbyist stations).
+// Markers get a visual flag and can be toggled off.
+// ---------------------------------------------------------------------------
+const PERSONAL_NETWORKS = new Set(['wunderground', 'ecowitt']);
+
+// ---------------------------------------------------------------------------
 // Marker colours per network (used in popups)
 // ---------------------------------------------------------------------------
 const NETWORK_COLOR = {
@@ -70,17 +76,49 @@ function markerSize(gust) {
 }
 
 // ---------------------------------------------------------------------------
+// Weather-condition indicator SVG helpers
+// These are rendered below the main 32×32 arrow area in an extended viewBox.
+// ---------------------------------------------------------------------------
+
+// Cloud shape: three overlapping circles + white rect to flatten the base.
+// yTop is the viewBox y-coordinate where the cloud begins (typically 33).
+function _cloudSvg(yTop) {
+  const cY = yTop + 8; // vertical centre of the cloud body
+  return `<g opacity="0.92">
+    <circle cx="11" cy="${cY - 1}" r="4"   fill="white" stroke="#90cdf4" stroke-width="1.2"/>
+    <circle cx="17" cy="${cY - 4}" r="4.8" fill="white" stroke="#90cdf4" stroke-width="1.2"/>
+    <circle cx="22" cy="${cY - 1}" r="3.5" fill="white" stroke="#90cdf4" stroke-width="1.2"/>
+    <rect x="7" y="${cY}" width="18" height="5" fill="white"/>
+    <line x1="7" y1="${cY + 4}" x2="25" y2="${cY + 4}" stroke="#90cdf4" stroke-width="1.2"/>
+  </g>`;
+}
+
+// Three rain-drop ellipses centred at yCentre (middle drop is 2px lower).
+function _dropsSvg(yCentre) {
+  return `<g fill="#4299e1" opacity="0.85">
+    <ellipse cx="10" cy="${yCentre}"     rx="1.8" ry="3"/>
+    <ellipse cx="16" cy="${yCentre + 2}" rx="1.8" ry="3"/>
+    <ellipse cx="22" cy="${yCentre}"     rx="1.8" ry="3"/>
+  </g>`;
+}
+
+// ---------------------------------------------------------------------------
 // Marker icon — directional arrow (tip points where wind travels TO),
 // rotated by wind_direction, coloured + sized by wind_gust / wind_speed.
 // Dark outline ensures visibility against the light OpenTopoMap background.
+// If the station reports precipitation or near-100% humidity, weather
+// condition icons are appended below the arrow in an extended SVG viewBox.
 // ---------------------------------------------------------------------------
 function markerIcon(station) {
-  const m      = station.latest || {};
-  const gust   = m.wind_gust ?? m.wind_speed;
-  const color  = windSpeedColor(gust);
-  const dir    = m.wind_direction ?? 0;
-  const hasDir = m.wind_direction != null;
-  const size   = markerSize(gust);
+  const m          = station.latest || {};
+  const gust       = m.wind_gust ?? m.wind_speed;
+  const color      = windSpeedColor(gust);
+  const dir        = m.wind_direction ?? 0;
+  const hasDir     = m.wind_direction != null;
+  const size       = markerSize(gust);
+  const isPersonal = PERSONAL_NETWORKS.has(station.network);
+  // Personal stations get an amber center dot so they're visually distinct
+  const centerFill = isPersonal ? '#f6ad55' : 'white';
 
   const arrow = hasDir
     ? `<g transform="rotate(${dir},16,16)">
@@ -94,15 +132,37 @@ function markerIcon(station) {
     : `<circle cx="16" cy="16" r="5" fill="${color}"
                stroke="white" stroke-width="2"/>`;
 
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 32 32">
+  // Weather condition indicators — appear below the arrow area
+  const hasPrecip = m.precipitation != null && m.precipitation > 0;
+  const hasCloud  = m.humidity      != null && m.humidity >= 90;
+
+  // extraH extends the 32-unit viewBox downward; pixel height scales with size
+  let extraH     = 0;
+  let weatherSvg = '';
+  if (hasCloud && hasPrecip) {
+    extraH     = 24;
+    weatherSvg = _cloudSvg(33) + _dropsSvg(50);
+  } else if (hasCloud) {
+    extraH     = 14;
+    weatherSvg = _cloudSvg(33);
+  } else if (hasPrecip) {
+    extraH     = 14;
+    weatherSvg = _dropsSvg(38);
+  }
+
+  const vbH = 32 + extraH;
+  const pxH = size + Math.round(size * extraH / 32);
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${pxH}" viewBox="0 0 32 ${vbH}">
     ${arrow}
-    <circle cx="16" cy="16" r="3.5" fill="white" stroke="rgba(0,0,0,0.5)" stroke-width="1"/>
+    <circle cx="16" cy="16" r="3.5" fill="${centerFill}" stroke="rgba(0,0,0,0.5)" stroke-width="1"/>
+    ${weatherSvg}
   </svg>`;
 
   return L.divIcon({
     html: svg,
     className: '',
-    iconSize:    [size, size],
+    iconSize:    [size, pxH],
     iconAnchor:  [size / 2, size / 2],
     popupAnchor: [0, -(size / 2 + 4)],
   });
@@ -174,9 +234,133 @@ function buildPopup(s) {
 }
 
 // ---------------------------------------------------------------------------
+// Föhn station marker icon — badge shape coloured by foehn_active value
+// ---------------------------------------------------------------------------
+const FOEHN_ABBR = {
+  haslital:  'HS',
+  beo:       'BEO',
+  wallis:    'WL',
+  reussthal: 'RS',
+  rheintal:  'RT',
+  guggi:     'GG',
+  overall:   '∑',
+};
+
+function foehnStatusColor(foehnActive) {
+  if (foehnActive == null || foehnActive < -0.5) return '#a0aec0'; // grey = no data
+  if (foehnActive >= 0.9) return '#fc8181';  // red = active
+  if (foehnActive >= 0.4) return '#f6ad55';  // orange = partial
+  return '#68d391';                           // green = inactive
+}
+
+function foehnMarkerIcon(station) {
+  const m = station.latest || {};
+  const active = m.foehn_active ?? null;
+  const color  = foehnStatusColor(active);
+
+  // Extract region key from station_id like "foehn-haslital" → "haslital"
+  const key  = (station.station_id || '').replace(/^foehn-/, '');
+  const abbr = FOEHN_ABBR[key] || '?';
+
+  // Compact hexagonal/badge SVG: 40×44 px viewBox, flat-topped hexagon with text
+  const isOverall = key === 'overall';
+  const size = isOverall ? 32 : 26;
+  const fontSize = abbr.length > 2 ? 9 : 11;
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 40 40">
+    <rect x="2" y="2" width="36" height="36" rx="8" ry="8"
+          fill="${color}" stroke="rgba(0,0,0,0.55)" stroke-width="2"/>
+    <rect x="4" y="4" width="32" height="32" rx="6" ry="6"
+          fill="none" stroke="rgba(255,255,255,0.35)" stroke-width="1"/>
+    <text x="20" y="24" text-anchor="middle" dominant-baseline="middle"
+          font-family="sans-serif" font-size="${fontSize}" font-weight="700"
+          fill="white" stroke="rgba(0,0,0,0.4)" stroke-width="0.6">${abbr}</text>
+  </svg>`;
+
+  return L.divIcon({
+    html: svg,
+    className: '',
+    iconSize:    [size, size],
+    iconAnchor:  [size / 2, size / 2],
+    popupAnchor: [0, -(size / 2 + 4)],
+  });
+}
+
+function buildFoehnPopup(station) {
+  const m      = station.latest || {};
+  const active = m.foehn_active ?? null;
+  const color  = foehnStatusColor(active);
+  const badge  = `<span class="network-badge network-foehn">foehn</span>`;
+
+  let statusLabel;
+  if (active == null || active < -0.5) statusLabel = 'No data';
+  else if (active >= 0.9)              statusLabel = 'Active';
+  else if (active >= 0.4)              statusLabel = 'Partial';
+  else                                 statusLabel = 'Inactive';
+
+  const age    = _ageLabel(m.timestamp);
+  const ageCls = _ageCssClass(m.timestamp);
+
+  return `
+    <div class="popup-name">${station.name}</div>
+    <div class="popup-meta">${badge} <span class="freshness ${ageCls}">${age || '—'}</span></div>
+    <div class="popup-row">
+      <span>Status</span>
+      <span style="color:${color};font-weight:600">${statusLabel}</span>
+    </div>
+    <a class="popup-link" href="/foehn">Föhn dashboard →</a>
+  `;
+}
+
+// ---------------------------------------------------------------------------
+// Marker layers — professional stations always visible; personal toggleable
+// ---------------------------------------------------------------------------
+const markerLayer    = L.layerGroup().addTo(map);  // professional + foehn
+const _personalLayer = L.layerGroup().addTo(map);  // wunderground, ecowitt, …
+let   _showPersonal  = true;
+
+// Leaflet control: "personal stations" toggle button
+const _PersonalToggle = L.Control.extend({
+  onAdd() {
+    const btn = L.DomUtil.create('button');
+    Object.assign(btn.style, {
+      background: '#1a1f2e',
+      border: '1px solid #2d3748',
+      borderRadius: '6px',
+      color: '#f6ad55',
+      cursor: 'pointer',
+      fontSize: '0.78rem',
+      fontFamily: 'inherit',
+      fontWeight: '500',
+      padding: '5px 10px',
+      lineHeight: '1.4',
+      boxShadow: '0 1px 4px rgba(0,0,0,0.4)',
+      whiteSpace: 'nowrap',
+    });
+    btn.title = 'Toggle personal weather stations (Wunderground, Ecowitt, …)';
+    function update() {
+      btn.textContent = _showPersonal ? '⚠ Personal stations: ON' : '⚠ Personal stations: OFF';
+      btn.style.opacity = _showPersonal ? '1' : '0.55';
+    }
+    update();
+    L.DomEvent.on(btn, 'click', L.DomEvent.stopPropagation);
+    L.DomEvent.on(btn, 'click', () => {
+      _showPersonal = !_showPersonal;
+      if (_showPersonal) {
+        _personalLayer.addTo(map);
+      } else {
+        map.removeLayer(_personalLayer);
+      }
+      update();
+    });
+    return btn;
+  },
+});
+new _PersonalToggle({ position: 'topright' }).addTo(map);
+
+// ---------------------------------------------------------------------------
 // Load stations and place markers
 // ---------------------------------------------------------------------------
-const markerLayer = L.layerGroup().addTo(map);
 
 // Exposed globally so ruleset popup builders can resolve station names
 window._lentiStationsMap = {};
@@ -193,13 +377,19 @@ async function loadStations() {
     for (const s of stations) window._lentiStationsMap[s.station_id] = s;
 
     markerLayer.clearLayers();
+    _personalLayer.clearLayers();
 
     let placed = 0;
     for (const s of stations) {
       if (s.latitude == null || s.longitude == null) continue;
-      L.marker([s.latitude, s.longitude], { icon: markerIcon(s) })
-        .addTo(markerLayer)
-        .bindPopup(buildPopup(s), { maxWidth: 260 });
+      const isFoehn   = s.network === 'foehn';
+      const isPersonal = PERSONAL_NETWORKS.has(s.network);
+      const icon  = isFoehn ? foehnMarkerIcon(s) : markerIcon(s);
+      const popup = isFoehn ? buildFoehnPopup(s) : buildPopup(s);
+      const layer = isPersonal ? _personalLayer : markerLayer;
+      L.marker([s.latitude, s.longitude], { icon })
+        .addTo(layer)
+        .bindPopup(popup, { maxWidth: 260 });
       placed++;
     }
 
@@ -238,12 +428,18 @@ startLiveRefresh();
 // ---------------------------------------------------------------------------
 function applyReplaySnapshot(stations) {
   markerLayer.clearLayers();
+  _personalLayer.clearLayers();
   let placed = 0;
   for (const s of stations) {
     if (s.latitude == null || s.longitude == null) continue;
-    L.marker([s.latitude, s.longitude], { icon: markerIcon(s) })
-      .addTo(markerLayer)
-      .bindPopup(buildPopup(s), { maxWidth: 260 });
+    const isFoehn    = s.network === 'foehn';
+    const isPersonal = PERSONAL_NETWORKS.has(s.network);
+    const icon  = isFoehn ? foehnMarkerIcon(s) : markerIcon(s);
+    const popup = isFoehn ? buildFoehnPopup(s) : buildPopup(s);
+    const layer = isPersonal ? _personalLayer : markerLayer;
+    L.marker([s.latitude, s.longitude], { icon })
+      .addTo(layer)
+      .bindPopup(popup, { maxWidth: 260 });
     placed++;
   }
   return placed;

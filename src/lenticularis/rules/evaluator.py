@@ -72,6 +72,9 @@ FIELD_MAP: dict[str, str] = {
     "pressure_delta": "pressure_qnh",
     "precipitation":  "precipitation",
     "snow_depth":     "snow_depth",
+    # Föhn virtual stations (station_id = "foehn-<region>", e.g. "foehn-haslital").
+    # Active=1.0, partial=0.5, inactive=0.0, no_data=-1.0.
+    "foehn_active":   "foehn_active",
 }
 
 COLOUR_RANK: dict[str, int] = {"green": 0, "orange": 1, "red": 2}
