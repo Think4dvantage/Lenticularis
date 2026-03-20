@@ -222,6 +222,10 @@
     .nav-user-name { font-size: 0.85rem; color: #90cdf4; }
     .nav-btn { background: transparent; border: 1px solid #4a5568; color: #a0aec0; font-size: 0.8rem; padding: 4px 10px; border-radius: 5px; cursor: pointer; transition: background 0.15s; }
     .nav-btn:hover { background: #2d3748; color: #e2e8f0; }
+    #navLangPicker { display: flex; gap: 2px; margin-left: 8px; }
+    .lang-btn { background: transparent; border: 1px solid #4a5568; color: #718096; font-size: 0.72rem; padding: 3px 7px; border-radius: 4px; cursor: pointer; transition: background 0.15s; }
+    .lang-btn:hover { background: #2d3748; color: #e2e8f0; }
+    .lang-btn.active { background: #2d4a6e; color: #90cdf4; border-color: #4a7bab; }
   </style>
 </head>
 <body>
@@ -229,24 +233,25 @@
 <nav class="top-nav">
   <span class="nav-brand">🪁 Lenticularis</span>
   <div class="nav-links">
-    <a href="/" class="nav-link">Map</a>
-    <a href="/stations" class="nav-link active">Stations</a>
-    <a href="/rulesets" class="nav-link">Rule Sets</a>
-    <a href="/stats" class="nav-link">Statistics</a>
-    <a href="/foehn" class="nav-link">Föhn</a>
+    <a href="/" class="nav-link" data-i18n="nav.map">Map</a>
+    <a href="/stations" class="nav-link active" data-i18n="nav.stations">Stations</a>
+    <a href="/rulesets" class="nav-link" data-i18n="nav.rulesets">Rule Sets</a>
+    <a href="/stats" class="nav-link" data-i18n="nav.stats">Statistics</a>
+    <a href="/foehn" class="nav-link" data-i18n="nav.foehn">Föhn</a>
   </div>
   <div class="nav-status">
     <span class="dot grey" id="dbDot"></span>
-    <span id="dbLabel">Connecting…</span>
+    <span id="dbLabel" data-i18n="nav.connecting">Connecting…</span>
     <span id="lastRefresh"></span>
   </div>
+  <div id="navLangPicker"></div>
   <div class="nav-user" id="navUser"></div>
 </nav>
 
 <div class="toolbar">
-  <input type="text" id="searchInput" placeholder="Search station or canton…" />
+  <input type="text" id="searchInput" data-i18n-placeholder="stations.search_placeholder" placeholder="Search station or canton…" />
   <select id="networkFilter">
-    <option value="">All networks</option>
+    <option value="" data-i18n="stations.all_networks">All networks</option>
     <option value="meteoswiss">MeteoSwiss</option>
     <option value="holfuy">Holfuy</option>
     <option value="slf">SLF</option>
@@ -256,34 +261,34 @@
     <option value="wunderground">Wunderground</option>
     <option value="foehn">Föhn</option>
   </select>
-  <button class="refresh-btn" id="refreshBtn" onclick="loadStations()">↻ Refresh</button>
+  <button class="refresh-btn" id="refreshBtn" onclick="loadStations()" data-i18n="common.refresh">↻ Refresh</button>
   <span class="badge" id="countBadge">0 stations</span>
 </div>
 
 <div class="table-container">
   <div id="loadingState" style="text-align:center;padding:40px 0;">
     <div class="spinner"></div>
-    <p style="margin-top:10px;color:#718096;font-size:.85rem">Loading stations…</p>
+    <p style="margin-top:10px;color:#718096;font-size:.85rem" data-i18n="stations.loading">Loading stations…</p>
   </div>
   <div id="emptyState" class="empty-state" style="display:none">
-    <h2>No stations found</h2>
-    <p>No weather data has been collected yet. Check that a collector is running.</p>
+    <h2 data-i18n="stations.no_stations_title">No stations found</h2>
+    <p data-i18n="stations.no_stations_body">No weather data has been collected yet. Check that a collector is running.</p>
   </div>
   <table id="stationTable" style="display:none">
     <thead>
       <tr>
-        <th onclick="sortBy('name')">Station <span class="sort-icon"></span></th>
-        <th onclick="sortBy('network')">Network</th>
-        <th onclick="sortBy('canton')">Canton</th>
-        <th onclick="sortBy('elevation')">Elev. (m)</th>
-        <th onclick="sortBy('wind_speed')">Wind (km/h)</th>
-        <th>Dir</th>
-        <th onclick="sortBy('wind_gust')">Gust (km/h)</th>
-        <th onclick="sortBy('temperature')">Temp (°C)</th>
-        <th onclick="sortBy('humidity')">Hum (%)</th>
-        <th onclick="sortBy('pressure_qnh')">QNH (hPa)</th>
-        <th onclick="sortBy('precipitation')">Precip (mm)</th>
-        <th onclick="sortBy('_age')">Last seen</th>
+        <th onclick="sortBy('name')" data-i18n="stations.col_station">Station <span class="sort-icon"></span></th>
+        <th onclick="sortBy('network')" data-i18n="stations.col_network">Network</th>
+        <th onclick="sortBy('canton')" data-i18n="stations.col_canton">Canton</th>
+        <th onclick="sortBy('elevation')" data-i18n="stations.col_elevation">Elev. (m)</th>
+        <th onclick="sortBy('wind_speed')" data-i18n="stations.col_wind">Wind (km/h)</th>
+        <th data-i18n="stations.col_dir">Dir</th>
+        <th onclick="sortBy('wind_gust')" data-i18n="stations.col_gust">Gust (km/h)</th>
+        <th onclick="sortBy('temperature')" data-i18n="stations.col_temp">Temp (°C)</th>
+        <th onclick="sortBy('humidity')" data-i18n="stations.col_humidity">Hum (%)</th>
+        <th onclick="sortBy('pressure_qnh')" data-i18n="stations.col_pressure">QNH (hPa)</th>
+        <th onclick="sortBy('precipitation')" data-i18n="stations.col_precipitation">Precip (mm)</th>
+        <th onclick="sortBy('_age')" data-i18n="stations.col_last_seen">Last seen</th>
       </tr>
     </thead>
     <tbody id="tableBody"></tbody>
@@ -292,8 +297,11 @@
 
 <script src="/static/app.js"></script>
 <script type="module">
+  import { initI18n, renderLangPicker } from '/static/i18n.js';
   import { renderNavAuth } from '/static/auth.js';
+  await initI18n();
   renderNavAuth('stations');
+  renderLangPicker();
 </script>
 </body>
 </html>

@@ -213,11 +213,11 @@ function buildPopup(s) {
   const ageCls = _ageCssClass(m.timestamp);
 
   const rows = [
-    ['Wind',  `${_fmt(m.wind_speed, 1)} km/h  ${_windArrow(m.wind_direction)}`],
-    ['Gust',  `${_fmt(m.wind_gust, 1)} km/h`],
-    ['Temp',  `${_fmt(m.temperature, 1)} °C`],
-    ['Hum',   `${_fmt(m.humidity, 0)} %`],
-    ['QNH',   `${_fmt(m.pressure_qnh, 1)} hPa`],
+    [window.t('map.popup.wind'),        `${_fmt(m.wind_speed, 1)} km/h  ${_windArrow(m.wind_direction)}`],
+    [window.t('map.popup.gust'),        `${_fmt(m.wind_gust, 1)} km/h`],
+    [window.t('map.popup.temperature'), `${_fmt(m.temperature, 1)} °C`],
+    [window.t('map.popup.humidity'),    `${_fmt(m.humidity, 0)} %`],
+    [window.t('map.popup.qnh'),         `${_fmt(m.pressure_qnh, 1)} hPa`],
   ].map(([label, val]) =>
     `<div class="popup-row"><span>${label}</span><span>${val}</span></div>`
   ).join('');
@@ -229,7 +229,7 @@ function buildPopup(s) {
     <div class="popup-name">${s.name}</div>
     <div class="popup-meta">${badge} ${canton}${elev}<span class="freshness ${ageCls}">${age || '—'}</span></div>
     ${rows}
-    <a class="popup-link" href="/station-detail?station_id=${encodeURIComponent(s.station_id)}">View history →</a>
+    <a class="popup-link" href="/station-detail?station_id=${encodeURIComponent(s.station_id)}">${window.t('map.popup.view_history')}</a>
   `;
 }
 
@@ -293,10 +293,10 @@ function buildFoehnPopup(station) {
   const badge  = `<span class="network-badge network-foehn">foehn</span>`;
 
   let statusLabel;
-  if (active == null || active < -0.5) statusLabel = 'No data';
-  else if (active >= 0.9)              statusLabel = 'Active';
-  else if (active >= 0.4)              statusLabel = 'Partial';
-  else                                 statusLabel = 'Inactive';
+  if (active == null || active < -0.5) statusLabel = window.t('map.popup.foehn_no_data');
+  else if (active >= 0.9)              statusLabel = window.t('map.popup.foehn_active');
+  else if (active >= 0.4)              statusLabel = window.t('map.popup.foehn_partial');
+  else                                 statusLabel = window.t('map.popup.foehn_inactive');
 
   const age    = _ageLabel(m.timestamp);
   const ageCls = _ageCssClass(m.timestamp);
@@ -305,10 +305,10 @@ function buildFoehnPopup(station) {
     <div class="popup-name">${station.name}</div>
     <div class="popup-meta">${badge} <span class="freshness ${ageCls}">${age || '—'}</span></div>
     <div class="popup-row">
-      <span>Status</span>
+      <span>${window.t('map.popup.status')}</span>
       <span style="color:${color};font-weight:600">${statusLabel}</span>
     </div>
-    <a class="popup-link" href="/foehn">Föhn dashboard →</a>
+    <a class="popup-link" href="/foehn">${window.t('map.popup.foehn_dashboard')}</a>
   `;
 }
 
@@ -339,7 +339,8 @@ const _PersonalToggle = L.Control.extend({
     });
     btn.title = 'Toggle personal weather stations (Wunderground, Ecowitt, …)';
     function update() {
-      btn.textContent = _showPersonal ? '⚠ Personal stations: ON' : '⚠ Personal stations: OFF';
+      const t = typeof window.t === 'function' ? window.t : k => k;
+      btn.textContent = _showPersonal ? t('map.toggle_personal_on') : t('map.toggle_personal_off');
       btn.style.opacity = _showPersonal ? '1' : '0.55';
     }
     update();

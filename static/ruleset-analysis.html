@@ -24,6 +24,10 @@
     .nav-user { display: flex; align-items: center; gap: 10px; margin-left: auto; }
     .nav-btn { background: transparent; border: 1px solid #4a5568; color: #a0aec0; font-size: 0.8rem; padding: 4px 10px; border-radius: 5px; cursor: pointer; transition: background 0.15s; }
     .nav-btn:hover { background: #2d3748; color: #e2e8f0; }
+    #navLangPicker { display: flex; gap: 2px; margin-left: 8px; }
+    .lang-btn { background: transparent; border: 1px solid #4a5568; color: #718096; font-size: 0.72rem; padding: 3px 7px; border-radius: 4px; cursor: pointer; transition: background 0.15s; }
+    .lang-btn:hover { background: #2d3748; color: #e2e8f0; }
+    .lang-btn.active { background: #2d4a6e; color: #90cdf4; border-color: #4a7bab; }
 
     /* ── Page ── */
     .page { max-width: 960px; margin: 0 auto; padding: 28px 20px 60px; }
@@ -155,22 +159,23 @@
 <nav class="top-nav">
   <span class="nav-brand">🪁 Lenticularis</span>
   <div class="nav-links">
-    <a href="/" class="nav-link">Map</a>
-    <a href="/stations" class="nav-link">Stations</a>
-    <a href="/rulesets" class="nav-link active">Rule Sets</a>
-    <a href="/stats" class="nav-link">Statistics</a>
-    <a href="/foehn" class="nav-link">Föhn</a>
+    <a href="/" class="nav-link" data-i18n="nav.map">Map</a>
+    <a href="/stations" class="nav-link" data-i18n="nav.stations">Stations</a>
+    <a href="/rulesets" class="nav-link active" data-i18n="nav.rulesets">Rule Sets</a>
+    <a href="/stats" class="nav-link" data-i18n="nav.stats">Statistics</a>
+    <a href="/foehn" class="nav-link" data-i18n="nav.foehn">Föhn</a>
   </div>
+  <div id="navLangPicker"></div>
   <div class="nav-user" id="navUser"></div>
 </nav>
 
 <div class="page">
-  <a href="/rulesets" class="back-link">← Back to Rule Sets</a>
+  <a href="/rulesets" class="back-link" data-i18n="analysis.back">← Back to Rule Sets</a>
 
   <!-- Loading state -->
   <div id="loadingState" style="text-align:center;padding:60px 0">
     <div class="spinner"></div>
-    <p style="margin-top:12px;color:#718096;font-size:0.85rem">Loading…</p>
+    <p style="margin-top:12px;color:#718096;font-size:0.85rem" data-i18n="common.loading">Loading…</p>
   </div>
 
   <!-- Main content -->
@@ -184,7 +189,7 @@
         <div class="site-meta" id="siteMeta"></div>
       </div>
       <div class="decision-pill" id="decisionPill">…</div>
-      <a id="editBtn" href="#" class="btn-ghost" style="display:inline-block;border:1px solid #4a5568;border-radius:6px;color:#a0aec0;font-size:0.83rem;padding:6px 14px;text-decoration:none;white-space:nowrap;transition:background 0.15s">Edit</a>
+      <a id="editBtn" href="#" class="btn-ghost" style="display:inline-block;border:1px solid #4a5568;border-radius:6px;color:#a0aec0;font-size:0.83rem;padding:6px 14px;text-decoration:none;white-space:nowrap;transition:background 0.15s" data-i18n="analysis.edit">Edit</a>
     </div>
 
     <!-- No-data warning -->
@@ -194,20 +199,20 @@
     <div class="section">
       <div class="section-header">
         <div>
-          <div class="section-title">Current Evaluation</div>
+          <div class="section-title" data-i18n="analysis.current_eval">Current Evaluation</div>
           <div class="section-sub" id="evalAge">—</div>
         </div>
-        <button class="refresh-btn" id="refreshBtn" onclick="refreshEval()">↻ Refresh</button>
+        <button class="refresh-btn" id="refreshBtn" onclick="refreshEval()" data-i18n="common.refresh">↻ Refresh</button>
       </div>
       <div style="overflow-x:auto">
         <table class="cond-table">
           <thead>
             <tr>
-              <th>Station</th>
-              <th>Field</th>
-              <th>Condition</th>
-              <th>Actual</th>
-              <th>Status</th>
+              <th data-i18n="analysis.col_station">Station</th>
+              <th data-i18n="analysis.col_field">Field</th>
+              <th data-i18n="analysis.col_condition">Condition</th>
+              <th data-i18n="analysis.col_actual">Actual</th>
+              <th data-i18n="analysis.col_status">Status</th>
             </tr>
           </thead>
           <tbody id="condBody">
@@ -221,7 +226,7 @@
     <div class="section">
       <div class="section-header">
         <div>
-          <div class="section-title">Decision History</div>
+          <div class="section-title" data-i18n="analysis.history_title">Decision History</div>
           <div class="section-sub" id="histSub">—</div>
         </div>
         <div class="range-btns">
@@ -235,28 +240,34 @@
       <div id="histLoading" style="text-align:center;padding:20px 0"><div class="spinner"></div></div>
       <div id="histContent" style="display:none">
         <div class="history-legend">
-          <span><div class="legend-dot" style="background:#276749"></div> Green</span>
-          <span><div class="legend-dot" style="background:#c05621"></div> Orange</span>
-          <span><div class="legend-dot" style="background:#7b2020"></div> Red</span>
-          <span id="histWindowNote" style="display:none;margin-left:auto">🌙 = outside daylight window (sunrise−1h → sunset+1h)</span>
+          <span><div class="legend-dot" style="background:#276749"></div> <span data-i18n="decisions.green">Green</span></span>
+          <span><div class="legend-dot" style="background:#c05621"></div> <span data-i18n="decisions.orange">Orange</span></span>
+          <span><div class="legend-dot" style="background:#7b2020"></div> <span data-i18n="decisions.red">Red</span></span>
+          <span id="histWindowNote" style="display:none;margin-left:auto" data-i18n="analysis.daylight_note">🌙 = outside daylight window (sunrise−1h → sunset+1h)</span>
         </div>
         <div class="history-timeline" id="histTimeline"></div>
         <div class="chart-wrap">
           <canvas id="histChart"></canvas>
         </div>
         <table class="hist-table" style="margin-top:14px">
-          <thead><tr><th>Decision</th><th>From</th><th>To</th><th>Duration</th><th style="color:#4a5568;font-weight:400;font-size:0.72rem">click to expand</th></tr></thead>
+          <thead><tr>
+            <th data-i18n="analysis.col_decision">Decision</th>
+            <th data-i18n="analysis.col_from">From</th>
+            <th data-i18n="analysis.col_to">To</th>
+            <th data-i18n="analysis.col_duration">Duration</th>
+            <th style="color:#4a5568;font-weight:400;font-size:0.72rem" data-i18n="analysis.col_expand">click to expand</th>
+          </tr></thead>
           <tbody id="histBody"></tbody>
         </table>
       </div>
-      <div id="histEmpty" class="empty-note" style="display:none">No evaluation history for this period.</div>
+      <div id="histEmpty" class="empty-note" style="display:none" data-i18n="analysis.no_history">No evaluation history for this period.</div>
     </div>
 
     <!-- Decision Forecast -->
     <div class="section" id="forecastSection">
       <div class="section-header">
         <div>
-          <div class="section-title-forecast">📡 Decision Forecast</div>
+          <div class="section-title-forecast" data-i18n="analysis.forecast_title">📡 Decision Forecast</div>
           <div class="section-sub" id="fcSub">—</div>
         </div>
         <div class="range-btns">
@@ -270,37 +281,54 @@
       <div id="fcLoading" style="text-align:center;padding:20px 0"><div class="spinner"></div></div>
       <div id="fcContent" style="display:none">
         <div class="history-legend">
-          <span><div class="legend-dot" style="background:#276749"></div> Status Ok</span>
-          <span><div class="legend-dot" style="background:#c05621"></div> Warning</span>
-          <span><div class="legend-dot" style="background:#7b2020"></div> Stop</span>
+          <span><div class="legend-dot" style="background:#276749"></div> <span data-i18n="analysis.fc_status_ok">Status Ok</span></span>
+          <span><div class="legend-dot" style="background:#c05621"></div> <span data-i18n="analysis.fc_warning">Warning</span></span>
+          <span><div class="legend-dot" style="background:#7b2020"></div> <span data-i18n="analysis.fc_stop">Stop</span></span>
         </div>
         <div class="forecast-timeline" id="fcTimeline"></div>
         <div class="chart-wrap">
           <canvas id="fcChart"></canvas>
         </div>
         <table class="hist-table" style="margin-top:14px">
-          <thead><tr><th>Decision</th><th>From</th><th>To</th><th>Duration</th><th style="color:#4a5568;font-weight:400;font-size:0.72rem">click to expand</th></tr></thead>
+          <thead><tr>
+            <th data-i18n="analysis.col_decision">Decision</th>
+            <th data-i18n="analysis.col_from">From</th>
+            <th data-i18n="analysis.col_to">To</th>
+            <th data-i18n="analysis.col_duration">Duration</th>
+            <th style="color:#4a5568;font-weight:400;font-size:0.72rem" data-i18n="analysis.col_expand">click to expand</th>
+          </tr></thead>
           <tbody id="fcBody"></tbody>
         </table>
       </div>
-      <div id="fcEmpty" class="empty-note" style="display:none">No forecast data available.</div>
+      <div id="fcEmpty" class="empty-note" style="display:none" data-i18n="analysis.no_forecast">No forecast data available.</div>
     </div>
 
   </div><!-- /mainContent -->
 </div>
 
 <script type="module">
+import { initI18n, renderLangPicker } from '/static/i18n.js';
 import { fetchAuth, renderNavAuth } from '/static/auth.js';
 
+await initI18n();
 renderNavAuth('rulesets');
+renderLangPicker();
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-const FIELD_LABEL = {
-  wind_speed:'Wind speed', wind_gust:'Gust', wind_direction:'Wind direction',
-  temperature:'Temperature', humidity:'Humidity', pressure:'Pressure',
-  pressure_delta:'Pressure delta', precipitation:'Precipitation', snow_depth:'Snow depth'
-};
+function getFieldLabel() {
+  return {
+    wind_speed:    window.t('editor.fields.wind_speed'),
+    wind_gust:     window.t('editor.fields.wind_gust'),
+    wind_direction:window.t('editor.fields.wind_direction'),
+    temperature:   window.t('editor.fields.temperature'),
+    humidity:      window.t('editor.fields.humidity'),
+    pressure:      window.t('editor.fields.pressure'),
+    pressure_delta:window.t('editor.fields.pressure_delta'),
+    precipitation: window.t('editor.fields.precipitation'),
+    snow_depth:    window.t('editor.fields.snow_depth'),
+  };
+}
 const FIELD_UNIT = {
   wind_speed:'km/h', wind_gust:'km/h', wind_direction:'°',
   temperature:'°C', humidity:'%', pressure:'hPa',
@@ -328,9 +356,9 @@ function condThreshold(cr) {
 
 function ageLabel(isoString) {
   const mins = Math.round((Date.now() - new Date(isoString).getTime()) / 60000);
-  if (mins < 2)  return 'just now';
-  if (mins < 60) return `${mins} min ago`;
-  return `${Math.floor(mins / 60)} h ago`;
+  if (mins < 2)  return window.t('analysis.just_now');
+  if (mins < 60) return window.t('analysis.min_ago', { n: mins });
+  return window.t('analysis.h_ago', { n: Math.floor(mins / 60) });
 }
 
 // ── State ────────────────────────────────────────────────────────────────────
@@ -347,7 +375,7 @@ let _stationNames = {};
 let _condDefs = {};   // condition_id → {operator, value_a, value_b, field} from ruleset detail
 
 if (!rsId) {
-  document.getElementById('loadingState').innerHTML = '<p style="color:#fc8181">No rule set ID specified.</p>';
+  document.getElementById('loadingState').innerHTML = `<p style="color:#fc8181">${window.t('analysis.no_rs_id')}</p>`;
 }
 
 // ── Load all station names for display ───────────────────────────────────────
@@ -375,7 +403,7 @@ async function init() {
   ]);
 
   if (!rsRes.ok) {
-    document.getElementById('loadingState').innerHTML = '<p style="color:#fc8181">Rule set not found or access denied.</p>';
+    document.getElementById('loadingState').innerHTML = `<p style="color:#fc8181">${window.t('analysis.not_found')}</p>`;
     return;
   }
 
@@ -407,10 +435,10 @@ function renderHeader(rs, dec) {
   document.getElementById('editBtn').href           = `/ruleset-editor?id=${rs.id}`;
 
   const meta = [];
-  meta.push(isLanding ? 'Landing zone' : 'Launch');
+  meta.push(isLanding ? window.t('rulesets.landing_zone') : window.t('rulesets.launch'));
   if (rs.altitude_m != null) meta.push(`${rs.altitude_m} m`);
-  meta.push(rs.combination_logic === 'worst_wins' ? 'Worst wins' : 'Majority vote');
-  meta.push(rs.is_public ? 'Public' : 'Private');
+  meta.push(rs.combination_logic === 'worst_wins' ? window.t('rulesets.worst_wins') : window.t('rulesets.majority_vote'));
+  meta.push(rs.is_public ? window.t('rulesets.public') : window.t('rulesets.private'));
   document.getElementById('siteMeta').innerHTML = meta.map(m => `<span>${esc(m)}</span>`).join('');
 
   const pill = document.getElementById('decisionPill');
@@ -431,21 +459,21 @@ function renderConditions(dec) {
   const evalAge = document.getElementById('evalAge');
 
   if (!dec) {
-    tbody.innerHTML = '<tr><td colspan="5" class="empty-note">Could not load evaluation.</td></tr>';
+    tbody.innerHTML = `<tr><td colspan="5" class="empty-note">${window.t('analysis.could_not_load')}</td></tr>`;
     return;
   }
 
-  evalAge.textContent = `Evaluated ${ageLabel(dec.evaluated_at)}`;
+  evalAge.textContent = window.t('analysis.evaluated', { age: ageLabel(dec.evaluated_at) });
 
   const warn = document.getElementById('nodataWarn');
   if (dec.no_data_stations && dec.no_data_stations.length) {
-    warn.textContent = `⚠ No data for: ${dec.no_data_stations.map(s => stationName(s)).join(', ')}`;
+    warn.textContent = window.t('analysis.no_data_for', { names: dec.no_data_stations.map(s => stationName(s)).join(', ') });
     warn.style.display = '';
   }
 
   const crs = dec.condition_results || [];
   if (crs.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="5" class="empty-note">No conditions defined.</td></tr>';
+    tbody.innerHTML = `<tr><td colspan="5" class="empty-note">${window.t('analysis.no_conditions')}</td></tr>`;
     return;
   }
 
@@ -468,14 +496,14 @@ function renderConditions(dec) {
       : `<span style="color:#4a5568">—</span>`;
     const actualStr = cr.actual_value != null
       ? `${cr.actual_value.toFixed(1)} ${FIELD_UNIT[cr.field] || ''}`
-      : '<span class="no-data-note">no data</span>';
+      : `<span class="no-data-note">${window.t('map.popup.no_data')}</span>`;
     const groupMark = groupLabel
       ? `<span class="group-badge">${esc(groupLabel)}</span>`
       : '';
 
     rows.push(`<tr class="${triggered ? 'triggered-row' : ''}">
       <td style="color:#a0aec0">${esc(stationName(cr.station_id))}</td>
-      <td>${groupMark}${esc(FIELD_LABEL[cr.field] || cr.field)}</td>
+      <td>${groupMark}${esc(getFieldLabel()[cr.field] || cr.field)}</td>
       <td style="color:#a0aec0">${esc(condThreshold(cr))}</td>
       <td>${actualStr}</td>
       <td><span class="status-dot ${dotCls}"></span>${statusLabel}</td>
@@ -488,7 +516,7 @@ function renderConditions(dec) {
   groupIds.forEach((gid, idx) => {
     const gCrs = groups[gid];
     const allMatched = gCrs[0].group_all_matched;
-    const label = `Condition Group ${idx + 1}`;
+    const label = window.t('analysis.cond_group_n', { n: idx + 1 });
     for (const cr of gCrs) makeRow(cr, label, allMatched);
   });
 
@@ -512,7 +540,7 @@ window.refreshEval = async function() {
     renderConditions(dec);
   } finally {
     btn.disabled = false;
-    btn.textContent = '↻ Refresh';
+    btn.textContent = window.t('common.refresh');
   }
 };
 
@@ -549,11 +577,11 @@ window.loadHistory = async function(hours) {
     const inWindow  = _activeWindowH != null ? data.filter(d => d.in_active_window).length : data.length;
     const rangeStr  = hours < 48 ? hours + 'h' : Math.round(hours / 24) + ' days';
     let histLabel   = _activeWindowH != null
-      ? `${data.length} evaluations in last ${rangeStr} · ${inWindow} during daylight`
-      : `${data.length} evaluations in last ${rangeStr}`;
+      ? window.t('analysis.hist_count_daylight', { n: data.length, range: rangeStr, inWindow })
+      : window.t('analysis.hist_count', { n: data.length, range: rangeStr });
     const updMs2    = _rsUpdatedAt ? new Date(_rsUpdatedAt).getTime() : null;
     const withinWindow = updMs2 && updMs2 > Date.now() - hours * 3600 * 1000;
-    if (withinWindow) histLabel += ` · ⚠ rules changed ${ageLabel(_rsUpdatedAt)} — amber line marks the change`;
+    if (withinWindow) histLabel += ' · ' + window.t('analysis.rules_changed_note', { age: ageLabel(_rsUpdatedAt) });
     document.getElementById('histSub').textContent = histLabel;
   } catch (err) {
     console.error('History load error:', err);
@@ -678,7 +706,7 @@ function renderHistChart(data, hours) {
           grid: { color: '#1e2533' },
           ticks: {
             color: '#718096',
-            callback: v => ['Green', 'Orange', 'Red'][v] ?? '',
+            callback: v => [window.t('decisions.green'), window.t('decisions.orange'), window.t('decisions.red')][v] ?? '',
             stepSize: 1,
           },
         },
@@ -736,7 +764,7 @@ function fmtTs(iso) {
 
 function buildCondDetail(condResults) {
   if (!condResults || condResults.length === 0)
-    return '<div style="color:#4a5568;font-size:0.78rem;padding:4px 0">No condition data stored for this evaluation.</div>';
+    return `<div style="color:#4a5568;font-size:0.78rem;padding:4px 0">${window.t('analysis.no_cond_data')}</div>`;
 
   const DC2 = { green:'#68d391', orange:'#f6ad55', red:'#fc8181' };
 
@@ -773,10 +801,10 @@ function buildCondDetail(condResults) {
         : `<span style="color:#4a5568">—</span>`;
       const actual = cr.actual_value != null
         ? `${cr.actual_value.toFixed(1)} ${FIELD_UNIT[cr.field] || ''}`
-        : '<span style="color:#4a5568;font-style:italic">no data</span>';
+        : `<span style="color:#4a5568;font-style:italic">${window.t('map.popup.no_data')}</span>`;
       return `<tr>
         <td style="color:#a0aec0">${esc(stationName(cr.station_id))}</td>
-        <td>${esc(FIELD_LABEL[cr.field] || cr.field)}</td>
+        <td>${esc(getFieldLabel()[cr.field] || cr.field)}</td>
         <td style="color:#a0aec0">${esc(condThresholdStr(cr))}</td>
         <td>${actual}</td>
         <td>${dot}${status}</td>
@@ -784,12 +812,13 @@ function buildCondDetail(condResults) {
     }).join('');
   }
 
+  const th = s => `<th style="color:#4a5568;font-weight:500;padding:4px 10px;text-align:left;font-size:0.72rem">${s}</th>`;
   const THEAD = `<thead><tr style="border-bottom:1px solid #2d3748">
-    <th style="color:#4a5568;font-weight:500;padding:4px 10px;text-align:left;font-size:0.72rem">Station</th>
-    <th style="color:#4a5568;font-weight:500;padding:4px 10px;text-align:left;font-size:0.72rem">Field</th>
-    <th style="color:#4a5568;font-weight:500;padding:4px 10px;text-align:left;font-size:0.72rem">Condition</th>
-    <th style="color:#4a5568;font-weight:500;padding:4px 10px;text-align:left;font-size:0.72rem">Actual</th>
-    <th style="color:#4a5568;font-weight:500;padding:4px 10px;text-align:left;font-size:0.72rem">Status</th>
+    ${th(window.t('analysis.col_station'))}
+    ${th(window.t('analysis.col_field'))}
+    ${th(window.t('analysis.col_condition'))}
+    ${th(window.t('analysis.col_actual'))}
+    ${th(window.t('analysis.col_status'))}
   </tr></thead>`;
 
   const TABLE_STYLE = `width:100%;border-collapse:collapse;font-size:0.78rem`;
@@ -803,7 +832,7 @@ function buildCondDetail(condResults) {
     const gCrs = groups[gid];
     const allMatched = gCrs[0].group_all_matched;
     html += `<tr><td colspan="5" style="padding:6px 10px 2px;color:#718096;font-size:0.68rem;text-transform:uppercase;letter-spacing:.05em;border-top:1px solid #2d3748">
-      Condition Group ${idx + 1}${allMatched ? ' — triggered' : ''}
+      ${window.t('analysis.cond_group_n', { n: idx + 1 })}${allMatched ? window.t('analysis.cond_group_triggered') : ''}
     </td></tr>`;
     html += renderRows(gCrs, true, allMatched);
   });
@@ -837,12 +866,12 @@ function renderHistTable(data) {
       <td style="color:#a0aec0">${to}</td>
       <td style="color:#a0aec0">${from}</td>
       <td style="color:#718096">${dur}</td>
-      <td style="color:#4a5568;font-size:0.78rem">${run.count} eval${run.count !== 1 ? 's' : ''} ▾</td>
+      <td style="color:#4a5568;font-size:0.78rem">${run.count !== 1 ? window.t('analysis.evals_many', { n: run.count }) : window.t('analysis.evals_one', { n: run.count })} ▾</td>
     </tr>
     <tr id="${detailId}" style="display:none">
       <td colspan="5" style="background:#0f1117;padding:10px 16px;border-bottom:2px solid #2d3748">
         <div style="font-size:0.72rem;color:#718096;margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">
-          Conditions at transition — ${fmtTs(run.first.timestamp)}
+          ${window.t('analysis.cond_at_transition', { ts: fmtTs(run.first.timestamp) })}
         </div>
         ${detail}
       </td>
@@ -886,8 +915,8 @@ window.loadForecast = async function(hours) {
     document.getElementById('fcContent').style.display = '';
     const fcInWin = fcWindowH != null ? steps.filter(s => s.in_active_window).length : steps.length;
     document.getElementById('fcSub').textContent = fcWindowH != null
-      ? `${steps.length} forecast steps over next ${hours}h · ${fcInWin} during daylight`
-      : `${steps.length} forecast steps over next ${hours}h`;
+      ? window.t('analysis.fc_count_daylight', { n: steps.length, hours, inWindow: fcInWin })
+      : window.t('analysis.fc_count', { n: steps.length, hours });
   } catch (err) {
     console.error('Forecast load error:', err);
     document.getElementById('fcLoading').style.display = 'none';
@@ -963,7 +992,7 @@ function renderForecastChart(steps, hours, fcWindowH) {
           grid: { color: '#1e2533' },
           ticks: {
             color: '#718096',
-            callback: v => ['Green', 'Orange', 'Red'][v] ?? '',
+            callback: v => [window.t('decisions.green'), window.t('decisions.orange'), window.t('decisions.red')][v] ?? '',
             stepSize: 1,
           },
         },
@@ -1005,12 +1034,12 @@ function renderForecastTable(steps, fcWindowH) {
       <td style="color:#a0aec0">${from}</td>
       <td style="color:#a0aec0">${to}</td>
       <td style="color:#718096">${dur}</td>
-      <td style="color:#4a5568;font-size:0.78rem">${run.count} step${run.count !== 1 ? 's' : ''} ▾</td>
+      <td style="color:#4a5568;font-size:0.78rem">${run.count !== 1 ? window.t('analysis.steps_many', { n: run.count }) : window.t('analysis.steps_one', { n: run.count })} ▾</td>
     </tr>
     <tr id="${detailId}" style="display:none">
       <td colspan="5" style="background:#0f1117;padding:10px 16px;border-bottom:2px solid #2d3748">
         <div style="font-size:0.72rem;color:#f6ad55;margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">
-          📡 Forecast conditions — ${fmtTs(run.first.valid_time)}
+          ${window.t('analysis.fc_conditions_header', { ts: fmtTs(run.first.valid_time) })}
         </div>
         ${detail}
       </td>

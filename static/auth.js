@@ -105,10 +105,10 @@ export function renderNavAuth(activePage) {
   if (user) {
     navUser.innerHTML = `
       <span class="nav-user-name">${escHtml(user.display_name)}</span>
-      <button class="nav-btn" id="logoutBtn">Sign out</button>`;
+      <button class="nav-btn" id="logoutBtn">${window.t('nav.sign_out')}</button>`;
     document.getElementById('logoutBtn').addEventListener('click', logout);
   } else {
-    navUser.innerHTML = `<a href="/login" class="nav-link${activePage === 'login' ? ' active' : ''}">Sign in</a>`;
+    navUser.innerHTML = `<a href="/login" class="nav-link${activePage === 'login' ? ' active' : ''}">${window.t('nav.sign_in')}</a>`;
   }
 }
 

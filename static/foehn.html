@@ -30,6 +30,10 @@
     .nav-user { display: flex; align-items: center; gap: 10px; margin-left: auto; }
     .nav-btn { background: transparent; border: 1px solid #4a5568; color: #a0aec0; font-size: 0.8rem; padding: 4px 10px; border-radius: 5px; cursor: pointer; }
     .nav-btn:hover { background: #2d3748; color: #e2e8f0; }
+    #navLangPicker { display: flex; gap: 2px; margin-left: 8px; }
+    .lang-btn { background: transparent; border: 1px solid #4a5568; color: #718096; font-size: 0.72rem; padding: 3px 7px; border-radius: 4px; cursor: pointer; transition: background 0.15s; }
+    .lang-btn:hover { background: #2d3748; color: #e2e8f0; }
+    .lang-btn.active { background: #2d4a6e; color: #90cdf4; border-color: #4a7bab; }
 
     /* ── Layout ──────────────────────────────────────────────────────── */
     .page-content { flex: 1; padding: 20px 28px; max-width: 1400px; margin: 0 auto; width: 100%; }
@@ -230,14 +234,15 @@
 
 <!-- ── Navigation ──────────────────────────────────────────────────────── -->
 <nav class="top-nav">
-  <span class="nav-brand">Lenticularis</span>
+  <span class="nav-brand">🪁 Lenticularis</span>
   <div class="nav-links">
-    <a href="/" class="nav-link">Map</a>
-    <a href="/stations" class="nav-link">Stations</a>
-    <a href="/rulesets" class="nav-link">Rule Sets</a>
-    <a href="/stats" class="nav-link">Statistics</a>
-    <a href="/foehn" class="nav-link active">Föhn</a>
+    <a href="/" class="nav-link" data-i18n="nav.map">Map</a>
+    <a href="/stations" class="nav-link" data-i18n="nav.stations">Stations</a>
+    <a href="/rulesets" class="nav-link" data-i18n="nav.rulesets">Rule Sets</a>
+    <a href="/stats" class="nav-link" data-i18n="nav.stats">Statistics</a>
+    <a href="/foehn" class="nav-link active" data-i18n="nav.foehn">Föhn</a>
   </div>
+  <div id="navLangPicker"></div>
   <div class="nav-user" id="navUser"></div>
 </nav>
 
@@ -245,22 +250,22 @@
 <div class="page-content">
 
   <div class="page-header">
-    <h1>Föhn Tracker</h1>
+    <h1 data-i18n="foehn.title">Föhn Tracker</h1>
     <div class="page-meta">
-      Updated: <span id="lastUpdated">—</span>
-      &nbsp;·&nbsp; auto-refresh 5 min
+      <span data-i18n="foehn.updated">Updated:</span> <span id="lastUpdated">—</span>
+      &nbsp;·&nbsp; <span data-i18n="foehn.auto_refresh">auto-refresh 5 min</span>
     </div>
   </div>
 
   <!-- Time navigation -->
   <div class="time-nav-wrap">
     <div class="time-nav-row">
-      <span class="time-nav-label">Mode</span>
-      <button class="tn-btn live-btn selected" id="btnLive">● Live</button>
+      <span class="time-nav-label" data-i18n="foehn.mode">Mode</span>
+      <button class="tn-btn live-btn selected" id="btnLive" data-i18n="foehn.live">● Live</button>
       <!-- day buttons filled by JS -->
     </div>
     <div class="time-nav-row" id="hourRow" style="display:none">
-      <span class="time-nav-label">Hour</span>
+      <span class="time-nav-label" data-i18n="foehn.hour_label">Hour</span>
       <!-- hour buttons filled by JS -->
     </div>
   </div>
@@ -269,7 +274,7 @@
   <div id="statusBanner" class="status-banner inactive">
     <div class="banner-icon">✓</div>
     <div>
-      <div class="banner-title inactive">Loading…</div>
+      <div class="banner-title inactive" data-i18n="common.loading">Loading…</div>
       <div class="banner-sub"></div>
     </div>
   </div>
@@ -277,37 +282,30 @@
   <!-- Pressure + chart row -->
   <div class="top-row">
     <div class="card">
-      <div class="card-title">Pressure Gradient (Föhn Risk Indicator)</div>
+      <div class="card-title" data-i18n="foehn.pressure_card_title">Pressure Gradient (Föhn Risk Indicator)</div>
       <div id="pressurePanel"><p class="loading" style="font-size:0.8rem">…</p></div>
     </div>
     <div class="card">
-      <div class="card-title" id="chartTitle">48h Pressure Gradient OTL − JUN</div>
+      <div class="card-title" id="chartTitle" data-i18n="foehn.chart_title_base">48h Pressure Gradient OTL − JUN</div>
       <div class="chart-wrap"><canvas id="gradientChart"></canvas></div>
     </div>
   </div>
 
   <!-- Region cards -->
   <div class="region-grid" id="regionGrid">
-    <p class="loading">Loading…</p>
+    <p class="loading" data-i18n="foehn.loading">Loading…</p>
   </div>
 
-  <div class="info-box">
-    <strong>Color coding:</strong>
-    Green = no föhn signal (safe) · Orange = partial föhn indicators (caution) · Red = föhn confirmed (danger).
-    &nbsp;<strong>Region logic:</strong> a corridor is <em>Active</em> only when <strong>all</strong> its station
-    conditions are met simultaneously. Partial = some conditions met, not all.
-    &nbsp;<strong>Pressure:</strong> OTL (south) − JUN (alpine crest) ≥ 4 hPa = föhn risk, but wind conditions must
-    also be met for confirmation.
-    &nbsp;<strong>Forecast:</strong> uses Open-Meteo ICON forecast per station — coverage may be incomplete for some SLF stations.
-  </div>
+  <div class="info-box" id="infoBox"></div>
 
 </div>
 
-<script src="/static/auth.js"></script>
-<script>
+<script type="module">
 // ────────────────────────────────────────────────────────────────────────────
 // Föhn Tracker — frontend
 // ────────────────────────────────────────────────────────────────────────────
+import { initI18n, renderLangPicker } from '/static/i18n.js';
+import { renderNavAuth } from '/static/auth.js';
 
 const REGION_LABELS = {
   haslital: 'Haslital', beo: 'BEO Föhn', wallis: 'Wallis',
@@ -332,9 +330,9 @@ function buildTimeNav() {
     const d = new Date();
     d.setDate(d.getDate() + off);
     if (off === -2) return `${DAYS[d.getDay()]} ${d.getDate()}`;
-    if (off === -1) return 'Yesterday';
-    if (off ===  0) return 'Today';
-    if (off ===  1) return 'Tomorrow';
+    if (off === -1) return window.t('foehn.yesterday');
+    if (off ===  0) return window.t('foehn.today');
+    if (off ===  1) return window.t('foehn.tomorrow');
     return `+${off}d ${DAYS[d.getDay()]} ${d.getDate()}`;
   }
 
@@ -412,29 +410,29 @@ function getFoehnUrl() {
 function renderBanner(overall, isForecast, isSnapshot) {
   const el = document.getElementById('statusBanner');
   const { status, active_regions, partial_regions, pressure_risk } = overall;
-  const fc = isSnapshot ? ' (Historical)' : isForecast ? ' (Forecast)' : '';
+  const fc = isSnapshot ? window.t('foehn.status.historical') : isForecast ? window.t('foehn.status.forecast') : '';
 
   let icon, title, sub;
   if (status === 'active') {
     const names = active_regions.map(k => REGION_LABELS[k] || k).join(', ');
     icon  = '▲';
-    title = `South Föhn Active${fc} — ${names}`;
+    title = window.t('foehn.status.active_title', {suffix: fc, names});
     sub   = pressure_risk
-      ? 'Pressure gradient confirms the föhn setup.'
-      : 'Wind conditions confirmed. No strong pressure gradient.';
+      ? window.t('foehn.status.active_sub_pressure')
+      : window.t('foehn.status.active_sub_no_pressure');
   } else if (status === 'risk') {
     icon  = '⚠';
-    title = `Föhn Risk${fc} — Pressure ≥ 4 hPa`;
-    sub   = 'No valley wind confirmed yet — föhn has not broken through.';
+    title = window.t('foehn.status.risk_title', {suffix: fc});
+    sub   = window.t('foehn.status.risk_sub');
   } else if (status === 'partial') {
     const names = partial_regions.map(k => REGION_LABELS[k] || k).join(', ');
     icon  = '↗';
-    title = `Föhn Developing${fc} — ${names}`;
-    sub   = 'Some station conditions met, not all — monitor closely.';
+    title = window.t('foehn.status.partial_title', {suffix: fc, names});
+    sub   = window.t('foehn.status.partial_sub');
   } else {
     icon  = '✓';
-    title = `No Föhn${fc} — All corridors clear`;
-    sub   = 'All station conditions are below föhn thresholds.';
+    title = window.t('foehn.status.inactive_title', {suffix: fc});
+    sub   = window.t('foehn.status.inactive_sub');
   }
 
   el.className = `status-banner ${status}`;
@@ -450,9 +448,9 @@ function renderBanner(overall, isForecast, isSnapshot) {
 
 function renderPressure(p) {
   const d = p.delta_hpa;
-  let cls = 'safe', badgeText = 'No Risk';
-  if (d != null && d >= 4)  { cls = 'danger';  badgeText = 'Föhn Risk'; }
-  else if (d != null && d >= 1) { cls = 'caution'; badgeText = 'Building'; }
+  let cls = 'safe', badgeText = window.t('foehn.pressure.no_risk');
+  if (d != null && d >= 4)  { cls = 'danger';  badgeText = window.t('foehn.pressure.risk'); }
+  else if (d != null && d >= 1) { cls = 'caution'; badgeText = window.t('foehn.pressure.building'); }
 
   const fillPct = d != null ? Math.min(Math.abs(d) / 8 * 100, 100) : 0;
   const fmt = v => v != null ? v.toFixed(1) : '—';
@@ -478,7 +476,7 @@ function renderPressure(p) {
     <div class="gradient-track">
       <div class="gradient-fill ${cls}" style="width:${fillPct}%"></div>
     </div>
-    <div class="pres-threshold">Threshold: ≥ ${p.threshold_hpa} hPa</div>
+    <div class="pres-threshold">${window.t('foehn.pressure.threshold', {hpa: p.threshold_hpa})}</div>
     <span class="pres-badge ${cls}">${badgeText}</span>`;
 }
 
@@ -500,7 +498,7 @@ function fmtDir(deg) {
 }
 
 function renderCondActual(cond) {
-  if (!cond.data_available) return '<span class="v-none">no data</span>';
+  if (!cond.data_available) return `<span class="v-none">${window.t('foehn.no_data_value')}</span>`;
 
   const noDir = cond.dir_desc === 'beliebig';
   const dirStr = fmtDir(cond.actual_direction);
@@ -518,10 +516,10 @@ function renderCondActual(cond) {
 
 function renderRegionCard(r) {
   const badgeText = {
-    active:   `Active ${r.conditions_met}/${r.conditions_total}`,
-    partial:  `Partial ${r.conditions_met}/${r.conditions_total}`,
-    inactive: 'Clear',
-    no_data:  'No Data',
+    active:   window.t('foehn.badge.active', {met: r.conditions_met, total: r.conditions_total}),
+    partial:  window.t('foehn.badge.partial', {met: r.conditions_met, total: r.conditions_total}),
+    inactive: window.t('foehn.badge.inactive'),
+    no_data:  window.t('foehn.badge.no_data'),
   }[r.status] || r.status;
 
   const condRows = r.conditions.map(c => {
@@ -655,23 +653,23 @@ async function load() {
   const isSnapshot = !!data.is_snapshot;
 
   // Update chart title
-  let chartSuffix = ' (last 48h)';
+  let chartSuffix = ' ' + window.t('foehn.chart_last48h');
   if (_mode !== 'live') {
     const noon = new Date();
     noon.setDate(noon.getDate() + _dayOff);
     const label = noon.toLocaleDateString('en-CH', { weekday: 'short', month: 'numeric', day: 'numeric' });
-    chartSuffix = ` (±24h around ${label} 12:00)`;
+    chartSuffix = ' ' + window.t('foehn.chart_around', {label});
   }
-  document.getElementById('chartTitle').textContent = `48h Pressure Gradient OTL − JUN${chartSuffix}`;
+  document.getElementById('chartTitle').textContent = window.t('foehn.chart_title_base') + chartSuffix;
 
   // Update meta
   let ts;
   if (isSnapshot) {
-    ts = `Historical — ${new Date(data.valid_time).toLocaleString('en-CH', {weekday:'short', month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'})}`;
+    ts = window.t('foehn.time.historical', {ts: new Date(data.valid_time).toLocaleString('en-CH', {weekday:'short', month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'})});
   } else if (isForecast) {
-    ts = `Forecast for ${new Date(data.valid_time).toLocaleString('en-CH', {weekday:'short', month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'})}`;
+    ts = window.t('foehn.time.forecast', {ts: new Date(data.valid_time).toLocaleString('en-CH', {weekday:'short', month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'})});
   } else {
-    ts = `Live — ${new Date(data.assessed_at).toLocaleTimeString('en-CH', { hour: '2-digit', minute: '2-digit' })}`;
+    ts = window.t('foehn.time.live', {ts: new Date(data.assessed_at).toLocaleTimeString('en-CH', { hour: '2-digit', minute: '2-digit' })});
   }
   document.getElementById('lastUpdated').textContent = ts;
 
@@ -692,6 +690,10 @@ async function load() {
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 
+await initI18n();
+renderNavAuth('foehn');
+renderLangPicker();
+document.getElementById('infoBox').innerHTML = window.t('foehn.info_box');
 buildTimeNav();
 load();
 setInterval(() => { if (_mode === 'live') load(); }, 5 * 60 * 1000);

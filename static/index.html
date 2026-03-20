@@ -68,6 +68,10 @@
     .nav-user-name { font-size: 0.85rem; color: #90cdf4; }
     .nav-btn { background: transparent; border: 1px solid #4a5568; color: #a0aec0; font-size: 0.8rem; padding: 4px 10px; border-radius: 5px; cursor: pointer; transition: background 0.15s; }
     .nav-btn:hover { background: #2d3748; color: #e2e8f0; }
+    #navLangPicker { display: flex; gap: 2px; margin-left: 8px; }
+    .lang-btn { background: transparent; border: 1px solid #4a5568; color: #718096; font-size: 0.72rem; padding: 3px 7px; border-radius: 4px; cursor: pointer; transition: background 0.15s; }
+    .lang-btn:hover { background: #2d3748; color: #e2e8f0; }
+    .lang-btn.active { background: #2d4a6e; color: #90cdf4; border-color: #4a7bab; }
 
     .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
     .dot.green { background: #48bb78; }
@@ -281,16 +285,17 @@
 <nav class="top-nav">
   <span class="nav-brand">🪁 Lenticularis</span>
   <div class="nav-links">
-    <a href="/" class="nav-link active">Map</a>
-    <a href="/stations" class="nav-link">Stations</a>
-    <a href="/rulesets" class="nav-link">Rule Sets</a>
-    <a href="/stats" class="nav-link">Statistics</a>
-    <a href="/foehn" class="nav-link">Föhn</a>
+    <a href="/" class="nav-link active" data-i18n="nav.map">Map</a>
+    <a href="/stations" class="nav-link" data-i18n="nav.stations">Stations</a>
+    <a href="/rulesets" class="nav-link" data-i18n="nav.rulesets">Rule Sets</a>
+    <a href="/stats" class="nav-link" data-i18n="nav.stats">Statistics</a>
+    <a href="/foehn" class="nav-link" data-i18n="nav.foehn">Föhn</a>
   </div>
   <div class="nav-status">
     <span class="dot grey" id="dbDot"></span>
-    <span id="navStatus">Connecting…</span>
+    <span id="navStatus" data-i18n="nav.connecting">Connecting…</span>
   </div>
+  <div id="navLangPicker"></div>
   <div class="nav-user" id="navUser"></div>
 </nav>
 
@@ -315,23 +320,23 @@
       <button class="tn-hour-btn" data-hour="18" onclick="tnSelectHour(18)">18:00</button>
       <button class="tn-hour-btn" data-hour="19" onclick="tnSelectHour(19)">19:00</button>
       <span class="tn-time-display" id="tnTimeDisplay"></span>
-      <button class="tn-play-btn" id="tnPlayDayBtn" onclick="tnTogglePlay()">▶ Play day</button>
+      <button class="tn-play-btn" id="tnPlayDayBtn" onclick="tnTogglePlay()" data-i18n="map.time_nav.play_day">▶ Play day</button>
     </div>
   </div>
   <!-- Day row: always visible -->
   <div class="tn-day-row">
-    <button class="tn-day-btn" data-offset="-3" onclick="tnSelectDay(-3)">−3 Days<small id="tnLabel_m3"></small></button>
-    <button class="tn-day-btn" data-offset="-2" onclick="tnSelectDay(-2)">−2 Days<small id="tnLabel_m2"></small></button>
-    <button class="tn-day-btn" data-offset="-1" onclick="tnSelectDay(-1)">Yesterday<small id="tnLabel_m1"></small></button>
-    <button class="tn-day-btn" data-offset="0" onclick="tnSelectDay(0)">Today<small id="tnLabel_0"></small></button>
-    <button class="tn-day-btn now-btn active" id="tnNowBtn" onclick="tnGoLive()">Now<small>Live</small></button>
-    <button class="tn-day-btn future" data-offset="1" onclick="tnSelectDay(1)">Tomorrow<small id="tnLabel_1"></small></button>
-    <button class="tn-day-btn future" data-offset="2" onclick="tnSelectDay(2)">+2 Days<small id="tnLabel_2"></small></button>
-    <button class="tn-day-btn future" data-offset="3" onclick="tnSelectDay(3)">+3 Days<small id="tnLabel_3"></small></button>
-    <button class="tn-day-btn future" data-offset="4" onclick="tnSelectDay(4)">+4 Days<small id="tnLabel_4"></small></button>
-    <button class="tn-day-btn future" data-offset="5" onclick="tnSelectDay(5)">+5 Days<small id="tnLabel_5"></small></button>
+    <button class="tn-day-btn" data-offset="-3" onclick="tnSelectDay(-3)"><span data-i18n="map.time_nav.minus3">−3 Days</span><small id="tnLabel_m3"></small></button>
+    <button class="tn-day-btn" data-offset="-2" onclick="tnSelectDay(-2)"><span data-i18n="map.time_nav.minus2">−2 Days</span><small id="tnLabel_m2"></small></button>
+    <button class="tn-day-btn" data-offset="-1" onclick="tnSelectDay(-1)"><span data-i18n="map.time_nav.yesterday">Yesterday</span><small id="tnLabel_m1"></small></button>
+    <button class="tn-day-btn" data-offset="0" onclick="tnSelectDay(0)"><span data-i18n="map.time_nav.today">Today</span><small id="tnLabel_0"></small></button>
+    <button class="tn-day-btn now-btn active" id="tnNowBtn" onclick="tnGoLive()"><span data-i18n="map.time_nav.now">Now</span><small data-i18n="map.time_nav.live">Live</small></button>
+    <button class="tn-day-btn future" data-offset="1" onclick="tnSelectDay(1)"><span data-i18n="map.time_nav.tomorrow">Tomorrow</span><small id="tnLabel_1"></small></button>
+    <button class="tn-day-btn future" data-offset="2" onclick="tnSelectDay(2)"><span data-i18n="map.time_nav.plus2">+2 Days</span><small id="tnLabel_2"></small></button>
+    <button class="tn-day-btn future" data-offset="3" onclick="tnSelectDay(3)"><span data-i18n="map.time_nav.plus3">+3 Days</span><small id="tnLabel_3"></small></button>
+    <button class="tn-day-btn future" data-offset="4" onclick="tnSelectDay(4)"><span data-i18n="map.time_nav.plus4">+4 Days</span><small id="tnLabel_4"></small></button>
+    <button class="tn-day-btn future" data-offset="5" onclick="tnSelectDay(5)"><span data-i18n="map.time_nav.plus5">+5 Days</span><small id="tnLabel_5"></small></button>
     <span class="tn-sep"></span>
-    <button class="tn-day-btn" id="tnCustomBtn" onclick="tnToggleCustom()">📅 Custom<small>Date</small></button>
+    <button class="tn-day-btn" id="tnCustomBtn" onclick="tnToggleCustom()"><span data-i18n="map.time_nav.custom">📅 Custom</span><small data-i18n="map.time_nav.date">Date</small></button>
     <input type="date" id="tnCustomDate" class="tn-custom-input" style="display:none" onchange="tnSelectCustomDate()" />
   </div>
 </div>
@@ -373,10 +378,10 @@ const _mapReplay = new ReplayEngine(
   (state) => {
     const playBtn = document.getElementById('tnPlayDayBtn');
     if (playBtn && state === 'loading') {
-      playBtn.textContent = '⏳ Loading…';
+      playBtn.textContent = window.t('map.time_nav.loading');
       playBtn.classList.remove('playing');
     } else if (playBtn && state !== 'loading' && !_tnPlayActive) {
-      playBtn.textContent = '▶ Play day';
+      playBtn.textContent = window.t('map.time_nav.play_day');
     }
   }
 );
@@ -535,7 +540,7 @@ function tnTogglePlay() {
 function tnStartPlay() {
   _tnPlayActive = true;
   const btn = document.getElementById('tnPlayDayBtn');
-  btn.textContent = '⏸ Stop';
+  btn.textContent = window.t('map.time_nav.stop');
   btn.classList.add('playing');
   let h = (_tnPlayHour >= 7 && _tnPlayHour < 19) ? _tnPlayHour : 7;
   function step() {
@@ -550,15 +555,18 @@ function tnStopPlay() {
   _tnPlayActive = false;
   if (_tnPlayTimer) { clearTimeout(_tnPlayTimer); _tnPlayTimer = null; }
   const btn = document.getElementById('tnPlayDayBtn');
-  if (btn) { btn.textContent = '▶ Play day'; btn.classList.remove('playing'); }
+  if (btn) { btn.textContent = window.t('map.time_nav.play_day'); btn.classList.remove('playing'); }
 }
 
 // Initialise day labels
 tnInitLabels();
 </script>
 <script type="module">
+  import { initI18n, renderLangPicker } from '/static/i18n.js';
   import { renderNavAuth, isLoggedIn, fetchAuth } from '/static/auth.js';
+  await initI18n();
   renderNavAuth('map');
+  renderLangPicker();
 
   if (isLoggedIn()) {
 
@@ -597,9 +605,15 @@ tnInitLabels();
   }
 
   const FIELD_LABEL = {
-    wind_speed:'Wind', wind_gust:'Gust', wind_direction:'Dir',
-    temperature:'Temp', humidity:'Hum', pressure:'Pressure',
-    pressure_delta:'ΔPressure', precipitation:'Precip', snow_depth:'Snow'
+    wind_speed:    window.t('map.popup.wind'),
+    wind_gust:     window.t('map.popup.gust'),
+    wind_direction:window.t('map.popup.direction'),
+    temperature:   window.t('map.popup.temperature'),
+    humidity:      window.t('map.popup.humidity'),
+    pressure:      window.t('map.popup.pressure'),
+    pressure_delta:window.t('map.popup.pressure_delta'),
+    precipitation: window.t('map.popup.precipitation'),
+    snow_depth:    window.t('map.popup.snow'),
   };
   const FIELD_UNIT = {
     wind_speed:'km/h', wind_gust:'km/h', wind_direction:'°',
@@ -617,7 +631,7 @@ tnInitLabels();
   }
 
   function condActual(cr) {
-    if (cr.actual_value == null) return '<span style="color:#4a5568">no data</span>';
+    if (cr.actual_value == null) return `<span style="color:#4a5568">${window.t('map.popup.no_data')}</span>`;
     return `${cr.actual_value.toFixed(1)} ${FIELD_UNIT[cr.field] || ''}`;
   }
 
@@ -635,7 +649,7 @@ tnInitLabels();
       else standalone.push(cr);
     }
 
-    let html = '<div class="popup-cond-header">Conditions</div>';
+    let html = `<div class="popup-cond-header">${window.t('map.popup.conditions')}</div>`;
 
     function renderCond(cr, isGroupMember, groupAllMatched) {
       const triggered = cr.matched && (isGroupMember ? groupAllMatched : true);
@@ -657,7 +671,7 @@ tnInitLabels();
     for (const [, crs] of Object.entries(groups)) {
       const allMatched = crs[0].group_all_matched;
       html += `<div class="popup-cond-group">
-        <div class="popup-cond-group-label">Condition Group${allMatched ? ' — triggered' : ''}</div>`;
+        <div class="popup-cond-group-label">${window.t('map.popup.condition_group')}${allMatched ? ' ' + window.t('map.popup.triggered') : ''}</div>`;
       for (const cr of crs) html += renderCond(cr, true, allMatched);
       html += '</div>';
     }
@@ -675,16 +689,16 @@ tnInitLabels();
     }
     return `
       <div class="popup-name">▲ ${escHtml(rs.name)}</div>
-      <div class="popup-meta">Launch${altLabel}</div>
+      <div class="popup-meta">${window.t('map.popup.launch')}${altLabel}</div>
       <div class="popup-row" style="margin-bottom:6px">
-        <span>Launch</span>
+        <span>${window.t('map.popup.launch')}</span>
         <span style="color:${lc};font-weight:700">${dec.decision.toUpperCase()}</span>
       </div>
       ${landingRows}
       ${buildConditionRows(dec.condition_results)}
       <div style="display:flex;gap:8px;margin-top:10px">
-        <a class="popup-link" href="/ruleset-analysis?id=${rs.id}">Analysis →</a>
-        <a class="popup-link" style="background:#2d3748" href="/ruleset-editor?id=${rs.id}">Edit</a>
+        <a class="popup-link" href="/ruleset-analysis?id=${rs.id}">${window.t('map.popup.analysis')}</a>
+        <a class="popup-link" style="background:#2d3748" href="/ruleset-editor?id=${rs.id}">${window.t('map.popup.edit')}</a>
       </div>`;
   }
 
@@ -693,15 +707,15 @@ tnInitLabels();
     const altLabel = rs.altitude_m != null ? ` · ${rs.altitude_m} m` : '';
     return `
       <div class="popup-name">⚑ ${escHtml(rs.name)}</div>
-      <div class="popup-meta">Landing zone${altLabel}</div>
+      <div class="popup-meta">${window.t('map.popup.landing_zone')}${altLabel}</div>
       <div class="popup-row" style="margin-bottom:6px">
-        <span>Landable</span>
+        <span>${window.t('map.popup.landable')}</span>
         <span style="color:${lc};font-weight:700">${dec.decision.toUpperCase()}</span>
       </div>
       ${buildConditionRows(dec.condition_results)}
       <div style="display:flex;gap:8px;margin-top:10px">
-        <a class="popup-link" href="/ruleset-analysis?id=${rs.id}">Analysis →</a>
-        <a class="popup-link" style="background:#2d3748" href="/ruleset-editor?id=${rs.id}">Edit</a>
+        <a class="popup-link" href="/ruleset-analysis?id=${rs.id}">${window.t('map.popup.analysis')}</a>
+        <a class="popup-link" style="background:#2d3748" href="/ruleset-editor?id=${rs.id}">${window.t('map.popup.edit')}</a>
       </div>`;
   }
 

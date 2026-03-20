@@ -31,7 +31,7 @@ document.addEventListener('DOMContentLoaded', () => {
 async function loadStations() {
   const btn = document.getElementById('refreshBtn');
   btn.disabled = true;
-  btn.textContent = '↻ Loading…';
+  btn.textContent = '↻ ' + window.t('common.loading');
 
   try {
     const res = await fetch('/api/stations');
@@ -40,13 +40,13 @@ async function loadStations() {
 
     setStatus(true);
     document.getElementById('lastRefresh').textContent =
-      'Updated ' + new Date().toLocaleTimeString();
+      window.t('common.updated') + ' ' + new Date().toLocaleTimeString();
   } catch (err) {
     console.error('Failed to load stations:', err);
     setStatus(false);
   } finally {
     btn.disabled = false;
-    btn.textContent = '↻ Refresh';
+    btn.textContent = window.t('common.refresh');
     renderTable();
   }
 }
@@ -78,7 +78,9 @@ function renderTable() {
     return _sortAsc ? av - bv : bv - av;
   });
 
-  document.getElementById('countBadge').textContent = `${filtered.length} station${filtered.length !== 1 ? 's' : ''}`;
+  document.getElementById('countBadge').textContent = filtered.length === 1
+    ? window.t('stations.n_stations_one', { n: 1 })
+    : window.t('stations.n_stations', { n: filtered.length });
 
   const loadingEl = document.getElementById('loadingState');
   const emptyEl = document.getElementById('emptyState');
@@ -182,7 +184,7 @@ function setStatus(ok) {
   const dot = document.getElementById('dbDot');
   const label = document.getElementById('dbLabel');
   dot.className = 'dot ' + (ok ? 'green' : 'grey');
-  label.textContent = ok ? 'Live' : 'Error';
+  label.textContent = ok ? window.t('common.live') : window.t('common.error');
 }
 
 // ---------------------------------------------------------------------------
@@ -202,10 +204,10 @@ function _windArrow(degrees) {
 function _ageLabel(isoString) {
   if (!isoString) return null;
   const diff = Math.floor((Date.now() - new Date(isoString).getTime()) / 1000);
-  if (diff < 60)   return `${diff}s ago`;
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-  return `${Math.floor(diff / 86400)}d ago`;
+  if (diff < 60)    return window.t('common.n_seconds_ago', { n: diff });
+  if (diff < 3600)  return window.t('common.n_minutes_ago', { n: Math.floor(diff / 60) });
+  if (diff < 86400) return window.t('common.n_hours_ago',   { n: Math.floor(diff / 3600) });
+  return window.t('common.n_days_ago', { n: Math.floor(diff / 86400) });
 }
 
 function _ageCssClass(isoString) {

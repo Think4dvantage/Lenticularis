@@ -157,9 +157,14 @@ async def get_replay(
         end_dt = now
         start_dt = now - timedelta(hours=24)
 
-    # Observation data (past)
+    # Observation data (past).
+    # Always reach back at least 2 h from obs_end so that stations with no
+    # forecast data (e.g. computed foehn virtual stations) are still included
+    # in the result and their latest reading is carried forward into forecast
+    # frames by the client-side _buildSnapshot() logic.
     obs_end = min(end_dt, now)
-    raw = influx.query_history_all_stations(start_dt, obs_end)
+    obs_start = min(start_dt, obs_end - timedelta(hours=2))
+    raw = influx.query_history_all_stations(obs_start, obs_end)
 
     result: dict[str, Any] = {}
     for sid, measurements in raw.items():

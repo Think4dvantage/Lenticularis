@@ -22,6 +22,10 @@
     .nav-user-name { font-size: 0.85rem; color: #90cdf4; }
     .nav-btn { background: transparent; border: 1px solid #4a5568; color: #a0aec0; font-size: 0.8rem; padding: 4px 10px; border-radius: 5px; cursor: pointer; transition: background 0.15s; }
     .nav-btn:hover { background: #2d3748; color: #e2e8f0; }
+    #navLangPicker { display: flex; gap: 2px; margin-left: 8px; }
+    .lang-btn { background: transparent; border: 1px solid #4a5568; color: #718096; font-size: 0.72rem; padding: 3px 7px; border-radius: 4px; cursor: pointer; transition: background 0.15s; }
+    .lang-btn:hover { background: #2d3748; color: #e2e8f0; }
+    .lang-btn.active { background: #2d4a6e; color: #90cdf4; border-color: #4a7bab; }
 
     /* ── Page ── */
     .page { max-width: 900px; margin: 0 auto; padding: 32px 20px; width: 100%; }
@@ -92,30 +96,31 @@
 <nav class="top-nav">
   <span class="nav-brand">🪁 Lenticularis</span>
   <div class="nav-links">
-    <a href="/" class="nav-link">Map</a>
-    <a href="/stations" class="nav-link">Stations</a>
-    <a href="/rulesets" class="nav-link active">Rule Sets</a>
-    <a href="/stats" class="nav-link">Statistics</a>
-    <a href="/foehn" class="nav-link">Föhn</a>
+    <a href="/" class="nav-link" data-i18n="nav.map">Map</a>
+    <a href="/stations" class="nav-link" data-i18n="nav.stations">Stations</a>
+    <a href="/rulesets" class="nav-link active" data-i18n="nav.rulesets">Rule Sets</a>
+    <a href="/stats" class="nav-link" data-i18n="nav.stats">Statistics</a>
+    <a href="/foehn" class="nav-link" data-i18n="nav.foehn">Föhn</a>
   </div>
+  <div id="navLangPicker"></div>
   <div class="nav-user" id="navUser"></div>
 </nav>
 
 <div class="page">
   <!-- Auth gate -->
   <div class="auth-gate" id="authGate">
-    <p>Sign in to create and manage your rule sets.</p>
-    <a href="/login?next=/rulesets" class="btn btn-primary">Sign in</a>
+    <p data-i18n="rulesets.sign_in_prompt">Sign in to create and manage your rule sets.</p>
+    <a href="/login?next=/rulesets" class="btn btn-primary" data-i18n="nav.sign_in">Sign in</a>
   </div>
 
   <!-- Main content (hidden until authenticated) -->
   <div id="mainContent" style="display:none">
     <div class="page-header">
       <div>
-        <h1>My Rule Sets</h1>
-        <p>Each rule set defines conditions for one launch site or flying area.</p>
+        <h1 data-i18n="rulesets.title">My Rule Sets</h1>
+        <p data-i18n="rulesets.subtitle">Each rule set defines conditions for one launch site or flying area.</p>
       </div>
-      <a href="/ruleset-editor" class="btn btn-primary">＋ New rule set</a>
+      <a href="/ruleset-editor" class="btn btn-primary" data-i18n="rulesets.new_ruleset">＋ New rule set</a>
     </div>
 
     <div class="cards" id="cardList">
@@ -124,16 +129,18 @@
 
     <div class="empty-state" id="emptyState" style="display:none">
       <div class="big">🏔️</div>
-      <p>No rule sets yet. Create your first one to start getting flyability decisions.</p>
-      <a href="/ruleset-editor" class="btn btn-primary">＋ Create rule set</a>
+      <p data-i18n="rulesets.no_rulesets">No rule sets yet. Create your first one to start getting flyability decisions.</p>
+      <a href="/ruleset-editor" class="btn btn-primary" data-i18n="rulesets.create_first">＋ Create rule set</a>
     </div>
   </div>
 </div>
 
 <script type="module">
+  import { initI18n, renderLangPicker } from '/static/i18n.js';
   import { getUser, authHeader, renderNavAuth, isLoggedIn, fetchAuth } from '/static/auth.js';
-
+  await initI18n();
   renderNavAuth('rulesets');
+  renderLangPicker();
 
   const user = getUser();
   if (!user) {
@@ -162,21 +169,21 @@
         <a class="card-body" href="/ruleset-analysis?id=${rs.id}">
           <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
             <span class="card-title">${esc(rs.name)}</span>
-            <span class="badge" style="background:#1a2530;color:#90cdf4;border:1px solid #2a4a6e">${isLanding ? 'Landing zone' : 'Launch'}</span>
-            <span class="badge ${rs.is_public ? 'badge-public' : 'badge-private'}">${rs.is_public ? 'Public' : 'Private'}</span>
+            <span class="badge" style="background:#1a2530;color:#90cdf4;border:1px solid #2a4a6e">${isLanding ? window.t('rulesets.landing_zone') : window.t('rulesets.launch')}</span>
+            <span class="badge ${rs.is_public ? 'badge-public' : 'badge-private'}">${rs.is_public ? window.t('rulesets.public') : window.t('rulesets.private')}</span>
             <span class="decision-badge badge-loading" id="decision-${rs.id}">⏳ …</span>
             <span id="landing-badges-${rs.id}"></span>
           </div>
           <div class="card-meta">
             ${rs.lat != null ? `<span>📍 ${rs.lat.toFixed(4)}, ${rs.lon.toFixed(4)}</span>` : ''}
             ${rs.altitude_m != null ? `<span>⛰️ ${rs.altitude_m} m</span>` : ''}
-            <span>⚙️ ${rs.combination_logic === 'worst_wins' ? 'Worst wins' : 'Majority vote'}</span>
-            ${rs.clone_count > 0 ? `<span>📋 Cloned ${rs.clone_count}×</span>` : ''}
+            <span>⚙️ ${rs.combination_logic === 'worst_wins' ? window.t('rulesets.worst_wins') : window.t('rulesets.majority_vote')}</span>
+            ${rs.clone_count > 0 ? `<span>📋 ${window.t('rulesets.cloned_n', {n: rs.clone_count})}</span>` : ''}
             <span>${new Date(rs.created_at).toLocaleDateString()}</span>
           </div>
           ${rs.description ? `<div style="margin-top:7px;font-size:0.82rem;color:#a0aec0">${esc(rs.description)}</div>` : ''}
           <div class="forecast-strip" id="forecast-${rs.id}">
-            <span class="fc-pending">Loading forecast…</span>
+            <span class="fc-pending">${window.t('rulesets.loading_forecast')}</span>
           </div>
         </a>
         <div class="card-actions">
@@ -201,7 +208,7 @@
       if (!res.ok) { badge.remove(); return; }
       const { decision, condition_results, no_data_stations, landing_decisions } = await res.json();
       if (!condition_results || condition_results.length === 0) { badge.remove(); return; }
-      const labels = { green: '🟢 LAUNCH', orange: '🟠 LAUNCH', red: '🔴 LAUNCH' };
+      const labels = { green: window.t('rulesets.badge_launch_green'), orange: window.t('rulesets.badge_launch_orange'), red: window.t('rulesets.badge_launch_red') };
       badge.textContent = labels[decision] || decision.toUpperCase();
       badge.className = `decision-badge badge-${decision}`;
       if (no_data_stations && no_data_stations.length) {
@@ -228,7 +235,7 @@
       if (!res.ok) { strip.innerHTML = ''; return; }
       const { steps } = await res.json();
       if (!steps || steps.length === 0) {
-        strip.innerHTML = '<span class="fc-pending">Forecast pending…</span>';
+        strip.innerHTML = `<span class="fc-pending">${window.t('rulesets.forecast_pending')}</span>`;
         return;
       }
       const labels = { green: 'Status Ok', orange: 'Warning', red: 'Stop' };
@@ -243,7 +250,7 @@
   }
 
   window.deleteSet = async (id) => {
-    if (!confirm('Delete this rule set and all its conditions?')) return;
+    if (!confirm(window.t('rulesets.delete_confirm'))) return;
     const res = await fetchAuth(`/api/rulesets/${id}`, { method: 'DELETE' });
     if (res.ok) {
       document.getElementById(`card-${id}`)?.remove();

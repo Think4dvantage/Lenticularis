@@ -251,10 +251,10 @@ function renderHeader(station) {
   netBadge.className = `network-badge network-${station.network || 'unknown'}`;
 
   const canton = document.getElementById('stationCanton');
-  canton.textContent = station.canton ? `Canton ${station.canton}` : '';
+  canton.textContent = station.canton ? window.t('common.canton', { name: station.canton }) : '';
 
   const elev = document.getElementById('stationElevation');
-  elev.textContent = station.elevation != null ? `${station.elevation} m a.s.l.` : '';
+  elev.textContent = station.elevation != null ? window.t('common.elevation_asl', { m: station.elevation }) : '';
 }
 
 // ---------------------------------------------------------------------------
@@ -648,7 +648,7 @@ function setDbDot(ok) {
 
 function setRefreshLabel() {
   document.getElementById('lastRefresh').textContent =
-    'Updated ' + new Date().toLocaleTimeString();
+    window.t('common.updated') + ' ' + new Date().toLocaleTimeString();
 }
 
 function hexToRgba(hex, alpha) {

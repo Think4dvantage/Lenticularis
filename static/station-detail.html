@@ -206,6 +206,10 @@
     .nav-user-name { font-size: 0.85rem; color: #90cdf4; }
     .nav-btn { background: transparent; border: 1px solid #4a5568; color: #a0aec0; font-size: 0.8rem; padding: 4px 10px; border-radius: 5px; cursor: pointer; transition: background 0.15s; }
     .nav-btn:hover { background: #2d3748; color: #e2e8f0; }
+    #navLangPicker { display: flex; gap: 2px; margin-left: 8px; }
+    .lang-btn { background: transparent; border: 1px solid #4a5568; color: #718096; font-size: 0.72rem; padding: 3px 7px; border-radius: 4px; cursor: pointer; transition: background 0.15s; }
+    .lang-btn:hover { background: #2d3748; color: #e2e8f0; }
+    .lang-btn.active { background: #2d4a6e; color: #90cdf4; border-color: #4a7bab; }
   </style>
 </head>
 <body>
@@ -213,18 +217,19 @@
 <nav class="top-nav">
   <span class="nav-brand">🪁 Lenticularis</span>
   <div class="nav-links">
-    <a href="/" class="nav-link">Map</a>
-    <a href="/stations" class="nav-link">Stations</a>
-    <a href="/rulesets" class="nav-link">Rule Sets</a>
-    <a href="/stats" class="nav-link">Statistics</a>
-    <a href="/foehn" class="nav-link">Föhn</a>
+    <a href="/" class="nav-link" data-i18n="nav.map">Map</a>
+    <a href="/stations" class="nav-link" data-i18n="nav.stations">Stations</a>
+    <a href="/rulesets" class="nav-link" data-i18n="nav.rulesets">Rule Sets</a>
+    <a href="/stats" class="nav-link" data-i18n="nav.stats">Statistics</a>
+    <a href="/foehn" class="nav-link" data-i18n="nav.foehn">Föhn</a>
   </div>
+  <div id="navLangPicker"></div>
   <div class="nav-user" id="navUser"></div>
 </nav>
 
 <header class="station-header">
   <div class="header-title">
-    <h1 id="stationName">Loading…</h1>
+    <h1 id="stationName" data-i18n="station_detail.loading">Loading…</h1>
     <div class="header-meta">
       <span id="networkBadge"></span>
       <span id="stationCanton"></span>
@@ -241,77 +246,80 @@
 <div class="error-banner" id="errorBanner"></div>
 
 <div class="time-range-bar">
-  <span>Show:</span>
-  <button class="range-btn" data-hours="6"   onclick="setRange(6)">6 h</button>
-  <button class="range-btn active" data-hours="24"  onclick="setRange(24)">24 h</button>
-  <button class="range-btn" data-hours="48"  onclick="setRange(48)">48 h</button>
-  <button class="range-btn" data-hours="168" onclick="setRange(168)">7 days</button>
-  <button class="range-btn" data-hours="720" onclick="setRange(720)">30 days</button>
+  <span data-i18n="station_detail.show">Show:</span>
+  <button class="range-btn" data-hours="6"   onclick="setRange(6)"   data-i18n="station_detail.ranges.6h">6 h</button>
+  <button class="range-btn active" data-hours="24"  onclick="setRange(24)"  data-i18n="station_detail.ranges.24h">24 h</button>
+  <button class="range-btn" data-hours="48"  onclick="setRange(48)"  data-i18n="station_detail.ranges.48h">48 h</button>
+  <button class="range-btn" data-hours="168" onclick="setRange(168)" data-i18n="station_detail.ranges.7days">7 days</button>
+  <button class="range-btn" data-hours="720" onclick="setRange(720)" data-i18n="station_detail.ranges.30days">30 days</button>
 </div>
 
 <div id="loadingOverlay" class="loading-overlay">
   <div class="spinner"></div>
-  <p>Loading history…</p>
+  <p data-i18n="station_detail.loading_history">Loading history…</p>
 </div>
 
 <div class="charts-grid" id="chartsGrid" style="display:none">
   <!-- Wind speed + gust -->
   <div class="chart-card" id="card-wind" style="display:none">
-    <h2>Wind speed &amp; gust (km/h)</h2>
+    <h2 data-i18n="station_detail.charts.wind">Wind speed &amp; gust (km/h)</h2>
     <div class="chart-wrapper"><canvas id="chart-wind"></canvas></div>
   </div>
 
   <!-- Wind direction rose (heatmap) -->
   <div class="chart-card" id="card-wind_direction" style="display:none">
-    <h2>Wind Direction — Heatmap</h2>
+    <h2 data-i18n="station_detail.charts.wind_direction_heatmap">Wind Direction — Heatmap</h2>
     <div class="chart-wrapper-rose"><canvas id="chart-wind_direction"></canvas></div>
   </div>
 
   <!-- Wind direction line chart -->
   <div class="chart-card" id="card-wind_direction_line" style="display:none">
-    <h2>Wind Direction — History</h2>
+    <h2 data-i18n="station_detail.charts.wind_direction_history">Wind Direction — History</h2>
     <div class="chart-wrapper"><canvas id="chart-wind_direction_line"></canvas></div>
   </div>
 
   <!-- Temperature -->
   <div class="chart-card" id="card-temperature" style="display:none">
-    <h2>Temperature (°C)</h2>
+    <h2 data-i18n="station_detail.charts.temperature">Temperature (°C)</h2>
     <div class="chart-wrapper"><canvas id="chart-temperature"></canvas></div>
   </div>
 
   <!-- Humidity -->
   <div class="chart-card" id="card-humidity" style="display:none">
-    <h2>Humidity (%)</h2>
+    <h2 data-i18n="station_detail.charts.humidity">Humidity (%)</h2>
     <div class="chart-wrapper"><canvas id="chart-humidity"></canvas></div>
   </div>
 
   <!-- Pressure -->
   <div class="chart-card" id="card-pressure" style="display:none">
-    <h2>Pressure QNH (hPa)</h2>
+    <h2 data-i18n="station_detail.charts.pressure">Pressure QNH (hPa)</h2>
     <div class="chart-wrapper"><canvas id="chart-pressure"></canvas></div>
   </div>
 
   <!-- Precipitation -->
   <div class="chart-card" id="card-precipitation" style="display:none">
-    <h2>Precipitation (mm)</h2>
+    <h2 data-i18n="station_detail.charts.precipitation">Precipitation (mm)</h2>
     <div class="chart-wrapper"><canvas id="chart-precipitation"></canvas></div>
   </div>
 
   <!-- Snow depth -->
   <div class="chart-card" id="card-snow_depth" style="display:none">
-    <h2>Snow depth (cm)</h2>
+    <h2 data-i18n="station_detail.charts.snow">Snow depth (cm)</h2>
     <div class="chart-wrapper"><canvas id="chart-snow_depth"></canvas></div>
   </div>
 </div>
 
-<div id="noDataNote" class="no-data-note" style="display:none">
+<div id="noDataNote" class="no-data-note" style="display:none" data-i18n="station_detail.no_data">
   No data available for the selected time range.
 </div>
 
 <script src="/static/station-detail.js"></script>
 <script type="module">
+  import { initI18n, renderLangPicker } from '/static/i18n.js';
   import { renderNavAuth } from '/static/auth.js';
+  await initI18n();
   renderNavAuth('stations');
+  renderLangPicker();
 </script>
 </body>
 </html>

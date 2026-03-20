@@ -22,6 +22,10 @@
     .nav-user { display: flex; align-items: center; gap: 10px; margin-left: auto; }
     .nav-btn { background: transparent; border: 1px solid #4a5568; color: #a0aec0; font-size: 0.8rem; padding: 4px 10px; border-radius: 5px; cursor: pointer; transition: background 0.15s; }
     .nav-btn:hover { background: #2d3748; color: #e2e8f0; }
+    #navLangPicker { display: flex; gap: 2px; margin-left: 8px; }
+    .lang-btn { background: transparent; border: 1px solid #4a5568; color: #718096; font-size: 0.72rem; padding: 3px 7px; border-radius: 4px; cursor: pointer; transition: background 0.15s; }
+    .lang-btn:hover { background: #2d3748; color: #e2e8f0; }
+    .lang-btn.active { background: #2d4a6e; color: #90cdf4; border-color: #4a7bab; }
 
     /* ── Layout ── */
     .page { max-width: 1100px; margin: 0 auto; padding: 28px 20px 60px; width: 100%; }
@@ -147,32 +151,33 @@
 <nav class="top-nav">
   <span class="nav-brand">🪁 Lenticularis</span>
   <div class="nav-links">
-    <a href="/" class="nav-link">Map</a>
-    <a href="/stations" class="nav-link">Stations</a>
-    <a href="/rulesets" class="nav-link">Rule Sets</a>
-    <a href="/stats" class="nav-link active">Statistics</a>
-    <a href="/foehn" class="nav-link">Föhn</a>
+    <a href="/" class="nav-link" data-i18n="nav.map">Map</a>
+    <a href="/stations" class="nav-link" data-i18n="nav.stations">Stations</a>
+    <a href="/rulesets" class="nav-link" data-i18n="nav.rulesets">Rule Sets</a>
+    <a href="/stats" class="nav-link active" data-i18n="nav.stats">Statistics</a>
+    <a href="/foehn" class="nav-link" data-i18n="nav.foehn">Föhn</a>
   </div>
+  <div id="navLangPicker"></div>
   <div class="nav-user" id="navUser"></div>
 </nav>
 
 <div class="page">
   <div class="auth-gate" id="authGate">
-    <p>Sign in to view statistics.</p>
-    <a href="/login?next=/stats" class="btn btn-primary">Sign in</a>
+    <p data-i18n="stats.sign_in_prompt">Sign in to view statistics.</p>
+    <a href="/login?next=/stats" class="btn btn-primary" data-i18n="nav.sign_in">Sign in</a>
   </div>
 
   <div id="mainContent" style="display:none">
     <div class="page-header">
-      <h1>Statistics</h1>
-      <p>Aggregate insights across all your rule sets, live weather extremes, and service health.</p>
+      <h1 data-i18n="stats.title">Statistics</h1>
+      <p data-i18n="stats.subtitle">Aggregate insights across all your rule sets, live weather extremes, and service health.</p>
     </div>
 
     <!-- Tabs -->
     <div class="tab-bar">
-      <button class="tab-btn active" data-tab="ruleset">Ruleset Stats</button>
-      <button class="tab-btn" data-tab="weather">Weather Stats</button>
-      <button class="tab-btn" data-tab="service">Service Stats</button>
+      <button class="tab-btn active" data-tab="ruleset" data-i18n="stats.tabs.ruleset">Ruleset Stats</button>
+      <button class="tab-btn" data-tab="weather" data-i18n="stats.tabs.weather">Weather Stats</button>
+      <button class="tab-btn" data-tab="service" data-i18n="stats.tabs.service">Service Stats</button>
     </div>
 
     <!-- ══════════════════════════════════════════════════════════════
@@ -181,48 +186,48 @@
     <div class="tab-panel active" id="tab-ruleset">
 
       <div class="controls">
-        <span class="control-label">Period</span>
+        <span class="control-label" data-i18n="stats.period">Period</span>
         <div class="seg-control" id="rsPeriod">
           <button class="seg-btn active" data-hours="168">7 d</button>
           <button class="seg-btn" data-hours="720">30 d</button>
           <button class="seg-btn" data-hours="2160">90 d</button>
           <button class="seg-btn" data-hours="8760">1 y</button>
         </div>
-        <button class="btn btn-ghost" id="rsRefresh" style="margin-left:auto">↻ Refresh</button>
+        <button class="btn btn-ghost" id="rsRefresh" style="margin-left:auto" data-i18n="common.refresh">↻ Refresh</button>
       </div>
 
       <!-- Summary cards -->
       <div class="summary-row" id="rsSummary">
-        <div class="sc"><div class="sc-label">Total evaluations</div><div class="sc-value blue" id="sc-total">—</div></div>
-        <div class="sc"><div class="sc-label">Overall green</div><div class="sc-value green" id="sc-green-pct">—</div><div class="sc-sub" id="sc-green-count"></div></div>
-        <div class="sc"><div class="sc-label">Overall orange</div><div class="sc-value orange" id="sc-orange-pct">—</div><div class="sc-sub" id="sc-orange-count"></div></div>
-        <div class="sc"><div class="sc-label">Overall red</div><div class="sc-value red" id="sc-red-pct">—</div><div class="sc-sub" id="sc-red-count"></div></div>
-        <div class="sc"><div class="sc-label">Best site</div><div class="sc-value green" id="sc-best-pct">—</div><div class="sc-sub" id="sc-best-name" style="color:#68d391"></div></div>
-        <div class="sc"><div class="sc-label">Worst site</div><div class="sc-value red" id="sc-worst-pct">—</div><div class="sc-sub" id="sc-worst-name" style="color:#fc8181"></div></div>
+        <div class="sc"><div class="sc-label" data-i18n="stats.ruleset.total_evaluations">Total evaluations</div><div class="sc-value blue" id="sc-total">—</div></div>
+        <div class="sc"><div class="sc-label" data-i18n="stats.ruleset.overall_green">Overall green</div><div class="sc-value green" id="sc-green-pct">—</div><div class="sc-sub" id="sc-green-count"></div></div>
+        <div class="sc"><div class="sc-label" data-i18n="stats.ruleset.overall_orange">Overall orange</div><div class="sc-value orange" id="sc-orange-pct">—</div><div class="sc-sub" id="sc-orange-count"></div></div>
+        <div class="sc"><div class="sc-label" data-i18n="stats.ruleset.overall_red">Overall red</div><div class="sc-value red" id="sc-red-pct">—</div><div class="sc-sub" id="sc-red-count"></div></div>
+        <div class="sc"><div class="sc-label" data-i18n="stats.ruleset.best_site">Best site</div><div class="sc-value green" id="sc-best-pct">—</div><div class="sc-sub" id="sc-best-name" style="color:#68d391"></div></div>
+        <div class="sc"><div class="sc-label" data-i18n="stats.ruleset.worst_site">Worst site</div><div class="sc-value red" id="sc-worst-pct">—</div><div class="sc-sub" id="sc-worst-name" style="color:#fc8181"></div></div>
       </div>
 
-      <div id="rsNoData" style="display:none" class="empty-msg">
+      <div id="rsNoData" style="display:none" class="empty-msg" data-i18n="stats.ruleset.no_data">
         No decision history found in this period. Run some ruleset evaluations first.
       </div>
 
       <!-- Site comparison (full width) -->
-      <div class="section-header"><span class="section-title">Site comparison</span><div class="section-divider"></div></div>
+      <div class="section-header"><span class="section-title" data-i18n="stats.ruleset.site_comparison">Site comparison</span><div class="section-divider"></div></div>
       <div class="chart-card" style="margin-bottom:20px">
-        <div class="chart-subtitle">% green / orange / red per rule set — sorted by green</div>
-        <div id="compareList" class="loading"><span class="spin">⟳</span> Loading…</div>
+        <div class="chart-subtitle" data-i18n="stats.ruleset.site_comparison_sub">% green / orange / red per rule set — sorted by green</div>
+        <div id="compareList" class="loading"><span class="spin">⟳</span> <span data-i18n="common.loading">Loading…</span></div>
       </div>
 
       <!-- Daily + hourly -->
-      <div class="section-header"><span class="section-title">Patterns</span><div class="section-divider"></div></div>
+      <div class="section-header"><span class="section-title" data-i18n="stats.ruleset.patterns">Patterns</span><div class="section-divider"></div></div>
       <div class="chart-grid">
         <div class="chart-card">
-          <div class="chart-title">Daily decisions</div>
-          <div class="chart-subtitle">Evaluations per day across all rule sets</div>
+          <div class="chart-title" data-i18n="stats.ruleset.daily_decisions">Daily decisions</div>
+          <div class="chart-subtitle" data-i18n="stats.ruleset.daily_decisions_sub">Evaluations per day across all rule sets</div>
           <div class="chart-wrap"><canvas id="chartFlyable"></canvas></div>
         </div>
         <div class="chart-card">
-          <div class="chart-title">Hourly pattern</div>
-          <div class="chart-subtitle">% status by hour of day (UTC), all rule sets</div>
+          <div class="chart-title" data-i18n="stats.ruleset.hourly_pattern">Hourly pattern</div>
+          <div class="chart-subtitle" data-i18n="stats.ruleset.hourly_pattern_sub">% status by hour of day (UTC), all rule sets</div>
           <div class="chart-wrap"><canvas id="chartHourly"></canvas></div>
         </div>
       </div>
@@ -235,38 +240,38 @@
     <div class="tab-panel" id="tab-weather">
 
       <!-- Extremes period selector -->
-      <div class="section-header"><span class="section-title">Extremes</span><div class="section-divider"></div></div>
+      <div class="section-header"><span class="section-title" data-i18n="stats.weather.extremes">Extremes</span><div class="section-divider"></div></div>
       <div class="controls" style="margin-bottom:16px">
         <div class="seg-control" id="wxExtremePeriod">
-          <button class="seg-btn active" data-period="now">Now</button>
-          <button class="seg-btn" data-period="today">Today</button>
-          <button class="seg-btn" data-period="yesterday">Yesterday</button>
-          <button class="seg-btn" data-period="last_week">Last 7 d</button>
-          <button class="seg-btn" data-period="tomorrow">Tomorrow ▸</button>
-          <button class="seg-btn" data-period="choose">📅 Date</button>
+          <button class="seg-btn active" data-period="now" data-i18n="stats.weather.now">Now</button>
+          <button class="seg-btn" data-period="today" data-i18n="stats.weather.today">Today</button>
+          <button class="seg-btn" data-period="yesterday" data-i18n="stats.weather.yesterday">Yesterday</button>
+          <button class="seg-btn" data-period="last_week" data-i18n="stats.weather.last_7d">Last 7 d</button>
+          <button class="seg-btn" data-period="tomorrow" data-i18n="stats.weather.tomorrow">Tomorrow ▸</button>
+          <button class="seg-btn" data-period="choose" data-i18n="stats.weather.choose_date">📅 Date</button>
         </div>
         <input type="date" id="wxDatePicker"
                style="display:none; background:#1a1f2e; border:1px solid #2d3748; color:#e2e8f0; border-radius:6px; padding:5px 10px; font-size:0.83rem; cursor:pointer" />
         <span id="extremePeriodLabel" style="font-size:0.78rem; color:#718096; margin-left:4px"></span>
-        <button class="btn btn-ghost" id="wxRefresh" style="margin-left:auto">↻ Refresh</button>
+        <button class="btn btn-ghost" id="wxRefresh" style="margin-left:auto" data-i18n="common.refresh">↻ Refresh</button>
       </div>
 
       <div id="extremesGrid" class="extremes-grid">
-        <div class="loading" style="grid-column:1/-1"><span class="spin">⟳</span> Loading…</div>
+        <div class="loading" style="grid-column:1/-1"><span class="spin">⟳</span> <span data-i18n="common.loading">Loading…</span></div>
       </div>
 
       <!-- Network + freshness -->
-      <div class="section-header"><span class="section-title">Station health</span><div class="section-divider"></div></div>
+      <div class="section-header"><span class="section-title" data-i18n="stats.weather.station_health">Station health</span><div class="section-divider"></div></div>
       <div class="chart-grid">
         <div class="chart-card">
-          <div class="chart-title">Network coverage</div>
-          <div class="chart-subtitle">Stations seen in last 24 h, by network</div>
-          <div id="netCoverage" class="loading"><span class="spin">⟳</span> Loading…</div>
+          <div class="chart-title" data-i18n="stats.weather.network_coverage">Network coverage</div>
+          <div class="chart-subtitle" data-i18n="stats.weather.network_coverage_sub">Stations seen in last 24 h, by network</div>
+          <div id="netCoverage" class="loading"><span class="spin">⟳</span> <span data-i18n="common.loading">Loading…</span></div>
         </div>
         <div class="chart-card">
-          <div class="chart-title">Station freshness</div>
-          <div class="chart-subtitle">20 most stale stations</div>
-          <div id="stationFreshness" class="loading"><span class="spin">⟳</span> Loading…</div>
+          <div class="chart-title" data-i18n="stats.weather.station_freshness">Station freshness</div>
+          <div class="chart-subtitle" data-i18n="stats.weather.station_freshness_sub">20 most stale stations</div>
+          <div id="stationFreshness" class="loading"><span class="spin">⟳</span> <span data-i18n="common.loading">Loading…</span></div>
         </div>
       </div>
 
@@ -278,39 +283,39 @@
     <div class="tab-panel" id="tab-service">
 
       <div class="controls">
-        <button class="btn btn-ghost" id="svcRefresh">↻ Refresh</button>
+        <button class="btn btn-ghost" id="svcRefresh" data-i18n="common.refresh">↻ Refresh</button>
       </div>
 
       <!-- Summary cards -->
-      <div class="section-header"><span class="section-title">Totals</span><div class="section-divider"></div></div>
+      <div class="section-header"><span class="section-title" data-i18n="stats.service.totals">Totals</span><div class="section-divider"></div></div>
       <div class="summary-row">
-        <div class="sc"><div class="sc-label">Users</div><div class="sc-value blue" id="sc-users">—</div></div>
-        <div class="sc"><div class="sc-label">Rule sets</div><div class="sc-value blue" id="sc-rulesets">—</div><div class="sc-sub" id="sc-public">— public</div></div>
-        <div class="sc"><div class="sc-label">Clones</div><div class="sc-value blue" id="sc-clones">—</div></div>
-        <div class="sc"><div class="sc-label">Collectors</div><div class="sc-value blue" id="sc-collectors">—</div><div class="sc-sub" id="sc-healthy">— healthy</div></div>
+        <div class="sc"><div class="sc-label" data-i18n="stats.service.users">Users</div><div class="sc-value blue" id="sc-users">—</div></div>
+        <div class="sc"><div class="sc-label" data-i18n="stats.service.rule_sets">Rule sets</div><div class="sc-value blue" id="sc-rulesets">—</div><div class="sc-sub" id="sc-public"></div></div>
+        <div class="sc"><div class="sc-label" data-i18n="stats.service.clones">Clones</div><div class="sc-value blue" id="sc-clones">—</div></div>
+        <div class="sc"><div class="sc-label" data-i18n="stats.service.collectors">Collectors</div><div class="sc-value blue" id="sc-collectors">—</div><div class="sc-sub" id="sc-healthy"></div></div>
       </div>
 
       <!-- InfluxDB storage cards -->
-      <div class="section-header"><span class="section-title">InfluxDB storage</span><div class="section-divider"></div></div>
+      <div class="section-header"><span class="section-title" data-i18n="stats.service.influxdb_storage">InfluxDB storage</span><div class="section-divider"></div></div>
       <div class="summary-row">
-        <div class="sc"><div class="sc-label">Weather records</div><div class="sc-value green" id="sc-wx-records">—</div><div class="sc-sub">last 365 days</div></div>
-        <div class="sc"><div class="sc-label">Forecast records</div><div class="sc-value blue" id="sc-fc-records">—</div><div class="sc-sub">last 30 days</div></div>
-        <div class="sc"><div class="sc-label">InfluxDB size</div><div class="sc-value" id="sc-db-size">—</div><div class="sc-sub" id="sc-db-size-sub">all shards on-disk</div></div>
+        <div class="sc"><div class="sc-label" data-i18n="stats.service.weather_records">Weather records</div><div class="sc-value green" id="sc-wx-records">—</div><div class="sc-sub" data-i18n="stats.service.last_365d">last 365 days</div></div>
+        <div class="sc"><div class="sc-label" data-i18n="stats.service.forecast_records">Forecast records</div><div class="sc-value blue" id="sc-fc-records">—</div><div class="sc-sub" data-i18n="stats.service.last_30d">last 30 days</div></div>
+        <div class="sc"><div class="sc-label" data-i18n="stats.service.influxdb_size">InfluxDB size</div><div class="sc-value" id="sc-db-size">—</div><div class="sc-sub" id="sc-db-size-sub" data-i18n="stats.service.all_shards">all shards on-disk</div></div>
       </div>
 
       <!-- Daily ingestion chart -->
-      <div class="section-header"><span class="section-title">Daily ingestion (last 30 days)</span><div class="section-divider"></div></div>
+      <div class="section-header"><span class="section-title" data-i18n="stats.service.influxdb_storage">Daily ingestion (last 30 days)</span><div class="section-divider"></div></div>
       <div class="chart-card">
         <div class="chart-title">Records written per day</div>
         <div class="chart-subtitle">wind_speed observations · weather (green) and forecast (blue)</div>
-        <div id="influxChartWrap" class="loading"><span class="spin">⟳</span> Loading…</div>
+        <div id="influxChartWrap" class="loading"><span class="spin">⟳</span> <span data-i18n="common.loading">Loading…</span></div>
         <canvas id="influxGrowthChart" height="90" style="display:none"></canvas>
       </div>
 
       <!-- Collector health table -->
       <div class="section-header"><span class="section-title">Collector health</span><div class="section-divider"></div></div>
       <div class="chart-card">
-        <div id="collectorTable" class="loading"><span class="spin">⟳</span> Loading…</div>
+        <div id="collectorTable" class="loading"><span class="spin">⟳</span> <span data-i18n="common.loading">Loading…</span></div>
       </div>
 
     </div><!-- /tab-service -->
@@ -319,9 +324,11 @@
 </div><!-- /page -->
 
 <script type="module">
+import { initI18n, renderLangPicker } from '/static/i18n.js';
 import { getUser, renderNavAuth, fetchAuth } from '/static/auth.js';
-
+await initI18n();
 renderNavAuth('stats');
+renderLangPicker();
 
 const user = getUser();
 if (!user) {
@@ -428,15 +435,15 @@ document.getElementById('wxDatePicker').addEventListener('change', e => {
 
 function updateExtremePeriodLabel() {
   const labels = {
-    now: 'latest snapshot (last measurement per station)',
-    today: 'UTC midnight → now',
-    yesterday: 'yesterday UTC',
-    last_week: 'rolling 7 days',
-    tomorrow: 'next 24 h — from forecast data',
+    now: window.t('stats.period_labels.now'),
+    today: window.t('stats.period_labels.today'),
+    yesterday: window.t('stats.period_labels.yesterday'),
+    last_week: window.t('stats.period_labels.last_week'),
+    tomorrow: window.t('stats.period_labels.tomorrow'),
   };
   const lbl = document.getElementById('extremePeriodLabel');
   if (_extremePeriod.startsWith('date:')) {
-    lbl.textContent = _extremePeriod.slice(5) + ' (full day UTC)';
+    lbl.textContent = window.t('stats.period_labels.date', {date: _extremePeriod.slice(5)});
   } else {
     lbl.textContent = labels[_extremePeriod] ?? '';
   }
@@ -457,7 +464,7 @@ async function loadRulesetTab() {
   _loaded.ruleset = true;
   // Reset to loading state on each call (covers re-loads from period buttons)
   document.getElementById('compareList').innerHTML =
-    '<div class="loading"><span class="spin">⟳</span> Loading…</div>';
+    `<div class="loading"><span class="spin">⟳</span> ${window.t('common.loading')}</div>`;
   try {
     const res = await fetchAuth(`/api/stats/rulesets/overview?hours=${_rsHours}`);
     if (!res.ok) {
@@ -483,11 +490,11 @@ function renderRulesetOverview(d) {
   // Summary cards
   document.getElementById('sc-total').textContent = noData ? '—' : agg.total.toLocaleString();
   document.getElementById('sc-green-pct').textContent = noData ? '—' : agg.green_pct + '%';
-  document.getElementById('sc-green-count').textContent = noData ? '' : agg.green_count.toLocaleString() + ' evaluations';
+  document.getElementById('sc-green-count').textContent = noData ? '' : window.t('stats.n_evaluations', {n: agg.green_count.toLocaleString()});
   document.getElementById('sc-orange-pct').textContent = noData ? '—' : agg.orange_pct + '%';
-  document.getElementById('sc-orange-count').textContent = noData ? '' : agg.orange_count.toLocaleString() + ' evaluations';
+  document.getElementById('sc-orange-count').textContent = noData ? '' : window.t('stats.n_evaluations', {n: agg.orange_count.toLocaleString()});
   document.getElementById('sc-red-pct').textContent = noData ? '—' : agg.red_pct + '%';
-  document.getElementById('sc-red-count').textContent = noData ? '' : agg.red_count.toLocaleString() + ' evaluations';
+  document.getElementById('sc-red-count').textContent = noData ? '' : window.t('stats.n_evaluations', {n: agg.red_count.toLocaleString()});
 
   const rsList = d.per_ruleset.filter(r => r.total > 0);
   if (rsList.length > 0) {
@@ -495,7 +502,7 @@ function renderRulesetOverview(d) {
     const worst = rsList[rsList.length - 1];
     document.getElementById('sc-best-pct').textContent = best.green_pct + '%';
     document.getElementById('sc-best-name').textContent = best.name;
-    document.getElementById('sc-worst-pct').textContent = worst.red_pct + '%' + ' red';
+    document.getElementById('sc-worst-pct').textContent = window.t('stats.ruleset.pct_red_sub', {pct: worst.red_pct});
     document.getElementById('sc-worst-name').textContent = worst.name;
   } else {
     ['sc-best-pct','sc-worst-pct'].forEach(id => document.getElementById(id).textContent = '—');
@@ -512,7 +519,7 @@ function renderRulesetOverview(d) {
 
 function renderCompare(rsList) {
   const el = document.getElementById('compareList');
-  if (!rsList.length) { el.innerHTML = '<div class="compare-empty">No rule sets found.</div>'; return; }
+  if (!rsList.length) { el.innerHTML = `<div class="compare-empty">${window.t('stats.ruleset.no_compare')}</div>`; return; }
 
   const withData = rsList.filter(r => r.total > 0);
   const noData   = rsList.filter(r => r.total === 0);
@@ -543,16 +550,16 @@ function renderFlyable(data) {
   mkChart('chartFlyable', 'bar', {
     labels: data.map(d => d.date),
     datasets: [
-      { label: 'Green',  data: data.map(d => d.green),  backgroundColor: C.green.bg,  borderColor: C.green.border,  borderWidth: 1, stack: 'a' },
-      { label: 'Orange', data: data.map(d => d.orange), backgroundColor: C.orange.bg, borderColor: C.orange.border, borderWidth: 1, stack: 'a' },
-      { label: 'Red',    data: data.map(d => d.red),    backgroundColor: C.red.bg,    borderColor: C.red.border,    borderWidth: 1, stack: 'a' },
+      { label: window.t('decisions.green'),  data: data.map(d => d.green),  backgroundColor: C.green.bg,  borderColor: C.green.border,  borderWidth: 1, stack: 'a' },
+      { label: window.t('decisions.orange'), data: data.map(d => d.orange), backgroundColor: C.orange.bg, borderColor: C.orange.border, borderWidth: 1, stack: 'a' },
+      { label: window.t('decisions.red'),    data: data.map(d => d.red),    backgroundColor: C.red.bg,    borderColor: C.red.border,    borderWidth: 1, stack: 'a' },
     ],
   }, {
     responsive: true, maintainAspectRatio: false,
     plugins: { legend: { position: 'top', labels: { boxWidth: 10, padding: 10 } }, tooltip: { mode: 'index' } },
     scales: {
       x: { stacked: true, ticks: { maxRotation: 45, autoSkip: true, maxTicksLimit: 14 } },
-      y: { stacked: true, beginAtZero: true, title: { display: true, text: 'evaluations' } },
+      y: { stacked: true, beginAtZero: true, title: { display: true, text: window.t('stats.ruleset.evaluations') } },
     },
   });
 }
@@ -561,9 +568,9 @@ function renderHourly(data) {
   mkChart('chartHourly', 'bar', {
     labels: data.map(d => `${String(d.hour).padStart(2,'0')}h`),
     datasets: [
-      { label: 'Green %',  data: data.map(d => d.green_pct),  backgroundColor: C.green.bg,  borderColor: C.green.border,  borderWidth: 1, stack: 'a' },
-      { label: 'Orange %', data: data.map(d => d.orange_pct), backgroundColor: C.orange.bg, borderColor: C.orange.border, borderWidth: 1, stack: 'a' },
-      { label: 'Red %',    data: data.map(d => d.red_pct),    backgroundColor: C.red.bg,    borderColor: C.red.border,    borderWidth: 1, stack: 'a' },
+      { label: window.t('decisions.green') + ' %',  data: data.map(d => d.green_pct),  backgroundColor: C.green.bg,  borderColor: C.green.border,  borderWidth: 1, stack: 'a' },
+      { label: window.t('decisions.orange') + ' %', data: data.map(d => d.orange_pct), backgroundColor: C.orange.bg, borderColor: C.orange.border, borderWidth: 1, stack: 'a' },
+      { label: window.t('decisions.red') + ' %',    data: data.map(d => d.red_pct),    backgroundColor: C.red.bg,    borderColor: C.red.border,    borderWidth: 1, stack: 'a' },
     ],
   }, {
     responsive: true, maintainAspectRatio: false,
@@ -587,7 +594,7 @@ async function loadWeatherTab() {
 
 async function loadExtremes() {
   document.getElementById('extremesGrid').innerHTML =
-    '<div class="loading" style="grid-column:1/-1"><span class="spin">⟳</span> Loading…</div>';
+    `<div class="loading" style="grid-column:1/-1"><span class="spin">⟳</span> ${window.t('common.loading')}</div>`;
   const res = await fetchAuth(`/api/stats/weather/extremes?period=${encodeURIComponent(_extremePeriod)}`);
   if (res.ok) renderExtremes(await res.json());
   else document.getElementById('extremesGrid').innerHTML = '<div class="empty-msg" style="grid-column:1/-1">Failed to load extremes.</div>';
@@ -602,35 +609,35 @@ async function loadWeatherHealth() {
   if (freshRes.ok) renderFreshness(await freshRes.json());
 }
 
-// Config: label, emoji, colour for each extreme
-const EXTREME_CFG = [
-  { field: 'wind_speed',   extreme: 'max', label: 'Highest wind',      emoji: '💨', colour: '#90cdf4' },
-  { field: 'wind_gust',    extreme: 'max', label: 'Highest gust',       emoji: '🌪',  colour: '#f6ad55' },
-  { field: 'temperature',  extreme: 'max', label: 'Hottest',            emoji: '🌡',  colour: '#fc8181' },
-  { field: 'temperature',  extreme: 'min', label: 'Coldest',            emoji: '🥶',  colour: '#90cdf4' },
-  { field: 'pressure_qnh', extreme: 'max', label: 'Highest pressure',   emoji: '⬆',  colour: '#68d391' },
-  { field: 'pressure_qnh', extreme: 'min', label: 'Lowest pressure',    emoji: '⬇',  colour: '#f6ad55' },
-  { field: 'precipitation',extreme: 'max', label: 'Most precipitation', emoji: '🌧',  colour: '#90cdf4' },
-  { field: 'snow_depth',   extreme: 'max', label: 'Deepest snow',       emoji: '❄',  colour: '#e2e8f0' },
-  { field: 'humidity',     extreme: 'max', label: 'Highest humidity',   emoji: '💧',  colour: '#90cdf4' },
-  { field: 'humidity',     extreme: 'min', label: 'Lowest humidity',    emoji: '🏜',  colour: '#d69e2e' },
-];
+// Config: label, emoji, colour for each extreme — labels use window.t() lazily
+function getExtremeCfg() { return [
+  { field: 'wind_speed',   extreme: 'max', label: window.t('stats.extremes.highest_wind'),       emoji: '💨', colour: '#90cdf4' },
+  { field: 'wind_gust',    extreme: 'max', label: window.t('stats.extremes.highest_gust'),       emoji: '🌪',  colour: '#f6ad55' },
+  { field: 'temperature',  extreme: 'max', label: window.t('stats.extremes.hottest'),            emoji: '🌡',  colour: '#fc8181' },
+  { field: 'temperature',  extreme: 'min', label: window.t('stats.extremes.coldest'),            emoji: '🥶',  colour: '#90cdf4' },
+  { field: 'pressure_qnh', extreme: 'max', label: window.t('stats.extremes.highest_pressure'),   emoji: '⬆',  colour: '#68d391' },
+  { field: 'pressure_qnh', extreme: 'min', label: window.t('stats.extremes.lowest_pressure'),    emoji: '⬇',  colour: '#f6ad55' },
+  { field: 'precipitation',extreme: 'max', label: window.t('stats.extremes.most_precipitation'), emoji: '🌧',  colour: '#90cdf4' },
+  { field: 'snow_depth',   extreme: 'max', label: window.t('stats.extremes.deepest_snow'),       emoji: '❄',  colour: '#e2e8f0' },
+  { field: 'humidity',     extreme: 'max', label: window.t('stats.extremes.highest_humidity'),   emoji: '💧',  colour: '#90cdf4' },
+  { field: 'humidity',     extreme: 'min', label: window.t('stats.extremes.lowest_humidity'),    emoji: '🏜',  colour: '#d69e2e' },
+]; }
 
 function renderExtremes(data) {
   const el = document.getElementById('extremesGrid');
   const isForecast = _extremePeriod === 'tomorrow';
 
-  const cards = EXTREME_CFG.map(cfg => {
+  const cards = getExtremeCfg().map(cfg => {
     const entry = data[cfg.field]?.[cfg.extreme];
     const badgeClass = cfg.extreme === 'max' ? 'ec-badge-max' : 'ec-badge-min';
-    const badgeLabel = cfg.extreme === 'max' ? '▲ MAX' : '▼ MIN';
+    const badgeLabel = cfg.extreme === 'max' ? window.t('stats.extremes.max_badge') : window.t('stats.extremes.min_badge');
     const forecastBadge = isForecast
-      ? `<span class="ec-badge" style="background:#1a2a3a;color:#90cdf4;border:1px solid #2b6cb0;margin-left:4px">forecast</span>`
+      ? `<span class="ec-badge" style="background:#1a2a3a;color:#90cdf4;border:1px solid #2b6cb0;margin-left:4px">${window.t('stats.extremes.forecast')}</span>`
       : '';
     if (!entry) {
       return `<div class="extreme-card">
         <div class="ec-label">${cfg.emoji} ${cfg.label} <span class="ec-badge ${badgeClass}">${badgeLabel}</span>${forecastBadge}</div>
-        <div class="ec-value" style="color:#4a5568;font-size:1.2rem">No data</div>
+        <div class="ec-value" style="color:#4a5568;font-size:1.2rem">${window.t('stats.extremes.no_data')}</div>
       </div>`;
     }
     const ts = entry.timestamp ? fmtDt(entry.timestamp) : '';
@@ -647,9 +654,9 @@ function renderExtremes(data) {
 
 function renderNetCoverage(data) {
   const el = document.getElementById('netCoverage');
-  if (!data.length) { el.innerHTML = '<div class="empty-msg">No data.</div>'; return; }
+  if (!data.length) { el.innerHTML = `<div class="empty-msg">${window.t('stats.weather.no_data')}</div>`; return; }
   el.innerHTML = `<table class="data-table">
-    <thead><tr><th>Network</th><th>Total</th><th>Fresh</th><th>Stale</th></tr></thead>
+    <thead><tr><th>${window.t('stats.weather.col_network')}</th><th>${window.t('stats.weather.col_total')}</th><th>${window.t('stats.weather.col_fresh')}</th><th>${window.t('stats.weather.col_stale')}</th></tr></thead>
     <tbody>${data.map(n => `<tr>
       <td>${esc(n.network)}</td><td>${n.total}</td>
       <td style="color:#68d391">${n.fresh}</td>
@@ -660,10 +667,10 @@ function renderNetCoverage(data) {
 
 function renderFreshness(data) {
   const el = document.getElementById('stationFreshness');
-  if (!data.length) { el.innerHTML = '<div class="empty-msg">No stations found.</div>'; return; }
+  if (!data.length) { el.innerHTML = `<div class="empty-msg">${window.t('stats.weather.no_stations')}</div>`; return; }
   const sorted = [...data].sort((a, b) => b.age_minutes - a.age_minutes).slice(0, 20);
   el.innerHTML = `<table class="data-table">
-    <thead><tr><th>Station</th><th>Network</th><th>Age</th></tr></thead>
+    <thead><tr><th>${window.t('stats.weather.col_station')}</th><th>${window.t('stats.weather.col_network')}</th><th>${window.t('stats.weather.col_age')}</th></tr></thead>
     <tbody>${sorted.map(s => `<tr>
       <td><span class="dot ${s.is_stale ? 'dot-stale' : 'dot-fresh'}"></span>${esc(s.station_id)}</td>
       <td style="color:#718096">${esc(s.network)}</td>
@@ -688,10 +695,10 @@ async function loadServiceTab() {
   if (summary) {
     document.getElementById('sc-users').textContent = summary.users.total;
     document.getElementById('sc-rulesets').textContent = summary.rulesets.total;
-    document.getElementById('sc-public').textContent = `${summary.rulesets.public} public`;
+    document.getElementById('sc-public').textContent = window.t('stats.service.n_public', {n: summary.rulesets.public});
     document.getElementById('sc-clones').textContent = summary.rulesets.total_clones;
     document.getElementById('sc-collectors').textContent = summary.collectors.total;
-    document.getElementById('sc-healthy').textContent = `${summary.collectors.healthy} healthy`;
+    document.getElementById('sc-healthy').textContent = window.t('stats.service.n_healthy', {n: summary.collectors.healthy});
   }
 
   if (influx) renderInfluxStats(influx);
@@ -722,11 +729,11 @@ function renderInfluxStats(data) {
   if (data.storage_bytes != null) {
     sizeEl.textContent    = fmtBytes(data.storage_bytes);
     sizeEl.className      = 'sc-value';
-    sizeSubEl.textContent = 'on-disk';
+    sizeSubEl.textContent = window.t('stats.service.on_disk');
   } else {
     sizeEl.textContent    = 'N/A';
     sizeEl.className      = 'sc-value';
-    sizeSubEl.textContent = '/metrics unavailable';
+    sizeSubEl.textContent = window.t('stats.service.metrics_unavailable');
   }
 
   // Build chart
@@ -753,7 +760,7 @@ function renderInfluxStats(data) {
       labels: allDates,
       datasets: [
         {
-          label: 'Weather observations',
+          label: window.t('stats.service.weather_records'),
           data: allDates.map(d => wxMap[d] ?? 0),
           borderColor: '#48bb78',
           backgroundColor: 'rgba(72,187,120,0.15)',
@@ -762,7 +769,7 @@ function renderInfluxStats(data) {
           pointRadius: 2,
         },
         {
-          label: 'Forecast records',
+          label: window.t('stats.service.forecast_records'),
           data: allDates.map(d => fcMap[d] ?? 0),
           borderColor: '#63b3ed',
           backgroundColor: 'rgba(99,179,237,0.15)',
@@ -796,7 +803,7 @@ function renderInfluxStats(data) {
 
 function renderCollectorTable(collectors) {
   const el = document.getElementById('collectorTable');
-  if (!collectors.length) { el.innerHTML = '<div class="empty-msg">No collectors configured.</div>'; return; }
+  if (!collectors.length) { el.innerHTML = `<div class="empty-msg">${window.t('stats.service.no_collectors')}</div>`; return; }
 
   function dotCls(s) {
     if (['ok','ok_no_data'].includes(s)) return 'dot-ok';
@@ -806,7 +813,7 @@ function renderCollectorTable(collectors) {
   }
 
   el.innerHTML = `<table class="data-table">
-    <thead><tr><th>Collector</th><th>Type</th><th>Status</th><th>Last success</th><th>Last error</th><th>Failures</th><th>Interval</th></tr></thead>
+    <thead><tr><th>${window.t('stats.service.col_collector')}</th><th>${window.t('stats.service.col_type')}</th><th>${window.t('stats.service.col_status')}</th><th>${window.t('stats.service.col_last_success')}</th><th>${window.t('stats.service.col_last_error')}</th><th>${window.t('stats.service.col_failures')}</th><th>${window.t('stats.service.col_interval')}</th></tr></thead>
     <tbody>${collectors.map(c => `<tr>
       <td><span class="dot ${dotCls(c.status)}"></span>${esc(c.collector)}</td>
       <td style="color:#718096">${c.type ?? '—'}</td>

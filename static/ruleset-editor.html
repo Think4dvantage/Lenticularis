@@ -22,6 +22,10 @@
     .nav-user-name { font-size: 0.85rem; color: #90cdf4; }
     .nav-btn { background: transparent; border: 1px solid #4a5568; color: #a0aec0; font-size: 0.8rem; padding: 4px 10px; border-radius: 5px; cursor: pointer; }
     .nav-btn:hover { background: #2d3748; color: #e2e8f0; }
+    #navLangPicker { display: flex; gap: 2px; margin-left: 8px; }
+    .lang-btn { background: transparent; border: 1px solid #4a5568; color: #718096; font-size: 0.72rem; padding: 3px 7px; border-radius: 4px; cursor: pointer; transition: background 0.15s; }
+    .lang-btn:hover { background: #2d3748; color: #e2e8f0; }
+    .lang-btn.active { background: #2d4a6e; color: #90cdf4; border-color: #4a7bab; }
 
     /* ── Layout ── */
     .page { max-width: 960px; margin: 0 auto; padding: 32px 20px 60px; width: 100%; }
@@ -208,19 +212,20 @@
 <nav class="top-nav">
   <span class="nav-brand">🪁 Lenticularis</span>
   <div class="nav-links">
-    <a href="/" class="nav-link">Map</a>
-    <a href="/stations" class="nav-link">Stations</a>
-    <a href="/rulesets" class="nav-link active">Rule Sets</a>
-    <a href="/stats" class="nav-link">Statistics</a>
-    <a href="/foehn" class="nav-link">Föhn</a>
+    <a href="/" class="nav-link" data-i18n="nav.map">Map</a>
+    <a href="/stations" class="nav-link" data-i18n="nav.stations">Stations</a>
+    <a href="/rulesets" class="nav-link active" data-i18n="nav.rulesets">Rule Sets</a>
+    <a href="/stats" class="nav-link" data-i18n="nav.stats">Statistics</a>
+    <a href="/foehn" class="nav-link" data-i18n="nav.foehn">Föhn</a>
   </div>
+  <div id="navLangPicker"></div>
   <div class="nav-user" id="navUser"></div>
 </nav>
 
 <div class="page">
   <div class="page-header">
-    <a href="/rulesets">← My Rule Sets</a>
-    <h1 id="pageTitle">New Rule Set</h1>
+    <a href="/rulesets" data-i18n="editor.back">← My Rule Sets</a>
+    <h1 id="pageTitle" data-i18n="editor.new_title">New Rule Set</h1>
   </div>
 
   <div class="error-msg" id="errorMsg"></div>
@@ -228,61 +233,61 @@
 
   <!-- ── Name ── -->
   <div class="name-hero">
-    <input type="text" id="rsName" placeholder="Rule set name, e.g. Beatenberg Südstart" maxlength="120" required />
+    <input type="text" id="rsName" data-i18n-placeholder="editor.name_placeholder" placeholder="Rule set name, e.g. Beatenberg Südstart" maxlength="120" required />
   </div>
 
   <!-- ── Map ── -->
   <div id="locationMap"></div>
-  <p class="map-hint">📍 Click the map to set the site location.</p>
+  <p class="map-hint" data-i18n="editor.map_hint">📍 Click the map to set the site location.</p>
   <input type="hidden" id="rsLat" />
   <input type="hidden" id="rsLon" />
   <input type="hidden" id="rsAlt" />
 
   <!-- ── Rule Engine ── -->
   <div class="section">
-    <div class="section-title">Rule Engine</div>
+    <div class="section-title" data-i18n="editor.section_engine">Rule Engine</div>
 
     <div id="conditionList"></div>
 
     <div class="conditions-header">
       <span></span>
-      <button class="btn btn-add" id="addGroupBtn">＋ Add Condition Group</button>
+      <button class="btn btn-add" id="addGroupBtn" data-i18n="editor.add_group">＋ Add Condition Group</button>
     </div>
 
     <p style="margin-top:14px;font-size:0.78rem;color:#4a5568">
-      Each condition targets an independent station. &ldquo;Value B&rdquo; is only used for <em>between</em> and <em>in direction range</em> operators.<br>
-      Conditions within the same group are <strong>AND</strong>-linked — all must match for the group to trigger.<br>
-      Direction compass: N=0° &nbsp;NE=45° &nbsp;E=90° &nbsp;SE=135° &nbsp;S=180° &nbsp;SW=225° &nbsp;W=270° &nbsp;NW=315°<br>
-      <span style="color:#f6ad55">⚠ Use <em>between A and B</em> for middle ranges to avoid overlapping triggers.</span>
+      <span data-i18n="editor.engine_hint_main">Each condition targets an independent station. "Value B" is only used for <em>between</em> and <em>in direction range</em> operators.</span><br>
+      <span data-i18n="editor.engine_hint_and">Conditions within the same group are AND-linked — all must match for the group to trigger.</span><br>
+      <span data-i18n="editor.engine_hint_compass">Direction compass: N=0° NE=45° E=90° SE=135° S=180° SW=225° W=270° NW=315°</span><br>
+      <span style="color:#f6ad55" data-i18n="editor.engine_hint_warning">⚠ Use between A and B for middle ranges to avoid overlapping triggers.</span>
     </p>
   </div>
 
   <!-- ── Evaluation ── -->
   <div class="section">
-    <div class="section-title">Evaluation</div>
+    <div class="section-title" data-i18n="editor.section_evaluation">Evaluation</div>
 
     <div class="form-group" style="margin-bottom:16px">
-      <label>Site type</label>
+      <label data-i18n="editor.site_type">Site type</label>
       <div class="site-type-toggle">
-        <button type="button" class="site-type-btn active" id="btnTypeLaunch">▲ Launch site</button>
-        <button type="button" class="site-type-btn"        id="btnTypeLanding">⚑ Landing zone</button>
+        <button type="button" class="site-type-btn active" id="btnTypeLaunch" data-i18n="editor.launch_site">▲ Launch site</button>
+        <button type="button" class="site-type-btn"        id="btnTypeLanding" data-i18n="editor.landing_zone_btn">⚑ Landing zone</button>
       </div>
       <input type="hidden" id="rsSiteType" value="launch" />
     </div>
 
-    <p style="font-size:0.82rem;color:#718096;margin-bottom:16px">Combination logic: <strong style="color:#e2e8f0">worst wins</strong> — if any condition triggers RED the site is RED; any ORANGE and it’s ORANGE.</p>
+    <p style="font-size:0.82rem;color:#718096;margin-bottom:16px" data-i18n="editor.combination_hint">Combination logic: <strong style="color:#e2e8f0">worst wins</strong> — if any condition triggers RED the site is RED; any ORANGE and it’s ORANGE.</p>
     <div class="toggle-row">
       <label class="toggle">
         <input type="checkbox" id="rsPublic" />
         <span class="slider"></span>
       </label>
-      <span class="toggle-label" id="publicLabel">Private (only you)</span>
+      <span class="toggle-label" id="publicLabel" data-i18n="editor.private_label">Private (only you)</span>
     </div>
 
     <!-- Landing zone links — only shown for launch type -->
     <div id="landingPickerSection" class="landing-picker">
-      <div class="landing-picker-title">Linked landing zones</div>
-      <p class="landing-picker-hint">Select the landing zones pilots would use after launching here. The map will show a halo coloured by the best landing decision.</p>
+      <div class="landing-picker-title" data-i18n="editor.linked_landings">Linked landing zones</div>
+      <p class="landing-picker-hint" data-i18n="editor.linked_landings_hint">Select the landing zones pilots would use after launching here. The map will show a halo coloured by the best landing decision.</p>
       <div class="landing-picker-list" id="landingPickerList">
         <!-- filled by JS -->
       </div>
@@ -291,8 +296,8 @@
 
   <!-- ── Save bar ── -->
   <div class="save-bar">
-    <a href="/rulesets" class="btn btn-ghost">Cancel</a>
-    <button class="btn btn-primary" id="saveBtn">Save rule set</button>
+    <a href="/rulesets" class="btn btn-ghost" data-i18n="editor.cancel">Cancel</a>
+    <button class="btn btn-primary" id="saveBtn" data-i18n="editor.save">Save rule set</button>
   </div>
 </div>
 
@@ -317,10 +322,12 @@
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script type="module">
+  import { initI18n, renderLangPicker } from '/static/i18n.js';
   import { authHeader, renderNavAuth, isLoggedIn, getUser, fetchAuth } from '/static/auth.js';
-
+  await initI18n();
   if (!isLoggedIn()) { window.location.href = '/login?next=' + encodeURIComponent(location.pathname + location.search); }
   renderNavAuth('rulesets');
+  renderLangPicker();
 
   // ── Location map picker ────────────────────────────────────────────────────
   // Switzerland centre, zoom 8
@@ -498,26 +505,26 @@
   let condSeq = 0;
 
   const FIELDS = [
-    { v: 'wind_speed',      l: 'Wind speed',     unit: 'km/h' },
-    { v: 'wind_gust',       l: 'Wind gust',      unit: 'km/h' },
-    { v: 'wind_direction',  l: 'Wind direction', unit: '°'    },
-    { v: 'temperature',     l: 'Temperature',    unit: '°C'   },
-    { v: 'humidity',        l: 'Humidity',       unit: '%'    },
-    { v: 'pressure',        l: 'Pressure',       unit: 'hPa'  },
-    { v: 'pressure_delta',  l: 'Pressure delta (hPa between two stations)', unit: 'hPa'  },
-    { v: 'precipitation',   l: 'Precipitation',  unit: 'mm'   },
-    { v: 'snow_depth',      l: 'Snow depth',     unit: 'cm'   },
+    { v: 'wind_speed',      l: window.t('editor.fields.wind_speed'),     unit: 'km/h' },
+    { v: 'wind_gust',       l: window.t('editor.fields.wind_gust'),      unit: 'km/h' },
+    { v: 'wind_direction',  l: window.t('editor.fields.wind_direction'), unit: '°'    },
+    { v: 'temperature',     l: window.t('editor.fields.temperature'),    unit: '°C'   },
+    { v: 'humidity',        l: window.t('editor.fields.humidity'),       unit: '%'    },
+    { v: 'pressure',        l: window.t('editor.fields.pressure'),       unit: 'hPa'  },
+    { v: 'pressure_delta',  l: window.t('editor.fields.pressure_delta'), unit: 'hPa'  },
+    { v: 'precipitation',   l: window.t('editor.fields.precipitation'),  unit: 'mm'   },
+    { v: 'snow_depth',      l: window.t('editor.fields.snow_depth'),     unit: 'cm'   },
   ];
 
   const OPS = [
-    { v: '>',                l: '> greater than'      },
-    { v: '<',                l: '< less than'          },
-    { v: '>=',               l: '≥ at least'           },
-    { v: '<=',               l: '≤ at most'            },
-    { v: '=',                l: '= equals'             },
-    { v: 'between',          l: 'between A and B'      },
-    { v: 'not_between',      l: 'not between A and B'  },
-    { v: 'in_direction_range', l: 'in direction A–B°' },
+    { v: '>',                  l: window.t('editor.ops.gt')               },
+    { v: '<',                  l: window.t('editor.ops.lt')               },
+    { v: '>=',                 l: window.t('editor.ops.gte')              },
+    { v: '<=',                 l: window.t('editor.ops.lte')              },
+    { v: '=',                  l: window.t('editor.ops.eq')               },
+    { v: 'between',            l: window.t('editor.ops.between')          },
+    { v: 'not_between',        l: window.t('editor.ops.not_between')      },
+    { v: 'in_direction_range', l: window.t('editor.ops.in_direction_range') },
   ];
 
   const TWO_VALUE_OPS = new Set(['between', 'not_between', 'in_direction_range']);
@@ -548,19 +555,19 @@
     groupEl.dataset.groupId = gid;
     groupEl.innerHTML = `
       <div class="condition-group-header">
-        <span class="condition-group-label">Condition Group</span>
+        <span class="condition-group-label">${window.t('editor.condition_group')}</span>
         <div style="display:flex;align-items:center;gap:10px">
           <select class="group-colour-select">
-            <option value="green"  ${initialColour === 'green'  ? 'selected' : ''}>🟢 Green</option>
-            <option value="orange" ${initialColour === 'orange' ? 'selected' : ''}>🟠 Orange</option>
-            <option value="red"    ${initialColour === 'red'    ? 'selected' : ''}>🔴 Red</option>
+            <option value="green"  ${initialColour === 'green'  ? 'selected' : ''}>${window.t('editor.colours.green')}</option>
+            <option value="orange" ${initialColour === 'orange' ? 'selected' : ''}>${window.t('editor.colours.orange')}</option>
+            <option value="red"    ${initialColour === 'red'    ? 'selected' : ''}>${window.t('editor.colours.red')}</option>
           </select>
-          <button class="btn-remove-group">✕ Remove group</button>
+          <button class="btn-remove-group">${window.t('editor.remove_group')}</button>
         </div>
       </div>
       <div class="condition-group-body"></div>
       <div class="condition-group-footer">
-        <button class="btn btn-add btn-add-cond">＋ Add condition</button>
+        <button class="btn btn-add btn-add-cond">${window.t('editor.add_condition')}</button>
       </div>`;
     document.getElementById('conditionList').appendChild(groupEl);
     const body = groupEl.querySelector('.condition-group-body');
@@ -600,7 +607,7 @@
       drop.innerHTML = matches.map(s => `
         <div class="station-option" data-id="${s.station_id}">
           ${esc(s.name)} <span class="sid">${s.network} · ${s.station_id}</span>
-        </div>`).join('') || '<div class="station-option" style="color:#718096">No matches</div>';
+        </div>`).join('') || `<div class="station-option" style="color:#718096">${window.t('editor.no_matches')}</div>`;
       drop.classList.add('open');
     });
 
@@ -641,13 +648,13 @@
 
     el.innerHTML = `
       <div class="station-search">
-        <input type="text" class="station-input" placeholder="Search station…"
+        <input type="text" class="station-input" placeholder="${window.t('editor.search_station')}"
           data-selected-id="${esc(data.station_id || '')}"
           value="${data.station_id ? esc(allStations.find(s => s.station_id === data.station_id)?.name || data.station_id) : ''}" />
         <div class="station-dropdown"></div>
         <div class="station-b-wrap">
-          <div class="station-b-label">Compare with station (B):</div>
-          <input type="text" class="station-input station-b-input" placeholder="Search station B…"
+          <div class="station-b-label">${window.t('editor.station_b_label')}</div>
+          <input type="text" class="station-input station-b-input" placeholder="${window.t('editor.search_station_b')}"
             data-selected-id="${esc(data.station_b_id || '')}"
             value="${staBName ? esc(staBName) : ''}" />
           <div class="station-b-dropdown station-dropdown"></div>
@@ -759,7 +766,7 @@
 
   function updatePublicLabel() {
     const isPublic = document.getElementById('rsPublic').checked;
-    document.getElementById('publicLabel').textContent = isPublic ? 'Public (gallery)' : 'Private (only you)';
+    document.getElementById('publicLabel').textContent = isPublic ? window.t('editor.public_label') : window.t('editor.private_label');
   }
 
   function esc(s) {
@@ -788,7 +795,7 @@
   function renderLandingPicker(selectedIds = []) {
     const list = document.getElementById('landingPickerList');
     if (myLandingRulesets.length === 0) {
-      list.innerHTML = '<p class="landing-picker-hint">No landing zones yet — create a ruleset with type "Landing zone" first.</p>';
+      list.innerHTML = `<p class="landing-picker-hint">${window.t('editor.no_landings')}</p>`;
       return;
     }
     list.innerHTML = myLandingRulesets.map(rs => {
@@ -809,10 +816,10 @@
   // ── Load existing rule set for editing ────────────────────────────────
   async function loadEdit(id) {
     const res = await fetchAuth(`/api/rulesets/${id}`);
-    if (!res.ok) { showError('Could not load rule set.'); return; }
+    if (!res.ok) { showError(window.t('editor.load_error')); return; }
     const rs = await res.json();
 
-    document.getElementById('pageTitle').textContent = 'Edit Rule Set';
+    document.getElementById('pageTitle').textContent = window.t('editor.edit_title');
     document.getElementById('rsName').value    = rs.name || '';
     document.getElementById('rsLat').value     = rs.lat ?? '';
     document.getElementById('rsLon').value     = rs.lon ?? '';
@@ -843,13 +850,13 @@
   document.getElementById('saveBtn').addEventListener('click', async () => {
     clearMessages();
     const name = document.getElementById('rsName').value.trim();
-    if (!name) { showError('Name is required.'); return; }
+    if (!name) { showError(window.t('editor.name_required')); return; }
 
     const conditions = readConditions();
-    if (conditions === null) { showError('Please select a station for every condition row.'); return; }
+    if (conditions === null) { showError(window.t('editor.station_required')); return; }
 
     const btn = document.getElementById('saveBtn');
-    btn.disabled = true; btn.textContent = 'Saving…';
+    btn.disabled = true; btn.textContent = window.t('editor.saving');
 
     const siteType = document.getElementById('rsSiteType').value;
 
@@ -905,11 +912,11 @@
         if (!lr.ok) throw new Error(await extractError(lr));
       }
 
-      showSuccess('Saved successfully.');
+      showSuccess(window.t('editor.saved'));
     } catch (e) {
       showError(e.message);
     } finally {
-      btn.disabled = false; btn.textContent = 'Save rule set';
+      btn.disabled = false; btn.textContent = window.t('editor.save');
     }
   });
 

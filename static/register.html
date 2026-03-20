@@ -35,6 +35,10 @@
     .nav-user-name { font-size: 0.85rem; color: #90cdf4; }
     .nav-btn { background: transparent; border: 1px solid #4a5568; color: #a0aec0; font-size: 0.8rem; padding: 4px 10px; border-radius: 5px; cursor: pointer; transition: background 0.15s; }
     .nav-btn:hover { background: #2d3748; color: #e2e8f0; }
+    #navLangPicker { display: flex; gap: 2px; margin-left: 8px; }
+    .lang-btn { background: transparent; border: 1px solid #4a5568; color: #718096; font-size: 0.72rem; padding: 3px 7px; border-radius: 4px; cursor: pointer; transition: background 0.15s; }
+    .lang-btn:hover { background: #2d3748; color: #e2e8f0; }
+    .lang-btn.active { background: #2d4a6e; color: #90cdf4; border-color: #4a7bab; }
 
     .auth-wrapper {
       flex: 1;
@@ -138,65 +142,70 @@
 <nav class="top-nav">
   <span class="nav-brand">🪁 Lenticularis</span>
   <div class="nav-links">
-    <a href="/" class="nav-link">Map</a>
-    <a href="/stations" class="nav-link">Stations</a>
+    <a href="/" class="nav-link" data-i18n="nav.map">Map</a>
+    <a href="/stations" class="nav-link" data-i18n="nav.stations">Stations</a>
   </div>
+  <div id="navLangPicker"></div>
   <div class="nav-user" id="navUser"></div>
 </nav>
 
 <div class="auth-wrapper">
   <div class="auth-card">
-    <h1>Create account</h1>
-    <p class="subtitle">A local account is recommended — your paragliding data stays under your control.</p>
+    <h1 data-i18n="auth.register_title">Create account</h1>
+    <p class="subtitle" data-i18n="auth.register_subtitle">A local account is recommended — your paragliding data stays under your control.</p>
 
     <div class="error-msg" id="errorMsg"></div>
 
     <form id="registerForm">
       <div class="form-group">
-        <label for="displayName">Display name</label>
+        <label for="displayName" data-i18n="auth.display_name">Display name</label>
         <input type="text" id="displayName" name="displayName" autocomplete="name" required
-               placeholder="e.g. Susi Bergwind" maxlength="80" />
+               data-i18n-placeholder="auth.display_name_placeholder" placeholder="e.g. Susi Bergwind" maxlength="80" />
       </div>
       <div class="form-group">
-        <label for="email">Email</label>
-        <input type="email" id="email" name="email" autocomplete="email" required placeholder="you@example.com" />
+        <label for="email" data-i18n="auth.email">Email</label>
+        <input type="email" id="email" name="email" autocomplete="email" required
+               data-i18n-placeholder="auth.email_placeholder" placeholder="you@example.com" />
       </div>
       <div class="form-group">
-        <label for="password">Password</label>
+        <label for="password" data-i18n="auth.password">Password</label>
         <input type="password" id="password" name="password" autocomplete="new-password" required
-               placeholder="At least 8 characters" minlength="8" />
-        <p class="form-hint">Minimum 8 characters.</p>
+               data-i18n-placeholder="auth.password_placeholder" placeholder="At least 8 characters" minlength="8" />
+        <p class="form-hint" data-i18n="auth.password_hint">Minimum 8 characters.</p>
       </div>
       <div class="form-group">
-        <label for="confirm">Confirm password</label>
+        <label for="confirm" data-i18n="auth.confirm_password">Confirm password</label>
         <input type="password" id="confirm" name="confirm" autocomplete="new-password" required
-               placeholder="Repeat your password" />
+               data-i18n-placeholder="auth.confirm_placeholder" placeholder="Repeat your password" />
       </div>
-      <button class="btn-primary" type="submit" id="submitBtn">Create account</button>
+      <button class="btn-primary" type="submit" id="submitBtn" data-i18n="auth.register_btn">Create account</button>
     </form>
 
-    <div class="divider">or sign up with</div>
+    <div class="divider" data-i18n="auth.or_sign_up">or sign up with</div>
 
     <button class="btn-social" id="googleBtn">
       <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.7 1.22 9.2 3.22l6.84-6.84C35.98 2.38 30.38 0 24 0 14.62 0 6.52 5.48 2.5 13.44l7.98 6.2C12.44 13.16 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.5c0-1.7-.14-3.36-.42-4.98H24v9.44h12.86C35.82 32.42 31.8 35.6 27 36.8l7.8 6.06C39.94 39.12 46.98 32.52 46.98 24.5z"/><path fill="#FBBC05" d="M10.48 28.36A14.54 14.54 0 0 1 9.5 24c0-1.52.26-3 .72-4.36l-7.98-6.2A23.96 23.96 0 0 0 0 24c0 3.86.92 7.52 2.5 10.76l7.98-6.4z"/><path fill="#34A853" d="M24 48c6.48 0 11.9-2.14 15.88-5.82l-7.8-6.06C29.98 37.64 27.12 38.5 24 38.5c-6.26 0-11.56-3.66-13.52-8.96l-7.98 6.4C6.52 42.52 14.62 48 24 48z"/></svg>
-      Continue with Google <span style="color:#4a5568;font-size:0.75rem">(coming soon)</span>
+      <span data-i18n="auth.google_btn">Continue with Google</span> <span style="color:#4a5568;font-size:0.75rem" data-i18n="auth.google_coming_soon">(coming soon)</span>
     </button>
 
     <div class="auth-footer">
-      Already have an account? <a href="/login">Sign in</a>
+      <span data-i18n="auth.have_account">Already have an account?</span> <a href="/login" data-i18n="auth.sign_in_link">Sign in</a>
     </div>
   </div>
 </div>
 
 <script type="module">
+  import { initI18n, renderLangPicker } from '/static/i18n.js';
   import { register, renderNavAuth, isLoggedIn } from '/static/auth.js';
+  await initI18n();
 
   if (isLoggedIn()) window.location.href = '/';
 
   renderNavAuth(null);
+  renderLangPicker();
 
   document.getElementById('googleBtn').addEventListener('click', () => {
-    alert('Google sign-up is coming soon. Please create a local account for now.');
+    alert(window.t('auth.google_signup_alert'));
   });
 
   document.getElementById('registerForm').addEventListener('submit', async (e) => {
@@ -208,13 +217,13 @@
     const password = document.getElementById('password').value;
     const confirm  = document.getElementById('confirm').value;
     if (password !== confirm) {
-      errEl.textContent = 'Passwords do not match.';
+      errEl.textContent = window.t('auth.passwords_no_match');
       errEl.classList.add('visible');
       return;
     }
 
     btn.disabled = true;
-    btn.textContent = 'Creating account…';
+    btn.textContent = window.t('auth.registering');
 
     try {
       await register(
@@ -227,7 +236,7 @@
       errEl.textContent = err.message;
       errEl.classList.add('visible');
       btn.disabled = false;
-      btn.textContent = 'Create account';
+      btn.textContent = window.t('auth.register_btn');
     }
   });
 </script>
