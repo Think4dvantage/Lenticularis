@@ -1,0 +1,174 @@
+/* =============================================================================
+   shared.css — mobile-responsive overrides
+   Linked on every page before the page-specific <style> block.
+   Uses !important to win against same-specificity inline styles.
+   ============================================================================= */
+
+/* ── Hamburger toggle (desktop: hidden) ──────────────────────────────────── */
+.nav-hamburger {
+  display: none;
+  background: none;
+  border: none;
+  color: #a0aec0;
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px 8px;
+  flex-shrink: 0;
+  transition: color 0.15s;
+}
+.nav-hamburger:hover { color: #e2e8f0; }
+
+/* ── Responsive nav (≤ 640 px) ───────────────────────────────────────────── */
+@media (max-width: 640px) {
+
+  /* Allow the nav bar to wrap to a second line */
+  .top-nav {
+    padding: 0 12px !important;
+    flex-wrap: wrap;
+    height: auto !important;
+    min-height: 48px;
+  }
+
+  /* Brand fills the first row, pushing right-side items to the right */
+  .nav-brand {
+    flex: 1 !important;
+    margin-right: 0 !important;
+    height: 48px;
+    display: flex;
+    align-items: center;
+  }
+
+  /* Links collapse to a full-width second row */
+  .nav-links {
+    display: none !important;
+    order: 99;
+    width: 100%;
+    flex-direction: column;
+    gap: 0 !important;
+    padding: 4px 0 8px;
+    border-top: 1px solid #2d3748;
+  }
+  .nav-links.open { display: flex !important; }
+
+  .nav-link {
+    padding: 10px 14px !important;
+    font-size: 0.9rem !important;
+    border-radius: 0 !important;
+    border-bottom: 1px solid #1e2535;
+  }
+  .nav-link:last-child { border-bottom: none !important; }
+
+  /* Hide live-data status dot on small screens */
+  .nav-status { display: none !important; }
+
+  /* User area — don't push left, remove redundant auto margin */
+  .nav-user {
+    gap: 6px !important;
+    margin-left: 0 !important;
+  }
+  /* Hide username text to save space — sign-out button stays */
+  .nav-user-name { display: none !important; }
+
+  /* Lang picker — no extra left margin */
+  #navLangPicker { margin-left: 0 !important; }
+
+  /* Reveal the hamburger */
+  .nav-hamburger { display: flex; align-items: center; }
+}
+
+/* ── Toolbars ────────────────────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .toolbar {
+    padding: 8px 12px !important;
+    gap: 8px !important;
+  }
+  .toolbar input,
+  .toolbar select {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+}
+
+/* ── Page padding ────────────────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .page-content { padding: 12px !important; }
+  .page         { padding: 16px 12px 40px !important; }
+}
+
+/* ── Station-detail: fix 560 px chart-grid min-width ─────────────────────── */
+@media (max-width: 640px) {
+  .charts-grid {
+    grid-template-columns: 1fr !important;
+    padding: 12px !important;
+  }
+  .time-range-bar {
+    padding: 8px 12px !important;
+    flex-wrap: wrap;
+  }
+}
+
+/* ── Foehn: fix 340 px region-grid min-width + two-column top-row ─────────── */
+@media (max-width: 640px) {
+  .region-grid { grid-template-columns: 1fr !important; }
+  .top-row     { grid-template-columns: 1fr !important; }
+}
+
+/* ── Map: time-nav rows scroll horizontally on small screens ──────────────── */
+@media (max-width: 640px) {
+  .tn-day-row,
+  .tn-hour-row {
+    justify-content: flex-start !important;
+    padding: 6px 8px !important;
+  }
+}
+
+/* ── Stats: tabs scroll, segment controls wrap, compare rows stack ─────────── */
+@media (max-width: 640px) {
+  .tab-bar {
+    overflow-x: auto;
+    flex-wrap: nowrap !important;
+    gap: 0 !important;
+  }
+  .tab-btn {
+    padding: 10px 14px !important;
+    font-size: 0.82rem !important;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .controls { gap: 8px !important; }
+
+  /* Comparison bar fills its own row */
+  .compare-row {
+    grid-template-columns: 1fr auto !important;
+    gap: 8px !important;
+  }
+  .compare-bar  { grid-column: 1 / -1 !important; }
+  .compare-name { grid-column: 1; }
+  .compare-pct  { grid-column: 2; display: flex; align-items: center; justify-content: flex-end; }
+}
+
+/* ── Rulesets: card actions stack below content on very small screens ──────── */
+@media (max-width: 480px) {
+  .card { flex-wrap: wrap !important; }
+  .card-actions {
+    width: 100% !important;
+    justify-content: flex-end !important;
+    padding-top: 8px !important;
+    border-top: 1px solid #1e2535 !important;
+    margin-top: 4px !important;
+  }
+}
+
+/* ── Rule editor: stack 2- and 3-column form rows ─────────────────────────── */
+@media (max-width: 640px) {
+  .form-row,
+  .form-row.three {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* ── Auth card: tighter padding on very small screens ────────────────────── */
+@media (max-width: 400px) {
+  .auth-card { padding: 28px 20px !important; }
+}

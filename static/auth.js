@@ -110,6 +110,19 @@ export function renderNavAuth(activePage) {
   } else {
     navUser.innerHTML = `<a href="/login" class="nav-link${activePage === 'login' ? ' active' : ''}">${window.t('nav.sign_in')}</a>`;
   }
+
+  // Inject hamburger toggle for mobile nav (idempotent)
+  const topNav = document.querySelector('.top-nav');
+  if (topNav && !topNav.querySelector('.nav-hamburger')) {
+    const btn = document.createElement('button');
+    btn.className = 'nav-hamburger';
+    btn.setAttribute('aria-label', 'Toggle navigation');
+    btn.innerHTML = '&#9776;';
+    btn.addEventListener('click', () => {
+      topNav.querySelector('.nav-links')?.classList.toggle('open');
+    });
+    topNav.appendChild(btn);
+  }
 }
 
 function escHtml(str) {
