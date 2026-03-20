@@ -68,6 +68,7 @@ static/
 ├── stations.html / station-detail.html   # Station browser + detail charts
 ├── auth.js / login.html / register.html  # Auth UI
 ├── i18n.js                         # Translation engine: initI18n(), t(), applyDataI18n(), renderLangPicker()
+├── shared.css                      # Mobile-responsive overrides: hamburger nav, grid fixes, toolbar helpers
 └── i18n/                           # Translation files
     ├── en.json                     # English (source of truth)
     ├── de.json                     # German

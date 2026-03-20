@@ -272,8 +272,9 @@ Pilot-owned launch site CRUD; site markers on map with distinct icon.
 ### v0.10 — Föhn Monitor + Wunderground + Personal Stations ✅ Shipped
 `collectors/wunderground.py` personal weather station collector (Ecovitt/Weather Underground API); virtual föhn stations (computed from N–S pressure delta pairs, written to `weather_data`); `static/foehn.html` föhn dashboard; personal-station toggle on map (hide/show Wunderground stations).
 
-### v1.0 — Multilanguage (EN / DE / FR / IT) ✅ Shipped
-Full i18n for all frontend pages and dynamic JS strings.
+### v1.0 — Multilanguage + Mobile-Responsive UI ✅ Shipped
+
+**Multilanguage (EN / DE / FR / IT)**
 
 - **Translation files**: `static/i18n/{en,de,fr,it}.json` — flat key tree covering all UI strings
 - **Core engine**: `static/i18n.js` — `initI18n()`, `t(key, vars?)`, `applyDataI18n()`, `renderLangPicker()`
@@ -283,6 +284,15 @@ Full i18n for all frontend pages and dynamic JS strings.
 - **Auto-detection**: `navigator.language` slice on first visit; falls back to `en`
 - **Timing guard**: non-module scripts (e.g. `map.js`) use `typeof window.t === 'function' ? window.t : k => k` to avoid `window.t is not a function` before `initI18n()` completes
 - **Lazy config**: objects whose values call `window.t()` are wrapped in getter functions (e.g. `getFieldLabel()`) rather than module-level constants, so they evaluate post-init
+
+**Mobile-Responsive UI**
+
+- **`static/shared.css`**: single shared stylesheet linked by all pages; contains all mobile overrides using `!important` to win against per-page inline `<style>` blocks
+- **Hamburger nav**: `auth.js` `renderNavAuth()` injects a `<button class="nav-hamburger">` into `.top-nav` on every page; click toggles `.nav-links.open`; nav collapses at ≤640 px
+- **Grid fixes**: `station-detail` chart grid (`minmax(560px,1fr)` → `1fr`); foehn region grid (`minmax(340px,1fr)` → `1fr`)
+- **Toolbars**: inputs and selects stretch full-width; page padding reduced on small screens
+- **Stats/rulesets/editor**: tab bar scrolls horizontally; card actions stack; form rows collapse to single column
+- **Tagged `v1.0`** in git
 
 ---
 

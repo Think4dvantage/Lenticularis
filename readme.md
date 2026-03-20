@@ -80,6 +80,7 @@ static/
 ├── foehn.html               # Föhn monitor
 ├── stations.html / station-detail.html
 ├── i18n.js + i18n/          # Translation engine + locale JSON files
+├── shared.css               # Mobile-responsive overrides (hamburger nav, grid fixes)
 └── auth.js / login.html / register.html
 ```
 
@@ -97,7 +98,7 @@ static/
 | v0.8 — ICON forecast pipeline + map time-navigation replay | ✅ Shipped |
 | v0.9 — Flyability statistics dashboard | ✅ Shipped |
 | v0.10 — Föhn monitor + Wunderground collector + personal-station toggle | ✅ Shipped |
-| v1.0 — Multilanguage EN / DE / FR / IT | ✅ Shipped |
+| v1.0 — Multilanguage EN / DE / FR / IT + mobile-responsive UI | ✅ Shipped — tagged `v1.0` |
 | v1.1 — Admin GUI + customer role | Planned |
 | v1.2 — Rule types: Risk + Opportunity | Planned |
 | v1.3 — Pre-seeded launch site defaults | Planned |
