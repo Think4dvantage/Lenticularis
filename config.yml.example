@@ -113,17 +113,6 @@ collectors:
         #   longitude: ...
         #   elevation: ...
 
-# Forecast Collectors
-# Each entry runs on its own interval and writes to the weather_forecast InfluxDB measurement.
-# All historical model runs are retained (tagged by init_time) for accuracy analysis.
-forecast_collectors:
-  - name: "open-meteo"
-    enabled: true
-    interval_minutes: 60   # refresh forecast hourly (new model run available ~every 3h)
-    horizon_hours: 120      # how many hours ahead to collect (5 days)
-    # No config keys required — Open-Meteo is public and needs no authentication.
-    # Future sources (e.g. meteoswiss-stac) can be added here without schema changes.
-
 # SQLite Database (rule sets, launch sites, future user data)
 database:
   path: "/app/data/lenticularis.db"

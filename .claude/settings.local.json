@@ -16,7 +16,11 @@
       "Bash(.venv/Scripts/python -c \":*)",
       "Bash(.venv/Scripts/python -m lenticularis.scheduler)",
       "Bash(.venv/Scripts/python -c \"import sqlalchemy; print\\(''sqlalchemy OK:'', sqlalchemy.__version__\\)\")",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "WebFetch(domain:www.meteoschweiz.admin.ch)",
+      "Bash(.venv/Scripts/python -c \"from lenticularis.config import FoehnConfig, MainConfig; print\\(''config OK''\\); fc = FoehnConfig\\(north_stations=[''ALT''], south_stations=[''LUG'']\\); print\\(fc.model_dump\\(\\)\\)\")",
+      "Bash(PYTHONPATH=src .venv/Scripts/python -c \":*)",
+      "Bash(node -e \":*)"
     ]
   }
 }
