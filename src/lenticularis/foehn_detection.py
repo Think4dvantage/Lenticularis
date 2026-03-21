@@ -191,7 +191,7 @@ def eval_cond(cond: Cond, latest: dict[str, dict]) -> dict:
     gust = m.get("wind_gust")
     dir_ = m.get("wind_direction")
 
-    speed_ok = spd is not None and spd >= cond.speed_min
+    speed_ok = gust is not None and gust >= cond.speed_min
     if cond.dir_low is not None and cond.dir_high is not None:
         dir_ok = in_range(dir_, cond.dir_low, cond.dir_high)
     else:
