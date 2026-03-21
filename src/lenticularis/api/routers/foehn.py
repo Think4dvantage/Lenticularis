@@ -16,9 +16,9 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from lenticularis.database.influx import InfluxClient
 from lenticularis.foehn_detection import (
     ALL_STATION_IDS,
-    PRESSURE,
+    PRESSURE_PAIRS,
     REGIONS,
-    build_pressure,
+    build_all_pressures,
     build_response,
     eval_region,
 )
@@ -32,10 +32,10 @@ router = APIRouter(prefix="/api/foehn", tags=["foehn"])
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _evaluate(latest: dict[str, dict]) -> tuple[list[dict], dict]:
-    regions  = [eval_region(r, latest) for r in REGIONS]
-    pressure = build_pressure(latest)
-    return regions, pressure
+def _evaluate(latest: dict[str, dict]) -> tuple[list[dict], list[dict]]:
+    regions   = [eval_region(r, latest) for r in REGIONS]
+    pressures = build_all_pressures(latest)
+    return regions, pressures
 
 
 # ---------------------------------------------------------------------------
@@ -47,8 +47,8 @@ async def get_foehn_status(request: Request) -> dict:
     """Evaluate all föhn regions and the pressure-gradient indicator (live data)."""
     influx: InfluxClient = request.app.state.influx
     latest = influx.query_latest_for_stations(ALL_STATION_IDS)
-    regions, pressure = _evaluate(latest)
-    return build_response(regions, pressure, assessed_at=datetime.now(timezone.utc).isoformat())
+    regions, pressures = _evaluate(latest)
+    return build_response(regions, pressures, assessed_at=datetime.now(timezone.utc).isoformat())
 
 
 @router.get("/forecast")
@@ -64,9 +64,9 @@ async def get_foehn_forecast(
         raise HTTPException(status_code=400, detail=f"Invalid valid_time: {valid_time!r}")
 
     latest = influx.query_forecast_snapshot_for_stations(ALL_STATION_IDS, vt)
-    regions, pressure = _evaluate(latest)
+    regions, pressures = _evaluate(latest)
     return build_response(
-        regions, pressure,
+        regions, pressures,
         assessed_at=datetime.now(timezone.utc).isoformat(),
         extra={"is_forecast": True, "valid_time": vt.isoformat()},
     )
@@ -85,9 +85,9 @@ async def get_foehn_observation(
         raise HTTPException(status_code=400, detail=f"Invalid valid_time: {valid_time!r}")
 
     latest = influx.query_observation_snapshot_for_stations(ALL_STATION_IDS, vt)
-    regions, pressure = _evaluate(latest)
+    regions, pressures = _evaluate(latest)
     return build_response(
-        regions, pressure,
+        regions, pressures,
         assessed_at=datetime.now(timezone.utc).isoformat(),
         extra={"is_snapshot": True, "valid_time": vt.isoformat()},
     )
@@ -99,9 +99,9 @@ async def get_foehn_history(
     hours: int = 48,
     center_time: Optional[str] = Query(None, description="ISO 8601 UTC center; window is ±24h around this. Defaults to now (live)."),
 ) -> dict:
-    """Return hourly pressure_qnh for OTL and JUN for the pressure-gradient chart."""
+    """Return hourly pressure_qnh for all pressure-pair stations for the gradient chart."""
     influx: InfluxClient = request.app.state.influx
-    station_ids = [PRESSURE["south_id"], PRESSURE["north_id"]]
+    station_ids = list({sid for pair in PRESSURE_PAIRS for sid in (pair["south_id"], pair["north_id"])})
     ct: Optional[datetime] = None
     if center_time:
         try:
@@ -110,8 +110,16 @@ async def get_foehn_history(
             raise HTTPException(status_code=400, detail=f"Invalid center_time: {center_time!r}")
     rows = influx.query_foehn_pressure_history(station_ids, hours=min(hours, 168), center_time=ct)
     return {
-        "south_station_id": PRESSURE["south_id"],
-        "north_station_id": PRESSURE["north_id"],
+        "pairs": [
+            {
+                "key":              pair["key"],
+                "south_station_id": pair["south_id"],
+                "north_station_id": pair["north_id"],
+                "south_label":      pair["south_label"],
+                "north_label":      pair["north_label"],
+            }
+            for pair in PRESSURE_PAIRS
+        ],
         "rows": [
             {
                 "station_id":   r["station_id"],

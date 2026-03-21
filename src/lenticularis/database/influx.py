@@ -961,7 +961,7 @@ from(bucket: "{self._cfg.bucket}")
     # Föhn status — write & query
     # ------------------------------------------------------------------
 
-    def write_foehn_status(self, regions: list[dict], pressure: dict) -> None:
+    def write_foehn_status(self, regions: list[dict]) -> None:
         """Write evaluated föhn region statuses to ``weather_data`` as virtual stations.
 
         Each region becomes one Point with station_id ``foehn-<key>`` and

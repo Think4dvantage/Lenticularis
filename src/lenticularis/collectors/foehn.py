@@ -16,7 +16,6 @@ import logging
 from lenticularis.foehn_detection import (
     ALL_STATION_IDS,
     VIRTUAL_STATIONS,
-    build_pressure,
     eval_region,
     REGIONS,
 )
@@ -54,10 +53,9 @@ class FoehnCollector:
 
         Returns the number of InfluxDB points written.
         """
-        latest   = influx.query_latest_for_stations(ALL_STATION_IDS)
-        regions  = [eval_region(r, latest) for r in REGIONS]
-        pressure = build_pressure(latest)
-        influx.write_foehn_status(regions, pressure)
+        latest  = influx.query_latest_for_stations(ALL_STATION_IDS)
+        regions = [eval_region(r, latest) for r in REGIONS]
+        influx.write_foehn_status(regions)
 
         # Keep virtual stations in the shared registry so the station picker
         # and map can find them

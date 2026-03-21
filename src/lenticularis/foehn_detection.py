@@ -97,21 +97,29 @@ REGIONS: list[Region] = [
     ]),
 ]
 
-# Pressure-based detection: south (OTL) vs alpine crest (JUN)
-PRESSURE = {
-    "south_id":    "meteoswiss-OTL",
-    "north_id":    "meteoswiss-JUN",
-    "south_label": "OTL (Locarno/Monti)",
-    "north_label": "JUN (Jungfraujoch)",
-    "threshold":   4.0,   # hPa
-}
+# Pressure-based detection: OTL (Locarno/Monti, south) vs INT (Interlaken, north).
+# Both stations are at valley/low-elevation level, giving a clean cross-alpine gradient.
+PRESSURE_PAIRS: list[dict] = [
+    {
+        "key":         "valley",
+        "south_id":    "meteoswiss-OTL",
+        "north_id":    "meteoswiss-INT",
+        "south_label": "OTL (Locarno/Monti)",
+        "north_label": "INT (Interlaken)",
+        "threshold":   4.0,   # hPa
+    },
+]
 
 # All station IDs needed for a full evaluation
 ALL_STATION_IDS: list[str] = list({
     c.station_id
     for r in REGIONS
     for c in r.conditions
-} | {PRESSURE["south_id"], PRESSURE["north_id"]})
+} | {
+    sid
+    for pair in PRESSURE_PAIRS
+    for sid in (pair["south_id"], pair["north_id"])
+})
 
 # ---------------------------------------------------------------------------
 # Virtual stations written to InfluxDB by the FoehnCollector.
@@ -231,32 +239,38 @@ def eval_region(region: Region, latest: dict[str, dict]) -> dict:
     }
 
 
-def build_pressure(latest: dict[str, dict]) -> dict:
-    s_data = latest.get(PRESSURE["south_id"])
-    n_data = latest.get(PRESSURE["north_id"])
-    s_p    = s_data.get("pressure_qnh") if s_data else None
-    n_p    = n_data.get("pressure_qnh") if n_data else None
-    delta  = round(s_p - n_p, 2) if (s_p is not None and n_p is not None) else None
-    return {
-        "south_station_id": PRESSURE["south_id"],
-        "north_station_id": PRESSURE["north_id"],
-        "south_label":      PRESSURE["south_label"],
-        "north_label":      PRESSURE["north_label"],
-        "south_hpa":        round(s_p, 2) if s_p is not None else None,
-        "north_hpa":        round(n_p, 2) if n_p is not None else None,
-        "delta_hpa":        delta,
-        "threshold_hpa":    PRESSURE["threshold"],
-        "active":           delta is not None and delta >= PRESSURE["threshold"],
-    }
+def build_all_pressures(latest: dict[str, dict]) -> list[dict]:
+    """Evaluate all PRESSURE_PAIRS against live/forecast data."""
+    result = []
+    for pair in PRESSURE_PAIRS:
+        s_data = latest.get(pair["south_id"])
+        n_data = latest.get(pair["north_id"])
+        s_p    = s_data.get("pressure_qnh") if s_data else None
+        n_p    = n_data.get("pressure_qnh") if n_data else None
+        delta  = round(s_p - n_p, 2) if (s_p is not None and n_p is not None) else None
+        result.append({
+            "key":              pair["key"],
+            "south_station_id": pair["south_id"],
+            "north_station_id": pair["north_id"],
+            "south_label":      pair["south_label"],
+            "north_label":      pair["north_label"],
+            "south_hpa":        round(s_p, 2) if s_p is not None else None,
+            "north_hpa":        round(n_p, 2) if n_p is not None else None,
+            "delta_hpa":        delta,
+            "threshold_hpa":    pair["threshold"],
+            "active":           delta is not None and delta >= pair["threshold"],
+        })
+    return result
 
 
-def build_response(regions: list[dict], pressure: dict, assessed_at: str, extra: dict | None = None) -> dict:
+def build_response(regions: list[dict], pressures: list[dict], assessed_at: str, extra: dict | None = None) -> dict:
     """Shared response builder for /status, /forecast, and /observation."""
     active_regions  = [r["key"] for r in regions if r["status"] == "active"]
     partial_regions = [r["key"] for r in regions if r["status"] == "partial"]
+    pressure_risk   = any(p["active"] for p in pressures)
     if active_regions:
         overall_status = "active"
-    elif pressure["active"]:
+    elif pressure_risk:
         overall_status = "risk"
     elif partial_regions:
         overall_status = "partial"
@@ -269,10 +283,10 @@ def build_response(regions: list[dict], pressure: dict, assessed_at: str, extra:
             "status":          overall_status,
             "active_regions":  active_regions,
             "partial_regions": partial_regions,
-            "pressure_risk":   pressure["active"],
+            "pressure_risk":   pressure_risk,
         },
-        "regions":  regions,
-        "pressure": pressure,
+        "regions":   regions,
+        "pressures": pressures,
     }
     if extra:
         resp.update(extra)

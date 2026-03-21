@@ -253,6 +253,8 @@
   <button class="range-btn" data-hours="48"  onclick="setRange(48)"  data-i18n="station_detail.ranges.48h">48 h</button>
   <button class="range-btn" data-hours="168" onclick="setRange(168)" data-i18n="station_detail.ranges.7days">7 days</button>
   <button class="range-btn" data-hours="720" onclick="setRange(720)" data-i18n="station_detail.ranges.30days">30 days</button>
+  <span style="width:1px;height:20px;background:#2d3748;flex-shrink:0;margin:0 4px"></span>
+  <button class="range-btn" id="forecastBtn" onclick="toggleForecast()" data-i18n="station_detail.forecast_button">📡 Forecast</button>
 </div>
 
 <div id="loadingOverlay" class="loading-overlay">

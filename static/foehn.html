@@ -447,17 +447,20 @@ function renderBanner(overall, isForecast, isSnapshot) {
 
 // ── Pressure panel ───────────────────────────────────────────────────────────
 
-function renderPressure(p) {
+function renderOnePressure(p) {
   const d = p.delta_hpa;
   let cls = 'safe', badgeText = window.t('foehn.pressure.no_risk');
-  if (d != null && d >= 4)  { cls = 'danger';  badgeText = window.t('foehn.pressure.risk'); }
+  if (d != null && d >= 4)      { cls = 'danger';  badgeText = window.t('foehn.pressure.risk'); }
   else if (d != null && d >= 1) { cls = 'caution'; badgeText = window.t('foehn.pressure.building'); }
 
   const fillPct = d != null ? Math.min(Math.abs(d) / 8 * 100, 100) : 0;
   const fmt = v => v != null ? v.toFixed(1) : '—';
   const deltaStr = d != null ? (d > 0 ? '+' : '') + d.toFixed(1) + ' hPa' : '—';
+  // Direction label: abbreviate "OTL (Locarno/Monti)" → "OTL"
+  const abbrev = label => label.split(' ')[0];
+  const dirLabel = `${abbrev(p.south_label)} − ${abbrev(p.north_label)}`;
 
-  document.getElementById('pressurePanel').innerHTML = `
+  return `
     <div class="pressure-stations">
       <div class="pres-side">
         <div class="pres-station-label">${p.north_label}</div>
@@ -466,7 +469,7 @@ function renderPressure(p) {
       </div>
       <div class="pres-delta-wrap">
         <div class="pres-delta ${cls}">${deltaStr}</div>
-        <div class="pres-direction">OTL − JUN</div>
+        <div class="pres-direction">${dirLabel}</div>
       </div>
       <div class="pres-side">
         <div class="pres-station-label">${p.south_label}</div>
@@ -479,6 +482,13 @@ function renderPressure(p) {
     </div>
     <div class="pres-threshold">${window.t('foehn.pressure.threshold', {hpa: p.threshold_hpa})}</div>
     <span class="pres-badge ${cls}">${badgeText}</span>`;
+}
+
+function renderPressures(pressures) {
+  const parts = pressures.map((p, i) =>
+    (i > 0 ? '<hr style="border-color:#1e2535;margin:14px 0 12px">' : '') + renderOnePressure(p)
+  );
+  document.getElementById('pressurePanel').innerHTML = parts.join('');
 }
 
 // ── Region cards ─────────────────────────────────────────────────────────────
@@ -566,62 +576,72 @@ async function loadChart(centerTime) {
     data = await res.json();
   } catch { return; }
 
-  const { south_station_id, north_station_id, rows } = data;
+  const { pairs, rows } = data;
 
-  const byHour = {};
+  // Collect all unique hour-bucket timestamps across all stations
+  const byHour = {};   // ts → { [station_id]: [pressure_qnh, ...] }
   for (const r of rows) {
     const ts = new Date(r.timestamp);
     ts.setMinutes(0, 0, 0);
     const key = ts.toISOString();
-    if (!byHour[key]) byHour[key] = { south: [], north: [] };
-    if (r.station_id === south_station_id) byHour[key].south.push(r.pressure_qnh);
-    if (r.station_id === north_station_id) byHour[key].north.push(r.pressure_qnh);
+    if (!byHour[key]) byHour[key] = {};
+    if (!byHour[key][r.station_id]) byHour[key][r.station_id] = [];
+    if (r.pressure_qnh != null) byHour[key][r.station_id].push(r.pressure_qnh);
   }
 
-  const labels = [], deltas = [];
-  for (const [ts, { south, north }] of Object.entries(byHour).sort()) {
-    const sA = south.length ? south.reduce((a,b) => a+b) / south.length : null;
-    const nA = north.length ? north.reduce((a,b) => a+b) / north.length : null;
-    if (sA != null && nA != null) {
-      const d = new Date(ts);
-      labels.push(
-        d.toLocaleDateString('en-CH', { weekday: 'short', month: 'numeric', day: 'numeric' }) + ' '
-        + d.toLocaleTimeString('en-CH', { hour: '2-digit', minute: '2-digit' })
-      );
-      deltas.push(+(sA - nA).toFixed(2));
-    }
-  }
+  const avg = vals => vals && vals.length ? vals.reduce((a, b) => a + b) / vals.length : null;
+  const ptColor = d => d >= 4 ? '#fc8181' : d >= 1 ? '#f6ad55' : '#68d391';
+  const abbrev  = label => label.split(' ')[0];
+
+  const sortedTs = Object.keys(byHour).sort();
+  const labels   = sortedTs.map(ts => {
+    const d = new Date(ts);
+    return d.toLocaleDateString('en-CH', { weekday: 'short', month: 'numeric', day: 'numeric' })
+      + ' ' + d.toLocaleTimeString('en-CH', { hour: '2-digit', minute: '2-digit' });
+  });
+
+  const COLORS = ['#718096', '#9f7aea'];   // valley = grey, alpine = purple
+
+  const datasets = pairs.map((pair, i) => {
+    const deltas = sortedTs.map(ts => {
+      const bucket = byHour[ts] || {};
+      const s = avg(bucket[pair.south_station_id]);
+      const n = avg(bucket[pair.north_station_id]);
+      return (s != null && n != null) ? +(s - n).toFixed(2) : null;
+    });
+    const pairLabel = `${abbrev(pair.south_label)} − ${abbrev(pair.north_label)} (hPa)`;
+    return {
+      label: pairLabel,
+      data: deltas,
+      borderColor: COLORS[i] || '#718096',
+      backgroundColor: `${COLORS[i] || '#718096'}0f`,
+      pointBackgroundColor: deltas.map(d => d == null ? 'transparent' : ptColor(d)),
+      pointRadius: 3,
+      borderWidth: 1.5,
+      tension: 0.3,
+      fill: false,
+      spanGaps: true,
+    };
+  });
 
   const ctx = document.getElementById('gradientChart');
   if (!ctx) return;
   if (_chart) _chart.destroy();
 
-  // Green = safe (<1 hPa), amber = building (1–4), red = risk (≥4)
-  const pointColors = deltas.map(d => d >= 4 ? '#fc8181' : d >= 1 ? '#f6ad55' : '#68d391');
-
   _chart = new Chart(ctx, {
     type: 'line',
-    data: {
-      labels,
-      datasets: [{
-        label: 'OTL − JUN (hPa)',
-        data: deltas,
-        borderColor: '#718096',
-        backgroundColor: 'rgba(113,128,150,0.06)',
-        pointBackgroundColor: pointColors,
-        pointRadius: 3,
-        borderWidth: 1.5,
-        tension: 0.3,
-        fill: true,
-      }],
-    },
+    data: { labels, datasets },
     options: {
       responsive: true, maintainAspectRatio: false,
       plugins: {
-        legend: { display: false },
+        legend: {
+          display: true,
+          labels: { color: '#718096', font: { size: 10 }, boxWidth: 12, padding: 10 },
+        },
         tooltip: {
           callbacks: {
-            label: c => `Δ ${c.parsed.y >= 0 ? '+' : ''}${c.parsed.y.toFixed(2)} hPa`,
+            label: c => c.parsed.y == null ? `${c.dataset.label}: —`
+              : `${c.dataset.label}: ${c.parsed.y >= 0 ? '+' : ''}${c.parsed.y.toFixed(2)} hPa`,
           },
         },
       },
@@ -629,7 +649,7 @@ async function loadChart(centerTime) {
         x: { ticks: { color: '#718096', maxTicksLimit: 8, font: { size: 10 } }, grid: { color: '#1a2035' } },
         y: {
           ticks: { color: '#718096', font: { size: 11 } }, grid: { color: '#1a2035' },
-          title: { display: true, text: 'Δ hPa (OTL − JUN)', color: '#4a5568', font: { size: 10 } },
+          title: { display: true, text: 'Δ hPa (south − north)', color: '#4a5568', font: { size: 10 } },
         },
       },
     },
@@ -675,7 +695,7 @@ async function load() {
   document.getElementById('lastUpdated').textContent = ts;
 
   renderBanner(data.overall, isForecast || isSnapshot, isSnapshot);
-  renderPressure(data.pressure);
+  renderPressures(data.pressures);
   document.getElementById('regionGrid').innerHTML = data.regions.map(renderRegionCard).join('');
 
   // Chart always centers on noon of the selected day (or now for live)

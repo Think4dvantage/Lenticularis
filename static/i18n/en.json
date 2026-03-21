@@ -201,6 +201,7 @@
       "7days": "7 days",
       "30days": "30 days"
     },
+    "forecast_button": "📡 Forecast",
     "charts": {
       "wind": "Wind speed & gust (km/h)",
       "wind_direction_heatmap": "Wind Direction — Heatmap",
@@ -219,7 +220,7 @@
     "mode": "Mode",
     "live": "● Live",
     "pressure_card_title": "Pressure Gradient (Föhn Risk Indicator)",
-    "chart_title_base": "48h Pressure Gradient OTL − JUN",
+    "chart_title_base": "48h Pressure Gradient OTL − INT",
     "loading": "Loading…",
     "status": {
       "active_title": "South Föhn Active{suffix} — {names}",
@@ -258,7 +259,7 @@
     "chart_last48h": "(last 48h)",
     "chart_around": "(±24h around {label} 12:00)",
     "no_data_value": "no data",
-    "info_box": "<strong>Color coding:</strong> Green = no föhn signal (safe) · Orange = partial föhn indicators (caution) · Red = föhn confirmed (danger). &nbsp;<strong>Region logic:</strong> a corridor is <em>Active</em> only when <strong>all</strong> its station conditions are met simultaneously. Partial = some conditions met, not all. &nbsp;<strong>Pressure:</strong> OTL (south) − JUN (alpine crest) ≥ 4 hPa = föhn risk, but wind conditions must also be met for confirmation. &nbsp;<strong>Forecast:</strong> uses Open-Meteo ICON forecast per station — coverage may be incomplete for some SLF stations."
+    "info_box": "<strong>Color coding:</strong> Green = no föhn signal (safe) · Orange = partial föhn indicators (caution) · Red = föhn confirmed (danger). &nbsp;<strong>Region logic:</strong> a corridor is <em>Active</em> only when <strong>all</strong> its station conditions are met simultaneously. Partial = some conditions met, not all. &nbsp;<strong>Pressure:</strong> OTL (Locarno/Monti, south) − INT (Interlaken, north) ≥ 4 hPa = föhn risk. Both stations are at valley level, giving a clean cross-alpine gradient. Wind conditions must also be met for confirmation. &nbsp;<strong>Forecast:</strong> uses Open-Meteo ICON forecast per station — coverage may be incomplete for some SLF stations."
   },
   "stats": {
     "title": "Statistics",

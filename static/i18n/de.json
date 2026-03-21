@@ -201,6 +201,7 @@
       "7days": "7 Tage",
       "30days": "30 Tage"
     },
+    "forecast_button": "📡 Vorhersage",
     "charts": {
       "wind": "Windgeschwindigkeit & Böen (km/h)",
       "wind_direction_heatmap": "Windrichtung — Heatmap",
@@ -219,7 +220,7 @@
     "mode": "Modus",
     "live": "● Live",
     "pressure_card_title": "Druckgradient (Föhn-Risikoindikator)",
-    "chart_title_base": "48h Druckgradient OTL − JUN",
+    "chart_title_base": "48h Druckgradient OTL − INT",
     "loading": "Lädt…",
     "status": {
       "active_title": "Südföhn aktiv{suffix} — {names}",
@@ -258,7 +259,7 @@
     "chart_last48h": "(letzte 48h)",
     "chart_around": "(±24h um {label} 12:00)",
     "no_data_value": "keine Daten",
-    "info_box": "<strong>Farbcodierung:</strong> Grün = kein Föhnsignal (sicher) · Orange = teilweise Föhnindikatoren (Achtung) · Rot = Föhn bestätigt (Gefahr). &nbsp;<strong>Regionslogik:</strong> Ein Korridor ist <em>Aktiv</em> nur wenn <strong>alle</strong> Stationsbedingungen gleichzeitig erfüllt sind. Teilweise = einige Bedingungen erfüllt, nicht alle. &nbsp;<strong>Druck:</strong> OTL (Süd) − JUN (Alpenkamm) ≥ 4 hPa = Föhnrisiko, aber Windbedingungen müssen ebenfalls erfüllt sein. &nbsp;<strong>Vorhersage:</strong> Verwendet Open-Meteo ICON-Vorhersage pro Station — für einige SLF-Stationen möglicherweise unvollständig."
+    "info_box": "<strong>Farbcodierung:</strong> Grün = kein Föhnsignal (sicher) · Orange = teilweise Föhnindikatoren (Achtung) · Rot = Föhn bestätigt (Gefahr). &nbsp;<strong>Regionslogik:</strong> Ein Korridor ist <em>Aktiv</em> nur wenn <strong>alle</strong> Stationsbedingungen gleichzeitig erfüllt sind. Teilweise = einige Bedingungen erfüllt, nicht alle. &nbsp;<strong>Druck:</strong> OTL (Locarno/Monti, Süd) − INT (Interlaken, Nord) ≥ 4 hPa = Föhnrisiko. Beide Stationen liegen auf Talniveau und liefern einen klaren alpenquerenden Gradienten. Windbedingungen müssen ebenfalls erfüllt sein. &nbsp;<strong>Vorhersage:</strong> Verwendet Open-Meteo ICON-Vorhersage pro Station — für einige SLF-Stationen möglicherweise unvollständig."
   },
   "stats": {
     "title": "Statistik",

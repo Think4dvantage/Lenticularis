@@ -131,6 +131,18 @@ const CHART_DEFAULTS = {
       borderWidth: 1,
       titleColor: '#a0aec0',
       bodyColor: '#e2e8f0',
+      callbacks: {
+        // mode:'index' matches items by array index across datasets.
+        // Observations (10-min) and forecast (1-h) have different lengths, so
+        // index N in the forecast maps to index N in the obs array — a timestamp
+        // from deep in the past. Fix: always show the label of the item with the
+        // largest (= most future) x timestamp, which is always the forecast item
+        // when the cursor is in the forecast region.
+        title: (items) => {
+          if (!items.length) return '';
+          return items.reduce((a, b) => b.parsed.x > a.parsed.x ? b : a).label;
+        },
+      },
     },
     cursorGuide: { enabled: true },
     forecastZone: { enabled: false },

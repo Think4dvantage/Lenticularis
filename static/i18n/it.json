@@ -201,6 +201,7 @@
       "7days": "7 giorni",
       "30days": "30 giorni"
     },
+    "forecast_button": "📡 Previsioni",
     "charts": {
       "wind": "Velocità del vento e raffiche (km/h)",
       "wind_direction_heatmap": "Direzione del vento — Mappa di calore",
@@ -219,7 +220,7 @@
     "mode": "Modalità",
     "live": "● Live",
     "pressure_card_title": "Gradiente di pressione (indicatore rischio föhn)",
-    "chart_title_base": "Gradiente pressione 48h OTL − JUN",
+    "chart_title_base": "Gradiente pressione 48h OTL − INT",
     "loading": "Caricamento…",
     "status": {
       "active_title": "Föhn del Sud attivo{suffix} — {names}",
@@ -258,7 +259,7 @@
     "chart_last48h": "(ultime 48h)",
     "chart_around": "(±24h intorno a {label} 12:00)",
     "no_data_value": "nessun dato",
-    "info_box": "<strong>Codice colore:</strong> Verde = nessun segnale föhn (sicuro) · Arancione = indicatori parziali föhn (attenzione) · Rosso = föhn confermato (pericolo). &nbsp;<strong>Logica regionale:</strong> un corridoio è <em>Attivo</em> solo quando <strong>tutte</strong> le sue condizioni stazione sono soddisfatte simultaneamente. Parziale = alcune condizioni soddisfatte, non tutte. &nbsp;<strong>Pressione:</strong> OTL (sud) − JUN (cresta alpina) ≥ 4 hPa = rischio föhn, ma anche le condizioni di vento devono essere soddisfatte per la conferma. &nbsp;<strong>Previsioni:</strong> usa le previsioni Open-Meteo ICON per stazione — la copertura potrebbe essere incompleta per alcune stazioni SLF."
+    "info_box": "<strong>Codice colore:</strong> Verde = nessun segnale föhn (sicuro) · Arancione = indicatori parziali föhn (attenzione) · Rosso = föhn confermato (pericolo). &nbsp;<strong>Logica regionale:</strong> un corridoio è <em>Attivo</em> solo quando <strong>tutte</strong> le sue condizioni stazione sono soddisfatte simultaneamente. Parziale = alcune condizioni soddisfatte, non tutte. &nbsp;<strong>Pressione:</strong> OTL (Locarno/Monti, sud) − INT (Interlaken, nord) ≥ 4 hPa = rischio föhn. Entrambe le stazioni sono a livello di valle, fornendo un gradiente trans-alpino affidabile. Anche le condizioni di vento devono essere soddisfatte per la conferma. &nbsp;<strong>Previsioni:</strong> usa le previsioni Open-Meteo ICON per stazione — la copertura potrebbe essere incompleta per alcune stazioni SLF."
   },
   "stats": {
     "title": "Statistiche",
