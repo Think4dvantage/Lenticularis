@@ -567,6 +567,7 @@ tnInitLabels();
   import { initI18n, renderLangPicker } from '/static/i18n.js';
   import { renderNavAuth, isLoggedIn, fetchAuth } from '/static/auth.js';
   await initI18n();
+  document.dispatchEvent(new CustomEvent('i18nReady'));
   renderNavAuth('map');
   renderLangPicker();
 

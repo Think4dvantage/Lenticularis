@@ -344,6 +344,9 @@ const _PersonalToggle = L.Control.extend({
       btn.style.opacity = _showPersonal ? '1' : '0.55';
     }
     update();
+    // i18n loads after this control is created (module script is deferred).
+    // Re-render once translations are ready so the button shows real text.
+    document.addEventListener('i18nReady', update, { once: true });
     L.DomEvent.on(btn, 'click', L.DomEvent.stopPropagation);
     L.DomEvent.on(btn, 'click', () => {
       _showPersonal = !_showPersonal;
