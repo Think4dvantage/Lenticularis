@@ -17,8 +17,8 @@ services:
       dockerfile: Dockerfile
     image: lenticularis:latest
     restart: unless-stopped
-    ports:
-      - "8000:8000"
+    # No ports here — defined per-environment in overlay files.
+    # Dev overlay: 8001:8000  |  Prod: Traefik handles routing (no direct port needed)
     volumes:
       - ./config.yml:/app/config.yml:ro,z
       - ./data:/app/data:z
