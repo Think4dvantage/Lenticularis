@@ -11,6 +11,14 @@ influxdb:
   bucket: "weather_data"
   timeout: 10000  # milliseconds
 
+# Forecast Collectors
+forecast_collectors:
+  - name: "open-meteo"
+    enabled: true
+    interval_minutes: 60    # how often to refresh forecasts
+    horizon_hours: 120      # how many hours ahead to fetch (max 120 = 5 days)
+    config: {}
+
 # Weather Data Collectors
 collectors:
   - name: "meteoswiss"
