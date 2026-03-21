@@ -296,14 +296,66 @@ Pilot-owned launch site CRUD; site markers on map with distinct icon.
 
 ---
 
-### v1.1 — Admin GUI + Role Expansion (planned)
+### v1.1 — Admin GUI + Role Expansion + Föhn Config Editor ✅ Shipped
 
 - New role: `customer` (read-only access to assigned sites/rulesets, no rule editing) — roles: `pilot` | `customer` | `admin`
-- Admin panel UI (`static/admin.html`): user table (list, activate/deactivate, change role), collector status (enabled/disabled toggle, interval override, last-run timestamp, error count)
-- `api/routers/admin.py`: `GET/PUT /api/admin/users`, `GET/PUT /api/admin/collectors`
-- Alembic migration: add `customer` to role enum
+- Admin panel UI (`static/admin.html`): user table (list, activate/deactivate, change role), collector status (enabled/disabled toggle, interval override, last-run timestamp, error count), Föhn config editor (add/edit/remove pressure pairs and wind regions, persisted to `data/foehn_config.json`)
+- `api/routers/admin.py`: `GET/PUT /api/admin/users`, `GET/PUT /api/admin/collectors`, `GET/PUT/DELETE /api/admin/foehn-config`
+- Collector trigger-now button in admin panel
 
-### v1.2 — Rule Types: Risk + Opportunity (planned)
+### v1.2 — Webcam Integration (planned)
+
+**Goal:** Link external webcam URLs to launch sites; show them in map popups and site detail.
+
+- New SQLite table `site_webcams`: `id`, `ruleset_id` (FK → rulesets), `url`, `label`, `provider`, `sort_order`, `is_active`, `added_by_id` (FK → users)
+- **Pilots** can add/edit/delete webcams on their own sites via the ruleset editor
+- **Admins** can add webcams to any site via the admin panel
+- Map popup: webcam thumbnail link (static preview image URL if provider supports it, e.g. Roundshot `?latest=1`) + "Open cam" button
+- API: `GET/POST /api/rulesets/{id}/webcams`, `PUT/DELETE /api/rulesets/{id}/webcams/{wid}`
+- i18n keys for all 4 languages
+
+**Critical files:**
+- `src/lenticularis/database/models.py` — add `SiteWebcam` ORM model + migration
+- `src/lenticularis/api/routers/rulesets.py` — add webcam sub-routes
+- `static/map.js` or `static/index.html` — extend ruleset popup to show webcam link
+- `static/ruleset-editor.html` — add webcam URL management section
+- `static/admin.html` — webcam management for admin (any site)
+
+### v1.3 — Forecast Accuracy Dashboard (planned)
+
+**Goal:** For any past time window, show how closely 1-day-ahead / 2-day-ahead / 3-day-ahead forecasts matched observed values. Also show per-ruleset decision accuracy.
+
+**Architecture — data already exists:**
+- `weather_data` = observed (tags: `station_id`, `network`, `canton`)
+- `weather_forecast` = forecasts (tags: `station_id`, `source`, `model`; field: `init_time` for deduplication)
+- A past forecast for `valid_time=T` made at `init_time=T-24h` is queried by filtering `init_time ≤ T-22h AND init_time ≥ T-26h`
+
+**New InfluxDB query method** (`database/influx.py`):
+```python
+def query_forecast_vs_actual(
+    self, station_id: str, field: str,
+    start: datetime, end: datetime,
+    lead_hours: list[int] = [24, 48, 72]
+) -> list[dict]:
+    # Returns: [{timestamp, actual, fc_24h, fc_48h, fc_72h}, ...]
+```
+
+**New API endpoint** (`api/routers/stations.py`):
+- `GET /api/stations/{id}/forecast-accuracy?field=wind_speed&from=&to=`
+
+**New page** `static/forecast-accuracy.html`:
+- Station picker + field picker + date range selector
+- Chart: overlaid lines — actual (solid blue), 1-day forecast (dashed amber), 2-day (dotted orange), 3-day (dotted red)
+- Summary card: RMSE and bias per lead time
+- Ruleset tab: for each user's rulesets, % of hours where forecast decision matched actual decision
+
+**Critical files:**
+- `src/lenticularis/database/influx.py` — add `query_forecast_vs_actual()`
+- `src/lenticularis/api/routers/stations.py` — add `/forecast-accuracy` endpoint
+- `static/forecast-accuracy.html` — new page
+- `static/i18n/*.json` — add keys
+
+### v1.4 — Rule Types: Risk + Opportunity (planned)
 
 - `RuleSet.rule_type`: `risk` (default, existing) | `opportunity`
 - **Risk** (existing): conditions define limits — exceeding them → ORANGE/RED
@@ -312,21 +364,63 @@ Pilot-owned launch site CRUD; site markers on map with distinct icon.
 - Rule editor gains rule-type toggle; condition builder UX is identical
 - Evaluator writes to `rule_decisions` with tag `rule_type` = risk/opportunity
 
-### v1.3 — Pre-seeded Launch Site Defaults (planned)
+### v1.5 — Pre-seeded Launch Site Defaults (planned)
 
 - Admin can define a default ruleset template per launch site (or a global fallback)
 - New SQLite table: `site_default_rulesets` (`site_id` nullable, `ruleset_json`, `created_by_admin_id`)
 - When a pilot adds a site that has a default template, the template is cloned into their account as an editable starting point
 - Admin UI: Default Rules tab per site in admin panel
 
-### v1.4 — AI-Assisted Rule Building (planned)
+### v1.6 — AI Rule Building + AI Weather Analysis + Trusted Users (planned)
 
-- Free-text input in rule editor: wind from south under 30, gusts under 40, not raining
+**Goal:** Two complementary AI features plus trusted-user field confirmations.
+
+**(A) AI Rule Building** (existing scope from v1.4):
+- Free-text input in rule editor: "wind from south under 30, gusts under 40, not raining"
 - `POST /api/rulesets/ai-suggest` sends prompt + available station list to Claude API, returns a pre-filled condition tree JSON
 - Pilot reviews and saves the suggested tree
-- Requires `claude_api_key` in `config.yml`
 
-### v1.5 — OGN Live Map Overlay + Launch Statistics (planned)
+**(B) AI Weather Analysis + Trusted Users** (new):
+- New boolean flag `is_trusted` on `User` model (admin-toggled, no new role)
+- Trusted users are experienced pilots who submit brief condition reports
+- **Two report triggers**: persistent "Report conditions" button (always available) + push prompt when AI detects a station/forecast anomaly
+
+**New SQLite table `weather_reports`:**
+- `id`, `reporter_id` FK → users, `lat`, `lon`, `reported_at`
+- `wind_speed_approx` (km/h range: calm / 0–15 / 15–30 / 30–50 / 50+)
+- `wind_direction_approx` (N/NE/E/SE/S/SW/W/NW)
+- `conditions` (enum: clear / cloudy / rain / snow / föhn / thermal)
+- `notes` (free text, max 500 chars)
+- `nearest_station_id` (auto-computed from lat/lon at submit time)
+
+**New API endpoints** (`api/routers/reports.py`):
+- `POST /api/reports` — submit a condition report (trusted users only)
+- `GET /api/reports?lat=&lon=&radius_km=&hours=` — recent reports near a location
+
+**AI Analysis job** (new scheduler task, runs every 6h):
+- Fetches last 24h of station data + all reports in the same window
+- For each report, finds nearest station(s) within 20 km and compares report values against station measurements (flag discrepancies > 2σ)
+- Sends data summary + discrepancies to Claude API with a structured prompt
+- Stores generated insight in a new `ai_insights` SQLite table: `id`, `generated_at`, `area` (bounding box), `insight_text`, `anomalies_json`
+
+**UI:**
+- Map: trusted users see "Report conditions" FAB button → quick modal form
+- Map: optional "AI insights" layer showing area summaries (admin-visible initially)
+- New `static/ai-insights.html` page (admin only initially)
+- Admin panel: toggle `is_trusted` on user management table
+
+**Requires** `claude_api_key` in `config.yml`.
+
+**Critical files:**
+- `src/lenticularis/database/models.py` — add `WeatherReport`, `AiInsight`, `is_trusted` on User
+- `src/lenticularis/api/routers/reports.py` — new router
+- `src/lenticularis/services/ai_analysis.py` — Claude API integration
+- `src/lenticularis/scheduler.py` — new 6h AI analysis job
+- `static/map.js` — "Report conditions" FAB for trusted users
+- `static/admin.html` — `is_trusted` toggle in user table
+- `config.yml.example` — add `claude_api_key` config key
+
+### v1.7 — OGN Live Map Overlay + Launch Statistics (planned)
 
 - **Live overlay**: toggleable Leaflet layer showing glider positions from OGN APRS feed
   - Backend WebSocket proxy (`/api/ogn/stream`) relays APRS messages filtered to Swiss bounding box
@@ -336,32 +430,76 @@ Pilot-owned launch site CRUD; site markers on map with distinct icon.
   - Stores daily takeoff count per site in InfluxDB `ogn_takeoffs` measurement
   - Stats dashboard: OGN launch activity vs ruleset decision chart
 
-### v1.6 — xcontest Statistics (planned)
+### v1.8 — xcontest Statistics (planned)
 
 - Correlate xcontest.org flight dates near each site with ruleset decision history
 - Rule accuracy card on `ruleset-analysis.html`: % of flight days that matched GREEN decision
 - If many flights on RED days, rule may be too pessimistic
 
-### v1.7 — Paragliding Club Area Overlay (planned)
+### v1.9 — Paragliding Club Area Overlay (planned)
 
 - Map layer showing club coverage polygons from a manually-maintained GeoJSON
 - Popup: club name, website, contact
 - Admin UI: upload/edit club GeoJSON
 
-### v1.8 — Duplicate Station Handling (planned)
+### v1.10 — Duplicate Station Handling (planned)
 
 - Admin can mark two stations as same physical location with a priority order
 - Map and API surface the station with the most recent data
 - Admin UI: Station aliases table
 
-### v1.9 — VKPI / BOB Custom Pages (planned)
+### v1.11 — VKPI / BOB White-label (planned)
 
 - White-label map view scoped to specific sites + customer role access
 - Details TBD
 
+### v2.0 — Flutter Mobile App (Android + iOS) (planned)
+
+**Approach:** Flutter native app in a separate repo (`lenticularis-app`), consuming the existing REST API. Play Store + App Store distribution.
+
+**Backend additions** (in this repo, done as part of v2.0 prep):
+- New SQLite table `fcm_tokens`: `id`, `user_id`, `token`, `platform` (android/ios), `created_at`
+- New API endpoint `POST /api/notifications/fcm-register` — stores FCM token for a user
+- New backend service `services/push_fcm.py` — dispatches FCM messages on ruleset status transitions
+- `config.yml.example` — add `firebase_service_account_json` key
+
+**Push notification triggers** (backend):
+- Ruleset status transition (RED → GREEN, GREEN → RED, etc.)
+- AI anomaly detected near user's sites (trusted users only)
+
+**Flutter app screens:**
+1. **Map** — flutter_map (Leaflet port) with ruleset traffic light markers; tap → popup with status + webcam link
+2. **My Sites** — ruleset list with live GREEN/ORANGE/RED badges; tap → condition breakdown
+3. **Stations** — station list + detail charts (fl_chart)
+4. **Föhn** — föhn dashboard (pressure gradient + region cards)
+5. **Report conditions** — trusted-user condition report form (lat/lon auto-filled via device GPS)
+6. **Admin** (admin role only) — user management, collector status
+
+**Critical files — backend prep:**
+- `src/lenticularis/database/models.py` — add `FcmToken`
+- `src/lenticularis/api/routers/notifications.py` — new router
+- `src/lenticularis/services/push_fcm.py` — FCM dispatcher
+- `src/lenticularis/rules/evaluator.py` — trigger push on status transition
+- `config.yml.example` — FCM config
+
+**Critical files — Flutter (separate repo):**
+- `pubspec.yaml` — flutter_map, fl_chart, flutter_secure_storage, firebase_messaging, http
+- `lib/main.dart`, `lib/screens/`, `lib/services/api.dart` (REST client), `lib/services/auth.dart`
+
 ---
 
-## Backlog (post-v1.9, unprioritised)
+## Decisions
+
+| Topic | Decision |
+|---|---|
+| Webcam authorship | Pilots manage their own sites; admins manage any site |
+| Android/iOS approach | Flutter native app in a separate repo → Play Store + App Store |
+| Trusted user model | `is_trusted` boolean flag on existing pilot role (admin-toggled, no new role) |
+| Report triggers | Both: persistent button (pull) + push prompt on AI anomaly (push) |
+
+---
+
+## Backlog (post-v2.0, unprioritised)
 
 - **Community Rule Gallery** — `GET /api/gallery`, `POST /api/gallery/{id}/clone`; pilots can publish rule sets for others to clone
 - **Notifications** — email + Pushover alerts on ruleset status transitions
@@ -390,4 +528,4 @@ Pilot-owned launch site CRUD; site markers on map with distinct icon.
 - Best-windows metric computed server-side (not Flux) for simplicity
 - Rule sharing is clone-only (no co-editing); private by default, opt-in publish
 - Chart.js for all charts (lightweight, no framework required)
-- MeteoSwiss, SLF, and METAR are the primary no-auth collectors; Holfuy, Windline, and Ecovitt are deferred to v1.2
+- MeteoSwiss, SLF, and METAR are the primary no-auth collectors; Holfuy, Windline, and Ecovitt are deferred to a later version
