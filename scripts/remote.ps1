@@ -62,7 +62,8 @@ $SSH_TARGET  = "xpsex"
 $REMOTE_DIR  = "~/lenticularis"
 
 # Docker Compose command — always layered: base + dev overlay
-$COMPOSE_CMD = "docker compose -f docker-compose.yml -f docker-compose.dev.yml"
+# --project-name isolates the dev stack from any prod stack on the same host
+$COMPOSE_CMD = "docker compose --project-name lenticularis-dev -f docker-compose.yml -f docker-compose.dev.yml"
 $APP_CONTAINER = "lenticularis-dev"
 
 # Files/directories to exclude when syncing to the remote host
