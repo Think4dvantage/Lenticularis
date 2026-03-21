@@ -193,8 +193,8 @@ function Invoke-Deploy {
     Write-Header "Building and starting DEV services on $SSH_TARGET"
     Invoke-SSH "cd $REMOTE_DIR && $COMPOSE_CMD up --build -d"
     Write-Host ""
-    Write-Host "Services started. Dashboard : http://${SSH_TARGET}:8000" -ForegroundColor Green
-    Write-Host "API docs    : http://${SSH_TARGET}:8000/docs" -ForegroundColor Green
+    Write-Host "Services started. Dashboard : http://${SSH_TARGET}:8001" -ForegroundColor Green
+    Write-Host "API docs    : http://${SSH_TARGET}:8001/docs" -ForegroundColor Green
     Write-Host "InfluxDB UI : http://${SSH_TARGET}:8086  (shared homelab instance)" -ForegroundColor Gray
     Write-Host ""
     Write-Host "Tail logs with: .\scripts\remote.ps1 logs" -ForegroundColor Gray
@@ -211,7 +211,7 @@ function Invoke-Up {
     if (-not (Test-SSHConnectivity)) { exit 1 }
     Write-Header "Starting services"
     Invoke-SSH "cd $REMOTE_DIR && $COMPOSE_CMD up -d"
-    Write-Host "  Dashboard: http://${SSH_TARGET}:8000" -ForegroundColor Green
+    Write-Host "  Dashboard: http://${SSH_TARGET}:8001" -ForegroundColor Green
 }
 
 function Invoke-Down {
@@ -224,7 +224,7 @@ function Invoke-Restart {
     if (-not (Test-SSHConnectivity)) { exit 1 }
     Write-Header "Restarting services"
     Invoke-SSH "cd $REMOTE_DIR && $COMPOSE_CMD restart"
-    Write-Host "  Dashboard: http://${SSH_TARGET}:8000" -ForegroundColor Green
+    Write-Host "  Dashboard: http://${SSH_TARGET}:8001" -ForegroundColor Green
 }
 
 function Invoke-Logs([string]$service = "") {
