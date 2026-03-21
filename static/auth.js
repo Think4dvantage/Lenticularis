@@ -107,6 +107,18 @@ export function renderNavAuth(activePage) {
       <span class="nav-user-name">${escHtml(user.display_name)}</span>
       <button class="nav-btn" id="logoutBtn">${window.t('nav.sign_out')}</button>`;
     document.getElementById('logoutBtn').addEventListener('click', logout);
+
+    // Inject Admin link for admin users
+    if (user.role === 'admin') {
+      const navLinks = document.querySelector('.nav-links');
+      if (navLinks && !navLinks.querySelector('a[href="/admin"]')) {
+        const link = document.createElement('a');
+        link.href = '/admin';
+        link.className = 'nav-link' + (activePage === 'admin' ? ' active' : '');
+        link.textContent = window.t('nav.admin');
+        navLinks.appendChild(link);
+      }
+    }
   } else {
     navUser.innerHTML = `<a href="/login" class="nav-link${activePage === 'login' ? ' active' : ''}">${window.t('nav.sign_in')}</a>`;
   }

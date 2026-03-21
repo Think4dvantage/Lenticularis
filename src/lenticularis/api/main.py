@@ -33,6 +33,7 @@ from lenticularis.api.routers import rulesets as rulesets_router
 from lenticularis.api.routers import health as health_router
 from lenticularis.api.routers import foehn as foehn_router
 from lenticularis.api.routers import stats as stats_router
+from lenticularis.api.routers import admin as admin_router
 from lenticularis.database.db import init_db
 from lenticularis.collectors.foehn import _VIRTUAL_WEATHER_STATIONS
 
@@ -163,6 +164,7 @@ def create_app() -> FastAPI:
     app.include_router(health_router.router)
     app.include_router(foehn_router.router)
     app.include_router(stats_router.router)
+    app.include_router(admin_router.router)
 
     # Static files (frontend)
     static_dir = Path(__file__).parent.parent.parent.parent / "static"
@@ -220,6 +222,10 @@ def create_app() -> FastAPI:
         @app.get("/foehn", include_in_schema=False)
         async def serve_foehn():
             return FileResponse(str(static_dir / "foehn.html"))
+
+        @app.get("/admin", include_in_schema=False)
+        async def serve_admin():
+            return FileResponse(str(static_dir / "admin.html"))
     else:
         @app.get("/", include_in_schema=False)
         async def root():

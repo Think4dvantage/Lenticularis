@@ -439,5 +439,44 @@
     "h_ago": "il y a {n} h",
     "cond_group_n": "Groupe de conditions {n}",
     "cond_group_triggered": " — déclenché"
+  },
+  "admin": {
+    "title": "Panneau admin",
+    "subtitle": "Gérer les utilisateurs et la configuration des collecteurs.",
+    "access_denied": "Accès administrateur requis.",
+    "tabs": {
+      "users": "Utilisateurs",
+      "collectors": "Collecteurs"
+    },
+    "users": {
+      "total": "{n} utilisateurs",
+      "col_name": "Nom",
+      "col_email": "E-mail",
+      "col_role": "Rôle",
+      "col_active": "Actif",
+      "col_created": "Créé",
+      "col_password": "Auth",
+      "role_pilot": "Pilote",
+      "role_customer": "Client",
+      "role_admin": "Admin",
+      "auth_local": "Local",
+      "auth_oauth": "OAuth",
+      "you": "(vous)",
+      "no_users": "Aucun utilisateur trouvé."
+    },
+    "collectors": {
+      "col_collector": "Collecteur",
+      "col_type": "Type",
+      "col_enabled": "Actif",
+      "col_interval": "Intervalle (min)",
+      "col_status": "Statut",
+      "col_last_success": "Dernier succès",
+      "col_last_error": "Dernière erreur",
+      "col_failures": "Échecs",
+      "col_next_run": "Prochaine exéc.",
+      "temporary_note": "⚠ Les modifications actif/intervalle sont temporaires et réinitialisées au redémarrage.",
+      "cannot_toggle_foehn": "Le collecteur foehn ne peut pas être désactivé à l'exécution.",
+      "no_collectors": "Aucun collecteur configuré."
+    }
   }
 }

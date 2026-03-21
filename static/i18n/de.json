@@ -439,5 +439,44 @@
     "h_ago": "vor {n} Std.",
     "cond_group_n": "Bedingungsgruppe {n}",
     "cond_group_triggered": " — ausgelöst"
+  },
+  "admin": {
+    "title": "Admin-Panel",
+    "subtitle": "Benutzer und Kollektor-Konfiguration verwalten.",
+    "access_denied": "Admin-Zugriff erforderlich.",
+    "tabs": {
+      "users": "Benutzer",
+      "collectors": "Kollektoren"
+    },
+    "users": {
+      "total": "{n} Benutzer",
+      "col_name": "Name",
+      "col_email": "E-Mail",
+      "col_role": "Rolle",
+      "col_active": "Aktiv",
+      "col_created": "Erstellt",
+      "col_password": "Auth",
+      "role_pilot": "Pilot",
+      "role_customer": "Kunde",
+      "role_admin": "Admin",
+      "auth_local": "Lokal",
+      "auth_oauth": "OAuth",
+      "you": "(du)",
+      "no_users": "Keine Benutzer gefunden."
+    },
+    "collectors": {
+      "col_collector": "Kollektor",
+      "col_type": "Typ",
+      "col_enabled": "Aktiv",
+      "col_interval": "Intervall (Min.)",
+      "col_status": "Status",
+      "col_last_success": "Letzter Erfolg",
+      "col_last_error": "Letzter Fehler",
+      "col_failures": "Fehler",
+      "col_next_run": "Nächster Lauf",
+      "temporary_note": "⚠ Änderungen an Aktiv und Intervall sind temporär und werden beim Neustart zurückgesetzt.",
+      "cannot_toggle_foehn": "Der Föhn-Kollektor kann zur Laufzeit nicht umgeschaltet werden.",
+      "no_collectors": "Keine Kollektoren konfiguriert."
+    }
   }
 }

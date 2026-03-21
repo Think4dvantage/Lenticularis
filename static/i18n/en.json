@@ -439,5 +439,44 @@
     "h_ago": "{n} h ago",
     "cond_group_n": "Condition Group {n}",
     "cond_group_triggered": " — triggered"
+  },
+  "admin": {
+    "title": "Admin Panel",
+    "subtitle": "Manage users and collector configuration.",
+    "access_denied": "Admin access required.",
+    "tabs": {
+      "users": "Users",
+      "collectors": "Collectors"
+    },
+    "users": {
+      "total": "{n} users",
+      "col_name": "Name",
+      "col_email": "Email",
+      "col_role": "Role",
+      "col_active": "Active",
+      "col_created": "Created",
+      "col_password": "Auth",
+      "role_pilot": "Pilot",
+      "role_customer": "Customer",
+      "role_admin": "Admin",
+      "auth_local": "Local",
+      "auth_oauth": "OAuth",
+      "you": "(you)",
+      "no_users": "No users found."
+    },
+    "collectors": {
+      "col_collector": "Collector",
+      "col_type": "Type",
+      "col_enabled": "Enabled",
+      "col_interval": "Interval (min)",
+      "col_status": "Status",
+      "col_last_success": "Last success",
+      "col_last_error": "Last error",
+      "col_failures": "Failures",
+      "col_next_run": "Next run",
+      "temporary_note": "⚠ Enabled and interval changes are temporary and reset on server restart.",
+      "cannot_toggle_foehn": "The foehn collector cannot be toggled at runtime.",
+      "no_collectors": "No collectors configured."
+    }
   }
 }

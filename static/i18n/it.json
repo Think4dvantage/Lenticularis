@@ -439,5 +439,44 @@
     "h_ago": "{n} h fa",
     "cond_group_n": "Gruppo condizioni {n}",
     "cond_group_triggered": " — attivato"
+  },
+  "admin": {
+    "title": "Pannello admin",
+    "subtitle": "Gestione utenti e configurazione dei collettori.",
+    "access_denied": "Accesso amministratore richiesto.",
+    "tabs": {
+      "users": "Utenti",
+      "collectors": "Collettori"
+    },
+    "users": {
+      "total": "{n} utenti",
+      "col_name": "Nome",
+      "col_email": "E-mail",
+      "col_role": "Ruolo",
+      "col_active": "Attivo",
+      "col_created": "Creato",
+      "col_password": "Auth",
+      "role_pilot": "Pilota",
+      "role_customer": "Cliente",
+      "role_admin": "Admin",
+      "auth_local": "Locale",
+      "auth_oauth": "OAuth",
+      "you": "(tu)",
+      "no_users": "Nessun utente trovato."
+    },
+    "collectors": {
+      "col_collector": "Collettore",
+      "col_type": "Tipo",
+      "col_enabled": "Attivo",
+      "col_interval": "Intervallo (min)",
+      "col_status": "Stato",
+      "col_last_success": "Ultimo successo",
+      "col_last_error": "Ultimo errore",
+      "col_failures": "Errori",
+      "col_next_run": "Prossima esec.",
+      "temporary_note": "⚠ Le modifiche ad attivo/intervallo sono temporanee e vengono ripristinate al riavvio.",
+      "cannot_toggle_foehn": "Il collettore föhn non può essere disattivato in fase di esecuzione.",
+      "no_collectors": "Nessun collettore configurato."
+    }
   }
 }

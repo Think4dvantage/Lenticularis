@@ -32,7 +32,7 @@ class User(Base):
     display_name = Column(String, nullable=False)
     # Null for social-login-only accounts (no local password set)
     hashed_password = Column(String, nullable=True)
-    role = Column(String, nullable=False, default="pilot")   # "pilot" | "admin"
+    role = Column(String, nullable=False, default="pilot")   # "pilot" | "customer" | "admin"
     is_active = Column(Boolean, nullable=False, default=True)
     created_at = Column(
         DateTime(timezone=True),

@@ -418,6 +418,57 @@ class CollectorScheduler:
             health["consecutive_failures"] = int(health.get("consecutive_failures", 0)) + 1
             logger.error("Forecast collector %s failed: %s", name, exc, exc_info=True)
 
+    def update_collector_runtime(
+        self,
+        health_key: str,
+        enabled: bool | None = None,
+        interval_minutes: int | None = None,
+    ) -> dict[str, Any]:
+        """
+        Toggle or reschedule a collector at runtime.
+        Changes are in-memory only and reset on restart.
+
+        health_key: the key used in _collector_health (e.g. 'meteoswiss', 'forecast_open-meteo').
+        """
+        if health_key not in self._collector_health:
+            raise KeyError(f"Unknown collector: {health_key!r}")
+
+        health = self._collector_health[health_key]
+
+        if health.get("type") == "derived":
+            raise ValueError("The foehn collector cannot be toggled at runtime")
+
+        # Resolve APScheduler job ID from health entry type
+        ctype = health.get("type")
+        if ctype == "forecast":
+            job_id = health_key                         # e.g. "forecast_open-meteo"
+        else:
+            job_id = f"collector_{health_key}"          # e.g. "collector_meteoswiss"
+
+        job = self._scheduler.get_job(job_id)
+
+        if enabled is not None:
+            health["enabled"] = enabled
+            if enabled:
+                if job:
+                    job.resume()
+                health["status"] = "scheduled"
+            else:
+                if job:
+                    job.pause()
+                health["status"] = "disabled"
+
+        if interval_minutes is not None and interval_minutes > 0:
+            health["interval_minutes"] = interval_minutes
+            if job:
+                job.reschedule(trigger=IntervalTrigger(minutes=interval_minutes))
+
+        # Return a serialised snapshot (mirrors get_collector_health row shape)
+        row = dict(health)
+        job = self._scheduler.get_job(job_id)
+        row["next_run_time"] = job.next_run_time if job else None
+        return row
+
     def get_collector_health(self) -> list[dict[str, Any]]:
         """Return a health snapshot for all configured collectors."""
         snapshot: list[dict[str, Any]] = []

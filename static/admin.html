@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lenticularis — Admin</title>
+  <link rel="stylesheet" href="/static/shared.css" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: #0f1117; color: #e2e8f0; min-height: 100vh; display: flex; flex-direction: column;
+    }
+
+    /* ── Nav ── */
+    .top-nav { background: #1a1f2e; border-bottom: 1px solid #2d3748; padding: 0 24px; display: flex; align-items: center; flex-shrink: 0; height: 48px; }
+    .nav-brand { font-size: 1.1rem; font-weight: 600; color: #90cdf4; margin-right: 24px; white-space: nowrap; }
+    .nav-links { display: flex; gap: 2px; flex: 1; }
+    .nav-link { color: #718096; text-decoration: none; font-size: 0.85rem; padding: 6px 14px; border-radius: 6px; transition: background 0.15s, color 0.15s; }
+    .nav-link:hover { background: #2d3748; color: #e2e8f0; }
+    .nav-link.active { background: #2d4a6e; color: #90cdf4; font-weight: 500; }
+    .nav-user { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+    .nav-btn { background: transparent; border: 1px solid #4a5568; color: #a0aec0; font-size: 0.8rem; padding: 4px 10px; border-radius: 5px; cursor: pointer; transition: background 0.15s; }
+    .nav-btn:hover { background: #2d3748; color: #e2e8f0; }
+    #navLangPicker { display: flex; gap: 2px; margin-left: 8px; }
+    .lang-btn { background: transparent; border: 1px solid #4a5568; color: #718096; font-size: 0.72rem; padding: 3px 7px; border-radius: 4px; cursor: pointer; transition: background 0.15s; }
+    .lang-btn:hover { background: #2d3748; color: #e2e8f0; }
+    .lang-btn.active { background: #2d4a6e; color: #90cdf4; border-color: #4a7bab; }
+
+    /* ── Layout ── */
+    .page { max-width: 1100px; margin: 0 auto; padding: 28px 20px 60px; width: 100%; }
+    .page-header { margin-bottom: 24px; }
+    .page-header h1 { font-size: 1.4rem; font-weight: 600; }
+    .page-header p { color: #718096; font-size: 0.85rem; margin-top: 4px; }
+
+    /* ── Auth gate ── */
+    .auth-gate { display: none; text-align: center; padding: 60px 20px; }
+    .auth-gate.visible { display: block; }
+    .auth-gate p { color: #718096; margin-bottom: 16px; }
+
+    /* ── Tabs ── */
+    .tab-bar { display: flex; gap: 4px; border-bottom: 1px solid #2d3748; margin-bottom: 28px; overflow-x: auto; }
+    .tab-btn {
+      padding: 10px 20px; font-size: 0.88rem; font-weight: 500; cursor: pointer; border: none;
+      background: transparent; color: #718096; border-bottom: 2px solid transparent;
+      transition: color 0.15s, border-color 0.15s; margin-bottom: -1px; white-space: nowrap;
+    }
+    .tab-btn:hover { color: #e2e8f0; }
+    .tab-btn.active { color: #90cdf4; border-bottom-color: #90cdf4; }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* ── Table ── */
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
+    th { text-align: left; padding: 8px 12px; color: #718096; font-weight: 500; border-bottom: 1px solid #2d3748; white-space: nowrap; }
+    td { padding: 10px 12px; border-bottom: 1px solid #1e2533; vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #151b27; }
+
+    /* ── Controls ── */
+    select.role-select {
+      background: #1a2035; border: 1px solid #2d3748; color: #e2e8f0;
+      border-radius: 5px; padding: 4px 8px; font-size: 0.82rem; cursor: pointer;
+    }
+    select.role-select:disabled { opacity: 0.45; cursor: default; }
+    .toggle-wrap { display: flex; align-items: center; }
+    .toggle { position: relative; display: inline-block; width: 36px; height: 20px; }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .slider {
+      position: absolute; cursor: pointer; inset: 0;
+      background: #2d3748; border-radius: 20px; transition: background 0.2s;
+    }
+    .slider::before {
+      content: ''; position: absolute; height: 14px; width: 14px;
+      left: 3px; bottom: 3px; background: #fff; border-radius: 50%; transition: transform 0.2s;
+    }
+    input:checked + .slider { background: #3182ce; }
+    input:checked + .slider::before { transform: translateX(16px); }
+    input:disabled + .slider { opacity: 0.4; cursor: default; }
+
+    .interval-input {
+      width: 70px; background: #1a2035; border: 1px solid #2d3748; color: #e2e8f0;
+      border-radius: 5px; padding: 4px 8px; font-size: 0.82rem; text-align: center;
+    }
+    .interval-input:disabled { opacity: 0.45; }
+
+    /* ── Status badges ── */
+    .badge {
+      display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 500;
+    }
+    .badge-ok       { background: #1c4532; color: #68d391; }
+    .badge-ok_no_data { background: #1c4532; color: #68d391; }
+    .badge-error    { background: #4a1515; color: #fc8181; }
+    .badge-running  { background: #3d3010; color: #f6e05e; }
+    .badge-pending  { background: #2d3748; color: #a0aec0; }
+    .badge-scheduled { background: #2d3748; color: #a0aec0; }
+    .badge-disabled { background: #1a1f2e; color: #4a5568; }
+    .badge-unknown_collector { background: #4a1515; color: #fc8181; }
+
+    /* ── Note ── */
+    .note { font-size: 0.78rem; color: #718096; margin-top: 16px; }
+
+    /* ── You tag ── */
+    .you-tag { font-size: 0.72rem; color: #718096; margin-left: 4px; }
+
+    /* ── Error msg ── */
+    .error-msg { color: #fc8181; font-size: 0.82rem; margin-top: 12px; }
+    .empty-msg  { color: #718096; font-size: 0.85rem; padding: 20px 0; }
+  </style>
+</head>
+<body>
+
+<nav class="top-nav">
+  <span class="nav-brand">🪁 Lenticularis</span>
+  <div class="nav-links">
+    <a href="/" class="nav-link" data-i18n="nav.map"></a>
+    <a href="/stations" class="nav-link" data-i18n="nav.stations"></a>
+    <a href="/rulesets" class="nav-link" data-i18n="nav.rulesets"></a>
+    <a href="/stats" class="nav-link" data-i18n="nav.stats"></a>
+    <a href="/foehn" class="nav-link" data-i18n="nav.foehn"></a>
+    <a href="/admin" class="nav-link active" data-i18n="nav.admin"></a>
+  </div>
+  <div class="nav-user" id="navUser"></div>
+  <div id="navLangPicker"></div>
+</nav>
+
+<div class="page">
+  <!-- Access denied -->
+  <div class="auth-gate" id="authGate">
+    <p id="authGateMsg" data-i18n="admin.access_denied"></p>
+  </div>
+
+  <!-- Admin content -->
+  <div id="adminContent" style="display:none">
+    <div class="page-header">
+      <h1 data-i18n="admin.title"></h1>
+      <p data-i18n="admin.subtitle"></p>
+    </div>
+
+    <div class="tab-bar">
+      <button class="tab-btn active" onclick="switchTab('users')" id="tab-users" data-i18n="admin.tabs.users"></button>
+      <button class="tab-btn" onclick="switchTab('collectors')" id="tab-collectors" data-i18n="admin.tabs.collectors"></button>
+    </div>
+
+    <!-- Users tab -->
+    <div class="tab-panel active" id="panel-users">
+      <div id="usersError" class="error-msg" style="display:none"></div>
+      <div class="table-wrap">
+        <table id="usersTable">
+          <thead>
+            <tr>
+              <th data-i18n="admin.users.col_name"></th>
+              <th data-i18n="admin.users.col_email"></th>
+              <th data-i18n="admin.users.col_role"></th>
+              <th data-i18n="admin.users.col_active"></th>
+              <th data-i18n="admin.users.col_password"></th>
+              <th data-i18n="admin.users.col_created"></th>
+            </tr>
+          </thead>
+          <tbody id="usersBody">
+            <tr><td colspan="6" class="empty-msg" data-i18n="common.loading"></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div id="userCount" class="note"></div>
+    </div>
+
+    <!-- Collectors tab -->
+    <div class="tab-panel" id="panel-collectors">
+      <div id="collectorsError" class="error-msg" style="display:none"></div>
+      <div class="table-wrap">
+        <table id="collectorsTable">
+          <thead>
+            <tr>
+              <th data-i18n="admin.collectors.col_collector"></th>
+              <th data-i18n="admin.collectors.col_type"></th>
+              <th data-i18n="admin.collectors.col_enabled"></th>
+              <th data-i18n="admin.collectors.col_interval"></th>
+              <th data-i18n="admin.collectors.col_status"></th>
+              <th data-i18n="admin.collectors.col_last_success"></th>
+              <th data-i18n="admin.collectors.col_last_error"></th>
+              <th data-i18n="admin.collectors.col_failures"></th>
+              <th data-i18n="admin.collectors.col_next_run"></th>
+            </tr>
+          </thead>
+          <tbody id="collectorsBody">
+            <tr><td colspan="9" class="empty-msg" data-i18n="common.loading"></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="note" data-i18n="admin.collectors.temporary_note"></div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { initI18n, renderLangPicker, applyDataI18n } from '/static/i18n.js';
+import { renderNavAuth, getUser, fetchAuth } from '/static/auth.js';
+
+await initI18n();
+document.dispatchEvent(new CustomEvent('i18nReady'));
+renderNavAuth('admin');
+renderLangPicker();
+
+const user = getUser();
+
+if (!user || user.role !== 'admin') {
+  document.getElementById('authGate').classList.add('visible');
+} else {
+  document.getElementById('adminContent').style.display = 'block';
+  loadUsers();
+  loadCollectors();
+  // Auto-refresh collectors every 30s
+  setInterval(loadCollectors, 30_000);
+}
+
+// ---------------------------------------------------------------------------
+// Tab switching
+// ---------------------------------------------------------------------------
+window.switchTab = function(name) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.id === `tab-${name}`));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === `panel-${name}`));
+};
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+function fmtDate(iso) {
+  if (!iso) return '—';
+  try {
+    const d = new Date(iso);
+    return d.toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
+  } catch { return iso; }
+}
+
+function ageSince(iso) {
+  if (!iso) return '—';
+  const diff = Math.floor((Date.now() - new Date(iso)) / 1000);
+  if (diff < 60)  return window.t('common.n_seconds_ago', { n: diff });
+  if (diff < 3600) return window.t('common.n_minutes_ago', { n: Math.floor(diff / 60) });
+  if (diff < 86400) return window.t('common.n_hours_ago', { n: Math.floor(diff / 3600) });
+  return window.t('common.n_days_ago', { n: Math.floor(diff / 86400) });
+}
+
+// ---------------------------------------------------------------------------
+// Users
+// ---------------------------------------------------------------------------
+async function loadUsers() {
+  const res = await fetchAuth('/api/admin/users');
+  if (!res.ok) {
+    document.getElementById('usersError').style.display = 'block';
+    document.getElementById('usersError').textContent = `Error ${res.status}`;
+    return;
+  }
+  const data = await res.json();
+  renderUsers(data.users, data.total);
+}
+
+function renderUsers(users, total) {
+  document.getElementById('userCount').textContent = window.t('admin.users.total', { n: total });
+
+  if (!users.length) {
+    document.getElementById('usersBody').innerHTML =
+      `<tr><td colspan="6" class="empty-msg">${window.t('admin.users.no_users')}</td></tr>`;
+    return;
+  }
+
+  const roleLabels = {
+    pilot:    window.t('admin.users.role_pilot'),
+    customer: window.t('admin.users.role_customer'),
+    admin:    window.t('admin.users.role_admin'),
+  };
+
+  document.getElementById('usersBody').innerHTML = users.map(u => {
+    const isMe = u.id === user.id;
+    const youTag = isMe ? `<span class="you-tag">${window.t('admin.users.you')}</span>` : '';
+    const roleOpts = ['pilot', 'customer', 'admin'].map(r =>
+      `<option value="${r}" ${u.role === r ? 'selected' : ''}>${roleLabels[r]}</option>`
+    ).join('');
+
+    return `<tr>
+      <td>${escHtml(u.display_name)}${youTag}</td>
+      <td>${escHtml(u.email)}</td>
+      <td>
+        <select class="role-select" data-user-id="${u.id}" onchange="updateUserRole(this)"
+          ${isMe ? 'disabled' : ''}>
+          ${roleOpts}
+        </select>
+      </td>
+      <td>
+        <label class="toggle">
+          <input type="checkbox" ${u.is_active ? 'checked' : ''} ${isMe ? 'disabled' : ''}
+            onchange="updateUserActive(this, '${u.id}')">
+          <span class="slider"></span>
+        </label>
+      </td>
+      <td>${u.has_password ? window.t('admin.users.auth_local') : window.t('admin.users.auth_oauth')}</td>
+      <td>${fmtDate(u.created_at)}</td>
+    </tr>`;
+  }).join('');
+}
+
+window.updateUserRole = async function(select) {
+  const userId = select.dataset.userId;
+  const role = select.value;
+  const res = await fetchAuth(`/api/admin/users/${userId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ role }),
+  });
+  if (!res.ok) {
+    select.value = select.querySelector('[selected]')?.value || select.value;
+    const err = await res.json().catch(() => ({}));
+    document.getElementById('usersError').style.display = 'block';
+    document.getElementById('usersError').textContent = err.detail || `Error ${res.status}`;
+  } else {
+    document.getElementById('usersError').style.display = 'none';
+  }
+};
+
+window.updateUserActive = async function(checkbox, userId) {
+  const res = await fetchAuth(`/api/admin/users/${userId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ is_active: checkbox.checked }),
+  });
+  if (!res.ok) {
+    checkbox.checked = !checkbox.checked;
+    const err = await res.json().catch(() => ({}));
+    document.getElementById('usersError').style.display = 'block';
+    document.getElementById('usersError').textContent = err.detail || `Error ${res.status}`;
+  } else {
+    document.getElementById('usersError').style.display = 'none';
+  }
+};
+
+// ---------------------------------------------------------------------------
+// Collectors
+// ---------------------------------------------------------------------------
+async function loadCollectors() {
+  const res = await fetchAuth('/api/admin/collectors');
+  if (!res.ok) {
+    document.getElementById('collectorsError').style.display = 'block';
+    document.getElementById('collectorsError').textContent = `Error ${res.status}`;
+    return;
+  }
+  const data = await res.json();
+  renderCollectors(data.collectors);
+}
+
+function renderCollectors(collectors) {
+  if (!collectors.length) {
+    document.getElementById('collectorsBody').innerHTML =
+      `<tr><td colspan="9" class="empty-msg">${window.t('admin.collectors.no_collectors')}</td></tr>`;
+    return;
+  }
+
+  document.getElementById('collectorsBody').innerHTML = collectors.map(c => {
+    const isDerived = c.type === 'derived';
+    const healthKey = c.type === 'forecast'
+      ? `forecast_${c.collector}`
+      : c.collector;
+
+    const lastErr = c.last_error
+      ? `<span title="${escHtml(c.last_error)}">${ageSince(c.last_error_at)}</span>`
+      : '—';
+
+    return `<tr>
+      <td><strong>${escHtml(c.collector)}</strong></td>
+      <td>${escHtml(c.type)}</td>
+      <td>
+        <label class="toggle">
+          <input type="checkbox" ${c.enabled ? 'checked' : ''} ${isDerived ? 'disabled' : ''}
+            onchange="updateCollectorEnabled(this, '${escHtml(healthKey)}')">
+          <span class="slider"></span>
+        </label>
+      </td>
+      <td>
+        <input class="interval-input" type="number" min="1" max="1440"
+          value="${c.interval_minutes ?? ''}"
+          ${isDerived ? 'disabled' : ''}
+          data-health-key="${escHtml(healthKey)}"
+          onblur="updateCollectorInterval(this)">
+      </td>
+      <td><span class="badge badge-${escHtml(c.status)}">${escHtml(c.status)}</span></td>
+      <td>${ageSince(c.last_success_at)}</td>
+      <td>${lastErr}</td>
+      <td>${c.consecutive_failures || 0}</td>
+      <td>${fmtDate(c.next_run_time)}</td>
+    </tr>`;
+  }).join('');
+}
+
+window.updateCollectorEnabled = async function(checkbox, healthKey) {
+  const res = await fetchAuth(`/api/admin/collectors/${healthKey}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled: checkbox.checked }),
+  });
+  if (!res.ok) {
+    checkbox.checked = !checkbox.checked;
+    const err = await res.json().catch(() => ({}));
+    document.getElementById('collectorsError').style.display = 'block';
+    document.getElementById('collectorsError').textContent = err.detail || `Error ${res.status}`;
+  } else {
+    document.getElementById('collectorsError').style.display = 'none';
+    await loadCollectors();
+  }
+};
+
+window.updateCollectorInterval = async function(input) {
+  const val = parseInt(input.value, 10);
+  if (!val || val < 1) return;
+  const healthKey = input.dataset.healthKey;
+  const res = await fetchAuth(`/api/admin/collectors/${healthKey}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ interval_minutes: val }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    document.getElementById('collectorsError').style.display = 'block';
+    document.getElementById('collectorsError').textContent = err.detail || `Error ${res.status}`;
+  } else {
+    document.getElementById('collectorsError').style.display = 'none';
+  }
+};
+
+function escHtml(str) {
+  return String(str ?? '').replace(/[&<>"']/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+</script>
+</body>
+</html>

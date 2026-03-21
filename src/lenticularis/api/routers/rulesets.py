@@ -22,7 +22,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from lenticularis.api.dependencies import get_current_user
+from lenticularis.api.dependencies import get_current_user, require_pilot
 from lenticularis.database.db import get_db
 from lenticularis.database.models import RuleCondition, RuleSet, User
 from lenticularis.models.rules import (
@@ -88,7 +88,7 @@ def gallery(
 @router.post("", response_model=RuleSetOut, status_code=status.HTTP_201_CREATED)
 def create_ruleset(
     body: RuleSetCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_pilot),
     db: Session = Depends(get_db),
 ):
     rs = RuleSet(
@@ -164,7 +164,7 @@ def get_ruleset(
 def update_ruleset(
     ruleset_id: str,
     body: RuleSetUpdate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_pilot),
     db: Session = Depends(get_db),
 ):
     rs = _get_own_ruleset(ruleset_id, current_user, db)
@@ -183,7 +183,7 @@ def update_ruleset(
 @router.delete("/{ruleset_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_ruleset(
     ruleset_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_pilot),
     db: Session = Depends(get_db),
 ):
     rs = _get_own_ruleset(ruleset_id, current_user, db)
@@ -199,7 +199,7 @@ def delete_ruleset(
 def replace_conditions(
     ruleset_id: str,
     body: ConditionsReplaceRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_pilot),
     db: Session = Depends(get_db),
 ):
     rs = _get_own_ruleset(ruleset_id, current_user, db)
@@ -230,7 +230,7 @@ def replace_conditions(
 @router.post("/{ruleset_id}/clone", response_model=RuleSetOut, status_code=status.HTTP_201_CREATED)
 def clone_ruleset(
     ruleset_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_pilot),
     db: Session = Depends(get_db),
 ):
     source = db.get(RuleSet, ruleset_id)
