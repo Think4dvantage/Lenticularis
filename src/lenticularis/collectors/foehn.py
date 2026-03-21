@@ -14,10 +14,10 @@ from __future__ import annotations
 import logging
 
 from lenticularis.foehn_detection import (
-    ALL_STATION_IDS,
+    get_all_station_ids,
+    get_regions,
     VIRTUAL_STATIONS,
     eval_region,
-    REGIONS,
 )
 from lenticularis.models.weather import WeatherStation
 
@@ -53,8 +53,8 @@ class FoehnCollector:
 
         Returns the number of InfluxDB points written.
         """
-        latest  = influx.query_latest_for_stations(ALL_STATION_IDS)
-        regions = [eval_region(r, latest) for r in REGIONS]
+        latest  = influx.query_latest_for_stations(get_all_station_ids())
+        regions = [eval_region(r, latest) for r in get_regions()]
         influx.write_foehn_status(regions)
 
         # Keep virtual stations in the shared registry so the station picker

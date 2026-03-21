@@ -20,6 +20,11 @@ from sqlalchemy.orm import Session
 from lenticularis.api.dependencies import require_admin
 from lenticularis.database.db import get_db
 from lenticularis.database.models import User
+from lenticularis.foehn_detection import (
+    get_foehn_config_dict,
+    set_foehn_config,
+    reset_foehn_config,
+)
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -135,6 +140,22 @@ async def get_collectors(
     }
 
 
+@router.post("/collectors/{health_key:path}/trigger")
+async def trigger_collector(
+    health_key: str,
+    request: Request,
+    current_user: User = Depends(require_admin),
+):
+    scheduler = getattr(request.app.state, "scheduler", None)
+    if scheduler is None:
+        raise HTTPException(status_code=503, detail="Scheduler not available")
+    try:
+        await scheduler.trigger_collector_now(health_key)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    return {"triggered": health_key}
+
+
 @router.put("/collectors/{health_key:path}")
 async def update_collector(
     health_key: str,
@@ -158,3 +179,34 @@ async def update_collector(
         raise HTTPException(status_code=400, detail=str(e))
 
     return _serialise_row(row)
+
+
+# ---------------------------------------------------------------------------
+# Föhn config
+# ---------------------------------------------------------------------------
+
+@router.get("/foehn-config")
+def get_foehn_config_endpoint(
+    current_user: User = Depends(require_admin),
+):
+    return get_foehn_config_dict()
+
+
+@router.put("/foehn-config")
+def update_foehn_config(
+    body: dict,
+    current_user: User = Depends(require_admin),
+):
+    try:
+        set_foehn_config(body)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return get_foehn_config_dict()
+
+
+@router.delete("/foehn-config")
+def delete_foehn_config(
+    current_user: User = Depends(require_admin),
+):
+    reset_foehn_config()
+    return get_foehn_config_dict()

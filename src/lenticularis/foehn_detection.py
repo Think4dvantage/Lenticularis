@@ -9,7 +9,13 @@ Region status values (used as float in InfluxDB):
 """
 from __future__ import annotations
 
+import json
+import logging
+from pathlib import Path
 from typing import Optional
+
+_logger = logging.getLogger(__name__)
+_FOEHN_CONFIG_PATH = Path("data/foehn_config.json")
 
 # ---------------------------------------------------------------------------
 # Direction constants
@@ -110,7 +116,7 @@ PRESSURE_PAIRS: list[dict] = [
     },
 ]
 
-# All station IDs needed for a full evaluation
+# All station IDs needed for a full evaluation (default, pre-computed)
 ALL_STATION_IDS: list[str] = list({
     c.station_id
     for r in REGIONS
@@ -120,6 +126,123 @@ ALL_STATION_IDS: list[str] = list({
     for pair in PRESSURE_PAIRS
     for sid in (pair["south_id"], pair["north_id"])
 })
+
+# ---------------------------------------------------------------------------
+# Runtime config overrides (None = use hardcoded defaults above)
+# ---------------------------------------------------------------------------
+
+_runtime_regions: list[Region] | None = None
+_runtime_pressure_pairs: list[dict] | None = None
+
+
+def get_regions() -> list[Region]:
+    return _runtime_regions if _runtime_regions is not None else REGIONS
+
+
+def get_pressure_pairs() -> list[dict]:
+    return _runtime_pressure_pairs if _runtime_pressure_pairs is not None else PRESSURE_PAIRS
+
+
+def get_all_station_ids() -> list[str]:
+    return list({
+        c.station_id
+        for r in get_regions()
+        for c in r.conditions
+    } | {
+        sid
+        for pair in get_pressure_pairs()
+        for sid in (pair["south_id"], pair["north_id"])
+    })
+
+
+def _region_to_dict(r: Region) -> dict:
+    return {
+        "key":         r.key,
+        "label":       r.label,
+        "description": r.description,
+        "conditions": [
+            {
+                "station_id": c.station_id,
+                "label":      c.label,
+                "speed_min":  c.speed_min,
+                "dir_low":    c.dir_low,
+                "dir_high":   c.dir_high,
+            }
+            for c in r.conditions
+        ],
+    }
+
+
+def _region_from_dict(d: dict) -> Region:
+    return Region(
+        key=d["key"],
+        label=d["label"],
+        description=d.get("description", ""),
+        conditions=[
+            Cond(
+                station_id=c["station_id"],
+                label=c["label"],
+                speed_min=float(c["speed_min"]),
+                dir_low=c.get("dir_low"),
+                dir_high=c.get("dir_high"),
+            )
+            for c in d.get("conditions", [])
+        ],
+    )
+
+
+def get_foehn_config_dict() -> dict:
+    """Return the current (possibly overridden) config as a serialisable dict."""
+    return {
+        "regions": [_region_to_dict(r) for r in get_regions()],
+        "pressure_pairs": [
+            {
+                "key":         p["key"],
+                "south_id":    p["south_id"],
+                "south_label": p["south_label"],
+                "north_id":    p["north_id"],
+                "north_label": p["north_label"],
+                "threshold":   p["threshold"],
+            }
+            for p in get_pressure_pairs()
+        ],
+    }
+
+
+def set_foehn_config(data: dict) -> None:
+    """Apply a new config dict at runtime and persist it to JSON."""
+    global _runtime_regions, _runtime_pressure_pairs
+    regions = [_region_from_dict(r) for r in data.get("regions", [])]
+    pairs   = [dict(p) for p in data.get("pressure_pairs", [])]
+    _runtime_regions        = regions
+    _runtime_pressure_pairs = pairs
+    _FOEHN_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    _FOEHN_CONFIG_PATH.write_text(
+        json.dumps(get_foehn_config_dict(), ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    _logger.info("foehn_detection: config updated and saved to %s", _FOEHN_CONFIG_PATH)
+
+
+def reset_foehn_config() -> None:
+    """Remove the persisted override and revert to hardcoded defaults."""
+    global _runtime_regions, _runtime_pressure_pairs
+    _runtime_regions        = None
+    _runtime_pressure_pairs = None
+    if _FOEHN_CONFIG_PATH.exists():
+        _FOEHN_CONFIG_PATH.unlink()
+    _logger.info("foehn_detection: config reset to defaults")
+
+
+def _try_load_foehn_config() -> None:
+    if not _FOEHN_CONFIG_PATH.exists():
+        return
+    try:
+        data = json.loads(_FOEHN_CONFIG_PATH.read_text(encoding="utf-8"))
+        set_foehn_config(data)
+        _logger.info("foehn_detection: loaded config from %s", _FOEHN_CONFIG_PATH)
+    except Exception as exc:  # noqa: BLE001
+        _logger.warning("foehn_detection: could not load %s: %s", _FOEHN_CONFIG_PATH, exc)
 
 # ---------------------------------------------------------------------------
 # Virtual stations written to InfluxDB by the FoehnCollector.
@@ -240,9 +363,9 @@ def eval_region(region: Region, latest: dict[str, dict]) -> dict:
 
 
 def build_all_pressures(latest: dict[str, dict]) -> list[dict]:
-    """Evaluate all PRESSURE_PAIRS against live/forecast data."""
+    """Evaluate all pressure pairs against live/forecast data."""
     result = []
-    for pair in PRESSURE_PAIRS:
+    for pair in get_pressure_pairs():
         s_data = latest.get(pair["south_id"])
         n_data = latest.get(pair["north_id"])
         s_p    = s_data.get("pressure_qnh") if s_data else None
@@ -261,6 +384,9 @@ def build_all_pressures(latest: dict[str, dict]) -> list[dict]:
             "active":           delta is not None and delta >= pair["threshold"],
         })
     return result
+
+
+_try_load_foehn_config()
 
 
 def build_response(regions: list[dict], pressures: list[dict], assessed_at: str, extra: dict | None = None) -> dict:

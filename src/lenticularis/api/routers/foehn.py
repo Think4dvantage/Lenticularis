@@ -15,9 +15,9 @@ from fastapi import APIRouter, HTTPException, Query, Request
 
 from lenticularis.database.influx import InfluxClient
 from lenticularis.foehn_detection import (
-    ALL_STATION_IDS,
-    PRESSURE_PAIRS,
-    REGIONS,
+    get_all_station_ids,
+    get_pressure_pairs,
+    get_regions,
     build_all_pressures,
     build_response,
     eval_region,
@@ -33,7 +33,7 @@ router = APIRouter(prefix="/api/foehn", tags=["foehn"])
 # ---------------------------------------------------------------------------
 
 def _evaluate(latest: dict[str, dict]) -> tuple[list[dict], list[dict]]:
-    regions   = [eval_region(r, latest) for r in REGIONS]
+    regions   = [eval_region(r, latest) for r in get_regions()]
     pressures = build_all_pressures(latest)
     return regions, pressures
 
@@ -46,7 +46,7 @@ def _evaluate(latest: dict[str, dict]) -> tuple[list[dict], list[dict]]:
 async def get_foehn_status(request: Request) -> dict:
     """Evaluate all föhn regions and the pressure-gradient indicator (live data)."""
     influx: InfluxClient = request.app.state.influx
-    latest = influx.query_latest_for_stations(ALL_STATION_IDS)
+    latest = influx.query_latest_for_stations(get_all_station_ids())
     regions, pressures = _evaluate(latest)
     return build_response(regions, pressures, assessed_at=datetime.now(timezone.utc).isoformat())
 
@@ -63,7 +63,7 @@ async def get_foehn_forecast(
     except ValueError:
         raise HTTPException(status_code=400, detail=f"Invalid valid_time: {valid_time!r}")
 
-    latest = influx.query_forecast_snapshot_for_stations(ALL_STATION_IDS, vt)
+    latest = influx.query_forecast_snapshot_for_stations(get_all_station_ids(), vt)
     regions, pressures = _evaluate(latest)
     return build_response(
         regions, pressures,
@@ -84,7 +84,7 @@ async def get_foehn_observation(
     except ValueError:
         raise HTTPException(status_code=400, detail=f"Invalid valid_time: {valid_time!r}")
 
-    latest = influx.query_observation_snapshot_for_stations(ALL_STATION_IDS, vt)
+    latest = influx.query_observation_snapshot_for_stations(get_all_station_ids(), vt)
     regions, pressures = _evaluate(latest)
     return build_response(
         regions, pressures,
@@ -101,7 +101,7 @@ async def get_foehn_history(
 ) -> dict:
     """Return hourly pressure_qnh for all pressure-pair stations for the gradient chart."""
     influx: InfluxClient = request.app.state.influx
-    station_ids = list({sid for pair in PRESSURE_PAIRS for sid in (pair["south_id"], pair["north_id"])})
+    station_ids = list({sid for pair in get_pressure_pairs() for sid in (pair["south_id"], pair["north_id"])})
     ct: Optional[datetime] = None
     if center_time:
         try:
@@ -118,7 +118,7 @@ async def get_foehn_history(
                 "south_label":      pair["south_label"],
                 "north_label":      pair["north_label"],
             }
-            for pair in PRESSURE_PAIRS
+            for pair in get_pressure_pairs()
         ],
         "rows": [
             {

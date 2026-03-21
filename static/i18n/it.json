@@ -446,7 +446,33 @@
     "access_denied": "Accesso amministratore richiesto.",
     "tabs": {
       "users": "Utenti",
-      "collectors": "Collettori"
+      "collectors": "Collettori",
+      "foehn_config": "Config föhn"
+    },
+    "foehn_config": {
+      "save": "Salva",
+      "reset": "Ripristina predefiniti",
+      "saved": "Salvato ✓",
+      "regions_title": "Regioni di vento",
+      "pressures_title": "Coppie di pressione",
+      "add_region": "+ Aggiungi regione",
+      "add_condition": "+ Aggiungi condizione",
+      "add_pair": "+ Aggiungi coppia",
+      "remove": "✕",
+      "col_key": "Chiave",
+      "col_label": "Etichetta",
+      "col_description": "Descrizione",
+      "col_station": "ID stazione",
+      "col_speed_min": "Raffica min (km/h)",
+      "col_dir_low": "Dir bassa (°)",
+      "col_dir_high": "Dir alta (°)",
+      "col_south": "ID stazione sud",
+      "col_south_label": "Etichetta sud",
+      "col_north": "ID stazione nord",
+      "col_north_label": "Etichetta nord",
+      "col_threshold": "Soglia (hPa)",
+      "dir_any": "qualsiasi",
+      "persistent_note": "ℹ Le modifiche vengono salvate in data/foehn_config.json e hanno effetto immediato. Le nuove regioni richiedono un aggiornamento del codice per apparire sulla mappa."
     },
     "users": {
       "total": "{n} utenti",

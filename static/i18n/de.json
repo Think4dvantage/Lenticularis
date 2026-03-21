@@ -446,7 +446,33 @@
     "access_denied": "Admin-Zugriff erforderlich.",
     "tabs": {
       "users": "Benutzer",
-      "collectors": "Kollektoren"
+      "collectors": "Kollektoren",
+      "foehn_config": "Föhn-Konfig"
+    },
+    "foehn_config": {
+      "save": "Speichern",
+      "reset": "Auf Standard zurücksetzen",
+      "saved": "Gespeichert ✓",
+      "regions_title": "Föhn-Regionen",
+      "pressures_title": "Druckpaare",
+      "add_region": "+ Region hinzufügen",
+      "add_condition": "+ Bedingung hinzufügen",
+      "add_pair": "+ Paar hinzufügen",
+      "remove": "✕",
+      "col_key": "Schlüssel",
+      "col_label": "Bezeichnung",
+      "col_description": "Beschreibung",
+      "col_station": "Stations-ID",
+      "col_speed_min": "Min.-Böe (km/h)",
+      "col_dir_low": "Richtung von (°)",
+      "col_dir_high": "Richtung bis (°)",
+      "col_south": "Süd-Stations-ID",
+      "col_south_label": "Süd-Bezeichnung",
+      "col_north": "Nord-Stations-ID",
+      "col_north_label": "Nord-Bezeichnung",
+      "col_threshold": "Schwellenwert (hPa)",
+      "dir_any": "beliebig",
+      "persistent_note": "ℹ Änderungen werden in data/foehn_config.json gespeichert und gelten sofort. Neue Regionen benötigen ein Code-Update, um auf der Karte zu erscheinen."
     },
     "users": {
       "total": "{n} Benutzer",

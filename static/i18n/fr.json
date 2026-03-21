@@ -446,7 +446,33 @@
     "access_denied": "Accès administrateur requis.",
     "tabs": {
       "users": "Utilisateurs",
-      "collectors": "Collecteurs"
+      "collectors": "Collecteurs",
+      "foehn_config": "Config föhn"
+    },
+    "foehn_config": {
+      "save": "Enregistrer",
+      "reset": "Rétablir les valeurs par défaut",
+      "saved": "Enregistré ✓",
+      "regions_title": "Régions de vent",
+      "pressures_title": "Paires de pression",
+      "add_region": "+ Ajouter une région",
+      "add_condition": "+ Ajouter une condition",
+      "add_pair": "+ Ajouter une paire",
+      "remove": "✕",
+      "col_key": "Clé",
+      "col_label": "Libellé",
+      "col_description": "Description",
+      "col_station": "ID station",
+      "col_speed_min": "Rafale min (km/h)",
+      "col_dir_low": "Dir basse (°)",
+      "col_dir_high": "Dir haute (°)",
+      "col_south": "ID station sud",
+      "col_south_label": "Libellé sud",
+      "col_north": "ID station nord",
+      "col_north_label": "Libellé nord",
+      "col_threshold": "Seuil (hPa)",
+      "dir_any": "quelconque",
+      "persistent_note": "ℹ Les modifications sont enregistrées dans data/foehn_config.json et prennent effet immédiatement. Les nouvelles régions nécessitent une mise à jour du code pour apparaître sur la carte."
     },
     "users": {
       "total": "{n} utilisateurs",

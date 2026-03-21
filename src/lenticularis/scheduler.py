@@ -267,6 +267,20 @@ class CollectorScheduler:
         if job:
             job.modify(next_run_time=datetime.now(timezone.utc))
 
+    async def trigger_collector_now(self, health_key: str) -> None:
+        """Immediately queue a collector run by health_key."""
+        if health_key not in self._collector_health:
+            raise KeyError(f"Unknown collector: {health_key!r}")
+        health = self._collector_health[health_key]
+        ctype  = health.get("type")
+        if ctype == "forecast":
+            job_id = health_key
+        elif ctype == "derived":
+            job_id = "collector_foehn"
+        else:
+            job_id = f"collector_{health_key}"
+        await self._trigger_now(job_id)
+
     async def _run_foehn_collector(self) -> None:
         """Evaluate föhn regions and write results to InfluxDB."""
         health = self._collector_health["foehn"]
