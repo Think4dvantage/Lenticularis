@@ -513,7 +513,7 @@ function renderCondActual(cond) {
 
   const noDir = cond.dir_desc === 'beliebig';
   const dirStr = fmtDir(cond.actual_direction);
-  const spdStr = cond.actual_speed != null ? Math.round(cond.actual_speed) + ' km/h' : null;
+  const spdStr = cond.actual_gust != null ? Math.round(cond.actual_gust) + ' km/h↑' : (cond.actual_speed != null ? Math.round(cond.actual_speed) + ' km/h' : null);
 
   // Red = this value is in the "föhn" zone (concern); green = safe zone
   const dirSpan = dirStr
