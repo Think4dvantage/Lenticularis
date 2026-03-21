@@ -34,17 +34,22 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Generates tags:
-      #   ghcr.io/owner/lenticularis:v1.0
-      #   ghcr.io/owner/lenticularis:1.0
-      #   ghcr.io/owner/lenticularis:1          (major only)
+      # Generates tags (example for v1.0.0):
+      #   ghcr.io/owner/lenticularis:v1.0.0     (raw git tag — always present)
+      #   ghcr.io/owner/lenticularis:1.0.0      (semver full)
+      #   ghcr.io/owner/lenticularis:1.0        (semver major.minor)
+      #   ghcr.io/owner/lenticularis:1          (semver major)
       #   ghcr.io/owner/lenticularis:latest
+      #
+      # NOTE: use 3-part semver tags (v1.0.0) — docker/metadata-action requires
+      # MAJOR.MINOR.PATCH for the semver patterns to activate.
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
+            type=ref,event=tag
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
