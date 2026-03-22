@@ -162,12 +162,21 @@ class WundergroundCollector(BaseCollector):
             logger.error("WundergroundCollector [%s]: HTTP request failed: %s", pws_id, exc)
             return None
 
+        logger.debug("WundergroundCollector [%s]: raw response keys=%s", pws_id, list(response.keys()))
+
         observations = response.get("observations", [])
         if not observations:
-            logger.warning("WundergroundCollector [%s]: empty observations in response", pws_id)
+            # Log at ERROR so it's always visible regardless of log level config
+            logger.error(
+                "WundergroundCollector [%s]: API returned no observations "
+                "(station offline, wrong station ID, or invalid API key). "
+                "Top-level response keys: %s",
+                pws_id, list(response.keys()),
+            )
             return None
 
         obs = observations[0]
+        logger.debug("WundergroundCollector [%s]: observation keys=%s", pws_id, list(obs.keys()))
 
         # Parse timestamp
         raw_time = obs.get("obsTimeUtc")
@@ -183,6 +192,12 @@ class WundergroundCollector(BaseCollector):
         api_lat = _to_float(obs.get("lat"))
         api_lon = _to_float(obs.get("lon"))
         metric  = obs.get("metric", {})
+        if not metric:
+            logger.error(
+                "WundergroundCollector [%s]: no 'metric' block in observation — "
+                "units=m may not be accepted. Observation top-level keys: %s",
+                pws_id, list(obs.keys()),
+            )
         api_elev = _to_float(metric.get("elev"))
         self._coord_cache[pws_id] = {"lat": api_lat, "lon": api_lon, "elev": api_elev}
 
@@ -201,14 +216,23 @@ class WundergroundCollector(BaseCollector):
         precipitation = _to_float(metric.get("precipRate"))  # mm/hr instantaneous rate
 
         sid = self.station_id(self.NETWORK, pws_id)
-        logger.info(
-            "WundergroundCollector: %s — wind=%.1f km/h dir=%s°  temp=%.1f°C  pressure=%.1f hPa",
-            sid,
-            wind_speed or 0.0,
-            wind_direction,
-            temperature or 0.0,
-            pressure_qnh or 0.0,
-        )
+
+        all_null = all(v is None for v in (wind_speed, wind_gust, wind_direction, temperature, humidity, pressure_qnh))
+        if all_null:
+            logger.error(
+                "WundergroundCollector [%s]: observation returned but ALL metric values are None. "
+                "metric block: %s  |  obs top-level: winddir=%r humidity=%r",
+                pws_id, metric, raw_dir, obs.get("humidity"),
+            )
+        else:
+            logger.info(
+                "WundergroundCollector: %s — wind=%.1f km/h dir=%s°  temp=%.1f°C  pressure=%.1f hPa",
+                sid,
+                wind_speed or 0.0,
+                wind_direction,
+                temperature or 0.0,
+                pressure_qnh or 0.0,
+            )
         return WeatherMeasurement(
             station_id=sid,
             network=self.NETWORK,
