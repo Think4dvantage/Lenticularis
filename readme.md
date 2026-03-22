@@ -10,7 +10,9 @@ Paragliding weather decision-support system for Switzerland. Collects data from 
 - **Traffic light evaluation** — live + 120 h forecast evaluation; per-condition decision history with `ruleset-analysis.html`
 - **Flyability statistics** — hourly heatmap, monthly/seasonal breakdown, condition trigger leaderboard, site comparison, best consecutive-GREEN windows
 - **Föhn monitor** — virtual föhn stations computed from N–S pressure deltas; dedicated `foehn.html` dashboard with live/historical/forecast modes and editable thresholds
-- **Admin panel** — user management (roles: pilot / customer / admin), collector status and runtime control, Föhn config editor
+- **Webcam links** — attach webcam URLs (incl. Roundshot with bearing) to any ruleset; shown as cards in the analysis view with a Roundshot badge
+- **Preset launch sites** — admin-curated ruleset templates; pilots pick a preset when creating a new site and customise thresholds freely; admin panel "Preset Sites" tab to manage
+- **Admin panel** — user management (roles: pilot / customer / admin), collector status and runtime control, Föhn config editor, preset site management
 - **Multilanguage UI** — EN / DE / FR / IT; auto-detected from browser, switchable from nav, persisted to `localStorage`
 - **Auth** — JWT register/login; pilot-owned sites and rule sets; admin role for user/collector management
 - **Docker deployment** — single `docker-compose up -d` deploys app + InfluxDB; dev overlay with live volume mounts
@@ -109,7 +111,7 @@ static/
 | v0.10 — Föhn monitor + Wunderground + personal-station toggle | ✅ Shipped |
 | v1.0 — Multilanguage EN/DE/FR/IT + mobile-responsive UI | ✅ Shipped |
 | v1.1 — Admin panel + customer role + Föhn config editor | ✅ Shipped |
-| v1.2 — Webcam integration | Planned |
+| v1.2 — Webcam links + preset launch sites + map fixes | ✅ Shipped |
 | v1.3 — Forecast accuracy dashboard | Planned |
 | v1.4 — Rule types: Risk + Opportunity | Planned |
 | v1.5 — Pre-seeded launch site defaults | Planned |

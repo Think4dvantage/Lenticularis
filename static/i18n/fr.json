@@ -187,7 +187,25 @@
       "green": "🟢 Vert",
       "orange": "🟠 Orange",
       "red": "🔴 Rouge"
-    }
+    },
+    "section_webcams": "Webcams",
+    "webcam_url_placeholder": "https://livecam.roundshot.com/beatenberg/?bearing=180",
+    "webcam_label_placeholder": "Libellé (optionnel, ex. vue N)",
+    "webcam_add": "＋ Ajouter une webcam",
+    "webcam_remove": "✕",
+    "webcam_hint": "Collez l'URL complète incluant le paramètre de direction. S'ouvre dans un nouvel onglet depuis la page d'analyse.",
+    "preset_heading": "Partir d'un site prédéfini",
+    "preset_hint": "Choisissez un site de décollage curaté — tous les seuils restent modifiables.",
+    "preset_browse": "Parcourir les sites prédéfinis",
+    "preset_hide": "Masquer les prédéfinis",
+    "preset_use": "Utiliser ce site",
+    "preset_none": "Aucun site prédéfini disponible pour l'instant.",
+    "preset_active": "Basé sur le prédéfini : {name}",
+    "preset_active_hint": "Toutes les conditions et seuils sont modifiables.",
+    "preset_clear": "Effacer",
+    "preset_conds": "{n} condition",
+    "preset_conds_plural": "{n} conditions",
+    "preset_mark_admin": "⭐ Site système"
   },
   "station_detail": {
     "loading": "Chargement…",
@@ -438,7 +456,9 @@
     "min_ago": "il y a {n} min",
     "h_ago": "il y a {n} h",
     "cond_group_n": "Groupe de conditions {n}",
-    "cond_group_triggered": " — déclenché"
+    "cond_group_triggered": " — déclenché",
+    "webcams_title": "Webcams",
+    "webcam_open": "↗ Ouvrir"
   },
   "admin": {
     "title": "Panneau admin",
@@ -447,7 +467,8 @@
     "tabs": {
       "users": "Utilisateurs",
       "collectors": "Collecteurs",
-      "foehn_config": "Config föhn"
+      "foehn_config": "Config föhn",
+      "presets": "Sites prédef."
     },
     "foehn_config": {
       "save": "Enregistrer",
@@ -489,6 +510,18 @@
       "auth_oauth": "OAuth",
       "you": "(vous)",
       "no_users": "Aucun utilisateur trouvé."
+    },
+    "presets": {
+      "hint": "Les sites prédéfinis sont proposés à tous les pilotes dans le formulaire de nouveau règlement. Promouvez un règlement via ⭐ dans l'éditeur.",
+      "total": "{n} sites prédéfinis",
+      "col_name": "Nom",
+      "col_description": "Description",
+      "col_conditions": "Conditions",
+      "col_webcams": "Webcams",
+      "view_tip": "Ouvrir l'analyse du règlement",
+      "remove": "Retirer",
+      "remove_tip": "Retirer des presets système (le règlement est conservé)",
+      "no_presets": "Aucun site prédéfini pour l'instant."
     },
     "collectors": {
       "col_collector": "Collecteur",

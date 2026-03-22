@@ -723,6 +723,10 @@ tnInitLabels();
   }
 
   // ── Marker layer ────────────────────────────────────────────────────────
+  // Custom pane at z-index 450 — below the default markerPane (600) so
+  // weather-arrow markers always render on top of ruleset dots.
+  window._lentiMap.createPane('rulesetPane');
+  window._lentiMap.getPane('rulesetPane').style.zIndex = 450;
   const rulesetLayer = L.layerGroup().addTo(window._lentiMap);
 
   async function loadRulesetMarkers() {
@@ -745,11 +749,11 @@ tnInitLabels();
 
         if (rs.site_type === 'launch') {
           const haloColor = dec.landing_decisions?.length ? dec.best_landing_decision : null;
-          L.marker([rs.lat, rs.lon], { icon: launchIcon(dec.decision, haloColor), zIndexOffset: 500 })
+          L.marker([rs.lat, rs.lon], { icon: launchIcon(dec.decision, haloColor), pane: 'rulesetPane' })
             .addTo(rulesetLayer)
             .bindPopup(launchPopup(rs, dec), { maxWidth: 320 });
         } else {
-          L.marker([rs.lat, rs.lon], { icon: landingIcon(dec.decision), zIndexOffset: 400 })
+          L.marker([rs.lat, rs.lon], { icon: landingIcon(dec.decision), pane: 'rulesetPane' })
             .addTo(rulesetLayer)
             .bindPopup(landingPopup(rs, dec), { maxWidth: 300 });
         }

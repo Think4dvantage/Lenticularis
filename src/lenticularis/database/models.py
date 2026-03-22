@@ -8,6 +8,7 @@ oauth_identities     — one row per linked social provider per user
 rulesets             — pilot's rule set (includes site name + coordinates)
 rule_conditions      — individual condition rows within a rule set
 launch_landing_links — links a launch ruleset to one or more landing rulesets
+ruleset_webcams      — webcam URLs linked to a ruleset for visual reference
 """
 from __future__ import annotations
 
@@ -102,6 +103,9 @@ class RuleSet(Base):
     clone_count = Column(Integer, nullable=False, default=0)
     cloned_from_id = Column(String, ForeignKey("rulesets.id", ondelete="SET NULL"), nullable=True)
 
+    # Preset — admin-curated template visible to all pilots in the new-ruleset form
+    is_preset = Column(Boolean, nullable=False, default=False)
+
     created_at = Column(
         DateTime(timezone=True),
         nullable=False,
@@ -116,6 +120,11 @@ class RuleSet(Base):
     conditions = relationship(
         "RuleCondition", back_populates="ruleset", cascade="all, delete-orphan",
         order_by="RuleCondition.sort_order",
+    )
+
+    webcams = relationship(
+        "RuleSetWebcam", back_populates="ruleset", cascade="all, delete-orphan",
+        order_by="RuleSetWebcam.sort_order",
     )
 
     # Landing links — only populated/meaningful when site_type == "launch"
@@ -153,6 +162,22 @@ class LaunchLandingLink(Base):
     landing_ruleset = relationship(
         "RuleSet", foreign_keys=[landing_ruleset_id]
     )
+
+
+class RuleSetWebcam(Base):
+    """A webcam URL linked to a rule set for additional visual context."""
+
+    __tablename__ = "ruleset_webcams"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    ruleset_id = Column(
+        String, ForeignKey("rulesets.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    url = Column(String, nullable=False)
+    label = Column(String, nullable=True)
+    sort_order = Column(Integer, nullable=False, default=0)
+
+    ruleset = relationship("RuleSet", back_populates="webcams")
 
 
 class RuleCondition(Base):

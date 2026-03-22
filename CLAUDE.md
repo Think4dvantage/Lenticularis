@@ -131,6 +131,6 @@ Use the same nested key structure as existing keys (e.g. `"admin.users.col_trust
 
 ---
 
-## Current Version: v1.1 (shipped)
+## Current Version: v1.2 (shipped)
 
-Next planned: **v1.2 — Webcam Integration**. See `plan-lenticularisStructure.prompt.md` for full roadmap.
+Next planned: **v1.3 — Forecast Accuracy Dashboard**. See `plan-lenticularisStructure.prompt.md` for full roadmap.

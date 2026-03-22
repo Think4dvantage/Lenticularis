@@ -187,7 +187,25 @@
       "green": "🟢 Green",
       "orange": "🟠 Orange",
       "red": "🔴 Red"
-    }
+    },
+    "section_webcams": "Webcams",
+    "webcam_url_placeholder": "https://livecam.roundshot.com/beatenberg/?bearing=180",
+    "webcam_label_placeholder": "Label (optional, e.g. N view)",
+    "webcam_add": "＋ Add webcam",
+    "webcam_remove": "✕",
+    "webcam_hint": "Paste the full webcam URL including any direction/bearing parameter. Opens in a new tab from the analysis page.",
+    "preset_heading": "Start from a preset site",
+    "preset_hint": "Pick a curated launch site to pre-fill the form — every threshold stays editable.",
+    "preset_browse": "Browse preset sites",
+    "preset_hide": "Hide presets",
+    "preset_use": "Use this preset",
+    "preset_none": "No preset sites available yet.",
+    "preset_active": "Based on preset: {name}",
+    "preset_active_hint": "All conditions and thresholds are editable.",
+    "preset_clear": "Clear",
+    "preset_conds": "{n} condition",
+    "preset_conds_plural": "{n} conditions",
+    "preset_mark_admin": "⭐ System preset"
   },
   "station_detail": {
     "loading": "Loading…",
@@ -438,7 +456,9 @@
     "min_ago": "{n} min ago",
     "h_ago": "{n} h ago",
     "cond_group_n": "Condition Group {n}",
-    "cond_group_triggered": " — triggered"
+    "cond_group_triggered": " — triggered",
+    "webcams_title": "Webcams",
+    "webcam_open": "↗ Open"
   },
   "admin": {
     "title": "Admin Panel",
@@ -447,7 +467,8 @@
     "tabs": {
       "users": "Users",
       "collectors": "Collectors",
-      "foehn_config": "Föhn Config"
+      "foehn_config": "Föhn Config",
+      "presets": "Preset Sites"
     },
     "foehn_config": {
       "save": "Save",
@@ -489,6 +510,18 @@
       "auth_oauth": "OAuth",
       "you": "(you)",
       "no_users": "No users found."
+    },
+    "presets": {
+      "hint": "System presets are shown to all pilots in the new-ruleset form. Promote any ruleset to a preset via the ⭐ toggle in the ruleset editor.",
+      "total": "{n} preset sites",
+      "col_name": "Name",
+      "col_description": "Description",
+      "col_conditions": "Conditions",
+      "col_webcams": "Webcams",
+      "view_tip": "Open ruleset analysis",
+      "remove": "Remove preset",
+      "remove_tip": "Remove from system presets (ruleset is kept)",
+      "no_presets": "No preset sites defined yet."
     },
     "collectors": {
       "col_collector": "Collector",

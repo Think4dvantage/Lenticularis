@@ -99,7 +99,7 @@ REGIONS: list[Region] = [
     ]),
     Region("guggi", "Guggiföhn", "Enger ESE–SSE-Sektor am Jungfraujoch + Lohner", [
         Cond("meteoswiss-JUN", "JUN (Jungfraujoch)", 40, _ESE, _SSE),
-        Cond("slf-LHO2",       "LHO2 (Lohner)",       50),
+        Cond("slf-LHO2",       "LHO2 (Russisprung)",  50),
     ]),
 ]
 

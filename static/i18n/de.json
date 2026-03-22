@@ -187,7 +187,25 @@
       "green": "🟢 Grün",
       "orange": "🟠 Orange",
       "red": "🔴 Rot"
-    }
+    },
+    "section_webcams": "Webcams",
+    "webcam_url_placeholder": "https://livecam.roundshot.com/beatenberg/?bearing=180",
+    "webcam_label_placeholder": "Bezeichnung (optional, z.B. N-Blick)",
+    "webcam_add": "＋ Webcam hinzufügen",
+    "webcam_remove": "✕",
+    "webcam_hint": "Vollständige Webcam-URL inkl. Richtungsparameter einfügen. Wird auf der Analyse-Seite in einem neuen Tab geöffnet.",
+    "preset_heading": "Von einem Vorlagenstandort starten",
+    "preset_hint": "Wähle einen kuratierten Startplatz — alle Schwellenwerte bleiben bearbeitbar.",
+    "preset_browse": "Vorlagen durchsuchen",
+    "preset_hide": "Vorlagen ausblenden",
+    "preset_use": "Diese Vorlage verwenden",
+    "preset_none": "Noch keine Vorlagenstandorte verfügbar.",
+    "preset_active": "Basierend auf Vorlage: {name}",
+    "preset_active_hint": "Alle Bedingungen und Schwellenwerte sind bearbeitbar.",
+    "preset_clear": "Zurücksetzen",
+    "preset_conds": "{n} Bedingung",
+    "preset_conds_plural": "{n} Bedingungen",
+    "preset_mark_admin": "⭐ Systemvorlage"
   },
   "station_detail": {
     "loading": "Lädt…",
@@ -438,7 +456,9 @@
     "min_ago": "vor {n} Min.",
     "h_ago": "vor {n} Std.",
     "cond_group_n": "Bedingungsgruppe {n}",
-    "cond_group_triggered": " — ausgelöst"
+    "cond_group_triggered": " — ausgelöst",
+    "webcams_title": "Webcams",
+    "webcam_open": "↗ Öffnen"
   },
   "admin": {
     "title": "Admin-Panel",
@@ -447,7 +467,8 @@
     "tabs": {
       "users": "Benutzer",
       "collectors": "Kollektoren",
-      "foehn_config": "Föhn-Konfig"
+      "foehn_config": "Föhn-Konfig",
+      "presets": "Startplätze"
     },
     "foehn_config": {
       "save": "Speichern",
@@ -489,6 +510,18 @@
       "auth_oauth": "OAuth",
       "you": "(du)",
       "no_users": "Keine Benutzer gefunden."
+    },
+    "presets": {
+      "hint": "System-Startplätze werden allen Piloten im Formular für neue Regelsets angezeigt. Einen Regelset zum Preset machen: ⭐-Schalter im Regelset-Editor.",
+      "total": "{n} Preset-Startplätze",
+      "col_name": "Name",
+      "col_description": "Beschreibung",
+      "col_conditions": "Bedingungen",
+      "col_webcams": "Webcams",
+      "view_tip": "Regelset-Analyse öffnen",
+      "remove": "Preset entfernen",
+      "remove_tip": "Aus System-Presets entfernen (Regelset bleibt erhalten)",
+      "no_presets": "Noch keine Preset-Startplätze definiert."
     },
     "collectors": {
       "col_collector": "Kollektor",

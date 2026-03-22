@@ -26,6 +26,30 @@ CombinationLogic = Literal["worst_wins", "majority_vote"]
 
 
 # ---------------------------------------------------------------------------
+# Webcams
+# ---------------------------------------------------------------------------
+
+class WebcamBase(BaseModel):
+    url: str
+    label: Optional[str] = None
+    sort_order: int = 0
+
+
+class WebcamCreate(WebcamBase):
+    pass
+
+
+class WebcamOut(WebcamBase):
+    id: str
+
+    model_config = {"from_attributes": True}
+
+
+class WebcamsReplaceRequest(BaseModel):
+    webcams: list[WebcamCreate]
+
+
+# ---------------------------------------------------------------------------
 # Conditions
 # ---------------------------------------------------------------------------
 
@@ -88,6 +112,7 @@ class RuleSetOut(BaseModel):
     site_type: SiteType
     combination_logic: CombinationLogic
     is_public: bool
+    is_preset: bool
     clone_count: int
     cloned_from_id: Optional[str]
     linked_landing_ids: list[str] = []
@@ -98,8 +123,9 @@ class RuleSetOut(BaseModel):
 
 
 class RuleSetDetail(RuleSetOut):
-    """Full rule set including all conditions."""
+    """Full rule set including all conditions and webcams."""
     conditions: list[RuleConditionOut] = []
+    webcams: list[WebcamOut] = []
 
 
 class ConditionsReplaceRequest(BaseModel):

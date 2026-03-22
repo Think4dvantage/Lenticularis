@@ -153,6 +153,27 @@
       margin-bottom: 12px; border: 1px dashed #744210;
     }
     .range-btn-fc.active { background: #7b4f00; border-color: #c05621; color: #f6ad55; }
+
+    /* ── Webcams ── */
+    .webcam-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px;
+      margin-top: 4px;
+    }
+    .webcam-card {
+      display: flex; flex-direction: column; gap: 5px;
+      background: #0f1117; border: 1px solid #2d3748; border-radius: 8px; padding: 14px 16px;
+      text-decoration: none; color: inherit; transition: border-color 0.15s;
+    }
+    .webcam-card:hover { border-color: #4299e1; }
+    .webcam-card-top { display: flex; align-items: center; gap: 8px; }
+    .webcam-card-label { font-size: 0.88rem; font-weight: 600; color: #e2e8f0; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .webcam-badge {
+      font-size: 0.65rem; font-weight: 700; letter-spacing: 0.05em;
+      background: #1a2a3a; border: 1px solid #2b4a6e; color: #90cdf4;
+      padding: 2px 6px; border-radius: 4px; flex-shrink: 0;
+    }
+    .webcam-card-url { font-size: 0.7rem; color: #4a5568; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .webcam-card-open { font-size: 0.78rem; color: #4299e1; margin-top: 4px; }
   </style>
 </head>
 <body>
@@ -304,6 +325,12 @@
       <div id="fcEmpty" class="empty-note" style="display:none" data-i18n="analysis.no_forecast">No forecast data available.</div>
     </div>
 
+    <!-- Webcams — shown only when the ruleset has webcams -->
+    <div class="section" id="webcamSection" style="display:none">
+      <div class="section-title" data-i18n="analysis.webcams_title">Webcams</div>
+      <div class="webcam-grid" id="webcamGrid"></div>
+    </div>
+
   </div><!-- /mainContent -->
 </div>
 
@@ -379,6 +406,28 @@ if (!rsId) {
   document.getElementById('loadingState').innerHTML = `<p style="color:#fc8181">${window.t('analysis.no_rs_id')}</p>`;
 }
 
+// ── Webcams ───────────────────────────────────────────────────────────────────
+
+function renderWebcams(webcams) {
+  if (!webcams || webcams.length === 0) return;
+  document.getElementById('webcamSection').style.display = '';
+  const grid = document.getElementById('webcamGrid');
+  grid.innerHTML = webcams.map(w => {
+    const isRoundshot = w.url.includes('roundshot.com');
+    let domain = w.url;
+    try { domain = new URL(w.url).hostname; } catch { /* keep raw */ }
+    const label = w.label || domain;
+    const badge = isRoundshot ? `<span class="webcam-badge">Roundshot</span>` : '';
+    return `<a class="webcam-card" href="${esc(w.url)}" target="_blank" rel="noopener noreferrer">
+      <div class="webcam-card-top">
+        <span class="webcam-card-label">${esc(label)}</span>${badge}
+      </div>
+      <div class="webcam-card-url">${esc(w.url)}</div>
+      <div class="webcam-card-open">${window.t('analysis.webcam_open')}</div>
+    </a>`;
+  }).join('');
+}
+
 // ── Load all station names for display ───────────────────────────────────────
 
 async function loadStationNames() {
@@ -419,6 +468,7 @@ async function init() {
 
   renderHeader(rs, dec);
   renderConditions(dec);
+  renderWebcams(rs.webcams || []);
   document.getElementById('loadingState').style.display = 'none';
   document.getElementById('mainContent').style.display  = '';
 
@@ -557,12 +607,11 @@ window.loadHistory = async function(hours) {
 
   try {
     const res = await fetchAuth(`/api/rulesets/${rsId}/history?hours=${hours}`);
-    if (!res.ok) return;
+    document.getElementById('histLoading').style.display = 'none';
+    if (!res.ok) { document.getElementById('histEmpty').style.display = ''; return; }
     const json = await res.json();
     const { data } = json;
     _activeWindowH = json.active_window_hours ?? null;
-
-    document.getElementById('histLoading').style.display = 'none';
 
     if (!data || data.length === 0) {
       document.getElementById('histEmpty').style.display = '';

@@ -6,10 +6,14 @@ Endpoints
 GET    /api/rulesets                  — list own rule sets
 POST   /api/rulesets                  — create rule set
 GET    /api/rulesets/gallery          — public rule sets from other pilots
+GET    /api/rulesets/presets          — admin-curated preset templates (all pilots)
 GET    /api/rulesets/{id}             — get detail (with conditions)
 PUT    /api/rulesets/{id}             — update metadata
 DELETE /api/rulesets/{id}             — delete
 PUT    /api/rulesets/{id}/conditions  — replace full condition list
+PUT    /api/rulesets/{id}/landings    — replace landing links
+PUT    /api/rulesets/{id}/webcams     — replace webcam list
+PUT    /api/rulesets/{id}/set_preset  — toggle is_preset flag (admin only)
 POST   /api/rulesets/{id}/clone       — clone a public rule set
 """
 from __future__ import annotations
@@ -22,16 +26,18 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from lenticularis.api.dependencies import get_current_user, require_pilot
+from lenticularis.api.dependencies import get_current_user, require_admin, require_pilot
 from lenticularis.database.db import get_db
-from lenticularis.database.models import RuleCondition, RuleSet, User
+from lenticularis.database.models import LaunchLandingLink, RuleCondition, RuleSet, RuleSetWebcam, User
 from lenticularis.models.rules import (
     ConditionsReplaceRequest,
     EvaluationResult,
+    LandingLinksRequest,
     RuleSetCreate,
     RuleSetDetail,
     RuleSetOut,
     RuleSetUpdate,
+    WebcamsReplaceRequest,
 )
 
 logger = logging.getLogger(__name__)
@@ -77,6 +83,23 @@ def gallery(
         select(RuleSet)
         .where(RuleSet.is_public == True, RuleSet.owner_id != current_user.id)
         .order_by(RuleSet.clone_count.desc(), RuleSet.created_at.desc())
+    ).scalars().all()
+    return rows
+
+
+# ---------------------------------------------------------------------------
+# Presets — admin-curated templates shown in the new-ruleset form
+# ---------------------------------------------------------------------------
+
+@router.get("/presets", response_model=list[RuleSetDetail])
+def list_presets(
+    current_user: User = Depends(require_pilot),
+    db: Session = Depends(get_db),
+):
+    rows = db.execute(
+        select(RuleSet)
+        .where(RuleSet.is_preset == True)
+        .order_by(RuleSet.name)
     ).scalars().all()
     return rows
 
@@ -134,7 +157,117 @@ def evaluate_ruleset(
     result = run_evaluation(rs, influx)
     write_decision(rs, result, influx)
     logger.info("Evaluated ruleset %s → %s (no-data: %s)", rs.id, result["decision"], result["no_data_stations"])
+
+    # Evaluate linked landing rulesets and attach to result
+    if rs.landing_links:
+        landing_decisions = []
+        for link in rs.landing_links:
+            landing_rs = db.get(RuleSet, link.landing_ruleset_id)
+            if landing_rs is None:
+                continue
+            if landing_rs.conditions:
+                ld_result = run_evaluation(landing_rs, influx)
+            else:
+                ld_result = {"decision": "green"}
+            landing_decisions.append({
+                "ruleset_id": landing_rs.id,
+                "name": landing_rs.name,
+                "decision": ld_result["decision"],
+            })
+        result["landing_decisions"] = landing_decisions
+        if landing_decisions:
+            from lenticularis.rules.evaluator import _worst
+            result["best_landing_decision"] = _worst([ld["decision"] for ld in landing_decisions])
+
     return result
+
+
+# ---------------------------------------------------------------------------
+# Decision history — past evaluation results from InfluxDB
+# ---------------------------------------------------------------------------
+
+@router.get("/{ruleset_id}/history")
+def get_history(
+    ruleset_id: str,
+    hours: int = 24,
+    request: Request = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    import json as _json
+    rs = db.get(RuleSet, ruleset_id)
+    if rs is None:
+        raise HTTPException(status_code=404, detail="Rule set not found")
+    if rs.owner_id != current_user.id and not rs.is_public:
+        raise HTTPException(status_code=403, detail="Not your rule set")
+
+    influx = request.app.state.influx
+    raw = influx.query_decision_history(ruleset_id, hours)
+
+    active_window_hours: float | None = None
+    _annotate = rs.lat is not None and rs.lon is not None
+    if _annotate:
+        active_window_hours = 1.0
+        from lenticularis.utils.sunrise import is_in_active_window as _in_window
+
+    data = []
+    for row in raw:
+        try:
+            cond_results = _json.loads(row["condition_results_json"]) if row.get("condition_results_json") else []
+        except Exception:
+            cond_results = []
+        entry = {
+            "timestamp": row["timestamp"],
+            "decision": row["decision"],
+            "condition_results": cond_results,
+        }
+        if _annotate:
+            try:
+                dt = datetime.fromisoformat(row["timestamp"])
+                entry["in_active_window"] = _in_window(dt, rs.lat, rs.lon, active_window_hours)
+            except Exception:
+                entry["in_active_window"] = True
+        else:
+            entry["in_active_window"] = True
+        data.append(entry)
+
+    return {"data": data, "active_window_hours": active_window_hours}
+
+
+# ---------------------------------------------------------------------------
+# Decision forecast — ephemeral forecast evaluation
+# ---------------------------------------------------------------------------
+
+@router.get("/{ruleset_id}/forecast")
+def get_forecast(
+    ruleset_id: str,
+    hours: int = 24,
+    request: Request = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    rs = db.get(RuleSet, ruleset_id)
+    if rs is None:
+        raise HTTPException(status_code=404, detail="Rule set not found")
+    if rs.owner_id != current_user.id and not rs.is_public:
+        raise HTTPException(status_code=403, detail="Not your rule set")
+
+    if not rs.conditions:
+        return {"steps": [], "active_window_hours": None}
+
+    from lenticularis.rules.evaluator import run_forecast_evaluation
+
+    influx = request.app.state.influx
+    active_window_hours: float | None = 1.0 if (rs.lat is not None and rs.lon is not None) else None
+    steps = run_forecast_evaluation(
+        rs,
+        influx,
+        horizon_hours=hours,
+        lat=rs.lat,
+        lon=rs.lon,
+        active_window_hours=active_window_hours or 1.0,
+    )
+    return {"steps": steps, "active_window_hours": active_window_hours}
 
 
 # ---------------------------------------------------------------------------
@@ -220,6 +353,95 @@ def replace_conditions(
     rs.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(rs)
+    return rs
+
+
+# ---------------------------------------------------------------------------
+# Replace landing links for a launch ruleset
+# ---------------------------------------------------------------------------
+
+@router.put("/{ruleset_id}/landings", response_model=RuleSetOut)
+def replace_landings(
+    ruleset_id: str,
+    body: LandingLinksRequest,
+    current_user: User = Depends(require_pilot),
+    db: Session = Depends(get_db),
+):
+    rs = _get_own_ruleset(ruleset_id, current_user, db)
+
+    # Bulk-delete existing links (avoids ORM collection/cascade confusion)
+    db.query(LaunchLandingLink).filter(
+        LaunchLandingLink.launch_ruleset_id == rs.id
+    ).delete(synchronize_session=False)
+
+    # Insert new ones (validate each landing ruleset exists and belongs to the user)
+    for landing_id in body.landing_ids:
+        landing = db.get(RuleSet, landing_id)
+        if landing is None or landing.owner_id != current_user.id:
+            raise HTTPException(status_code=404, detail=f"Landing ruleset {landing_id} not found")
+        db.add(LaunchLandingLink(
+            id=str(uuid.uuid4()),
+            launch_ruleset_id=rs.id,
+            landing_ruleset_id=landing_id,
+        ))
+
+    rs.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(rs)
+    return rs
+
+
+# ---------------------------------------------------------------------------
+# Replace webcams
+# ---------------------------------------------------------------------------
+
+@router.put("/{ruleset_id}/webcams", response_model=RuleSetDetail)
+def replace_webcams(
+    ruleset_id: str,
+    body: WebcamsReplaceRequest,
+    current_user: User = Depends(require_pilot),
+    db: Session = Depends(get_db),
+):
+    rs = _get_own_ruleset(ruleset_id, current_user, db)
+
+    db.query(RuleSetWebcam).filter(
+        RuleSetWebcam.ruleset_id == rs.id
+    ).delete(synchronize_session=False)
+
+    for i, wc in enumerate(body.webcams):
+        db.add(RuleSetWebcam(
+            id=str(uuid.uuid4()),
+            ruleset_id=rs.id,
+            sort_order=i,
+            url=wc.url,
+            label=wc.label or None,
+        ))
+
+    rs.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(rs)
+    return rs
+
+
+# ---------------------------------------------------------------------------
+# Toggle is_preset flag (admin only)
+# ---------------------------------------------------------------------------
+
+@router.put("/{ruleset_id}/set_preset", response_model=RuleSetOut)
+def set_preset(
+    ruleset_id: str,
+    is_preset: bool,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    rs = db.get(RuleSet, ruleset_id)
+    if rs is None:
+        raise HTTPException(status_code=404, detail="Rule set not found")
+    rs.is_preset = is_preset
+    rs.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(rs)
+    logger.info("RuleSet %s is_preset set to %s by admin %s", rs.id, is_preset, current_user.id)
     return rs
 
 

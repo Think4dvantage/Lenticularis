@@ -205,6 +205,55 @@
     }
     .name-hero input:focus { border-color: #4299e1; }
     .name-hero input::placeholder { color: #4a5568; font-weight: 400; }
+
+    /* ── Preset picker ── */
+    .preset-panel-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+    .preset-hint-text { font-size: 0.78rem; color: #4a5568; margin-top: 3px; }
+    .preset-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; margin-top: 14px; }
+    .preset-card {
+      background: #0f1117; border: 1px solid #2d3748; border-radius: 8px; padding: 14px;
+      display: flex; flex-direction: column; gap: 5px; transition: border-color 0.15s;
+    }
+    .preset-card:hover { border-color: #4299e1; }
+    .preset-card-name { font-size: 0.88rem; font-weight: 600; color: #e2e8f0; }
+    .preset-card-meta { font-size: 0.72rem; color: #718096; }
+    .preset-card-desc { font-size: 0.76rem; color: #a0aec0; flex: 1; line-height: 1.4; }
+    .preset-card-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; }
+    .preset-card-conds { font-size: 0.7rem; color: #4a5568; }
+
+    /* ── Active preset banner ── */
+    .preset-active-banner {
+      background: #0f1f14; border: 1px solid #276749; border-radius: 8px;
+      padding: 10px 16px; margin-bottom: 14px;
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    }
+    .preset-active-text { color: #68d391; font-size: 0.82rem; font-weight: 600; flex: 1; }
+    .preset-active-hint-text { font-size: 0.72rem; color: #4a7b5a; }
+    .btn-preset-clear {
+      background: transparent; border: 1px solid #276749; color: #68d391;
+      padding: 3px 9px; border-radius: 5px; cursor: pointer; font-size: 0.75rem;
+      transition: background 0.15s;
+    }
+    .btn-preset-clear:hover { background: #1a3a22; }
+
+    /* ── Webcam editor ── */
+    .webcam-row {
+      display: grid; grid-template-columns: 1fr 200px 32px; gap: 8px; align-items: center;
+      background: #0f1117; border: 1px solid #2d3748; border-radius: 8px;
+      padding: 10px 12px; margin-bottom: 8px;
+    }
+    .webcam-input {
+      width: 100%; background: #1a1f2e; border: 1px solid #2d3748; border-radius: 6px;
+      padding: 7px 10px; color: #e2e8f0; font-size: 0.82rem; outline: none;
+    }
+    .webcam-input:focus { border-color: #4299e1; }
+    .webcam-input::placeholder { color: #4a5568; }
+    .btn-remove-webcam {
+      background: transparent; border: 1px solid #4a5568; color: #718096;
+      width: 32px; height: 32px; border-radius: 5px; cursor: pointer; font-size: 0.8rem;
+      display: flex; align-items: center; justify-content: center; transition: background 0.15s, color 0.15s;
+    }
+    .btn-remove-webcam:hover { background: #2d1515; border-color: #7b2020; color: #fc8181; }
   </style>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 </head>
@@ -231,6 +280,25 @@
 
   <div class="error-msg" id="errorMsg"></div>
   <div class="success-msg" id="successMsg"></div>
+
+  <!-- ── Preset picker — hidden when editing an existing ruleset ── -->
+  <div class="section" id="presetPanel">
+    <div class="preset-panel-head">
+      <div>
+        <div class="section-title" data-i18n="editor.preset_heading">Start from a preset site</div>
+        <p class="preset-hint-text" data-i18n="editor.preset_hint">Pick a curated launch site to pre-fill the form — every threshold stays editable.</p>
+      </div>
+      <button class="btn btn-add" id="presetToggleBtn" data-i18n="editor.preset_browse">Browse preset sites</button>
+    </div>
+    <div id="presetList" style="display:none"></div>
+  </div>
+
+  <!-- ── Active preset banner — shown after applying a preset ── -->
+  <div class="preset-active-banner" id="presetActiveBanner" style="display:none">
+    <span class="preset-active-text" id="presetActiveName"></span>
+    <span class="preset-active-hint-text" data-i18n="editor.preset_active_hint">All conditions and thresholds are editable.</span>
+    <button class="btn-preset-clear" id="presetClearBtn" data-i18n="editor.preset_clear">Clear</button>
+  </div>
 
   <!-- ── Name ── -->
   <div class="name-hero">
@@ -263,6 +331,16 @@
     </p>
   </div>
 
+  <!-- ── Webcams ── -->
+  <div class="section">
+    <div class="section-title" data-i18n="editor.section_webcams">Webcams</div>
+    <div id="webcamList"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
+      <p style="font-size:0.73rem;color:#4a5568;max-width:560px" data-i18n="editor.webcam_hint">Paste the full webcam URL including any direction/bearing parameter.</p>
+      <button class="btn btn-add" id="addWebcamBtn" data-i18n="editor.webcam_add">＋ Add webcam</button>
+    </div>
+  </div>
+
   <!-- ── Evaluation ── -->
   <div class="section">
     <div class="section-title" data-i18n="editor.section_evaluation">Evaluation</div>
@@ -283,6 +361,15 @@
         <span class="slider"></span>
       </label>
       <span class="toggle-label" id="publicLabel" data-i18n="editor.private_label">Private (only you)</span>
+    </div>
+
+    <!-- Admin-only: mark this ruleset as a system preset template -->
+    <div id="adminPresetRow" style="display:none;margin-top:16px;padding-top:16px;border-top:1px solid #2d3748" class="toggle-row">
+      <label class="toggle">
+        <input type="checkbox" id="rsIsPreset" />
+        <span class="slider"></span>
+      </label>
+      <span class="toggle-label" data-i18n="editor.preset_mark_admin">⭐ System preset</span>
     </div>
 
     <!-- Landing zone links — only shown for launch type -->
@@ -830,6 +917,16 @@
     setSiteType(rs.site_type || 'launch');
     renderLandingPicker(rs.linked_landing_ids || []);
 
+    // Populate webcam rows
+    for (const w of (rs.webcams || [])) makeWebcamRow(w);
+
+    // Admin-only: show preset toggle and set its state
+    if (getUser()?.role === 'admin') {
+      const adminRow = document.getElementById('adminPresetRow');
+      adminRow.style.display = 'flex';
+      document.getElementById('rsIsPreset').checked = rs.is_preset || false;
+    }
+
     // Place pin on map after filling in coordinates
     initPinFromInputs();
 
@@ -913,6 +1010,14 @@
         if (!lr.ok) throw new Error(await extractError(lr));
       }
 
+      // Save webcams
+      const wr = await fetchAuth(`/api/rulesets/${rsId}/webcams`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ webcams: readWebcams() }),
+      });
+      if (!wr.ok) throw new Error(await extractError(wr));
+
       showSuccess(window.t('editor.saved'));
     } catch (e) {
       showError(e.message);
@@ -927,11 +1032,151 @@
   document.getElementById('btnTypeLanding').addEventListener('click', () => setSiteType('landing'));
   document.getElementById('addGroupBtn').addEventListener('click', () => makeCondGroup());
 
+  // ── Webcam editor ─────────────────────────────────────────────────────
+  function makeWebcamRow(data = {}) {
+    const row = document.createElement('div');
+    row.className = 'webcam-row';
+    row.innerHTML = `
+      <input type="text" class="webcam-input webcam-url"
+             placeholder="${esc(window.t('editor.webcam_url_placeholder'))}"
+             value="${esc(data.url || '')}" />
+      <input type="text" class="webcam-input webcam-label"
+             placeholder="${esc(window.t('editor.webcam_label_placeholder'))}"
+             value="${esc(data.label || '')}" />
+      <button class="btn-remove-webcam" title="${esc(window.t('editor.webcam_remove'))}">${window.t('editor.webcam_remove')}</button>`;
+    row.querySelector('.btn-remove-webcam').addEventListener('click', () => row.remove());
+    document.getElementById('webcamList').appendChild(row);
+  }
+
+  function readWebcams() {
+    return [...document.querySelectorAll('.webcam-row')].map((row, i) => ({
+      url:         row.querySelector('.webcam-url').value.trim(),
+      label:       row.querySelector('.webcam-label').value.trim() || null,
+      sort_order:  i,
+    })).filter(w => w.url);
+  }
+
+  document.getElementById('addWebcamBtn').addEventListener('click', () => makeWebcamRow());
+
+  // ── Preset picker ──────────────────────────────────────────────────────
+  let allPresets = [];
+  let presetsOpen = false;
+
+  function _presetCondStr(n) {
+    return n === 1
+      ? window.t('editor.preset_conds',        { n })
+      : window.t('editor.preset_conds_plural', { n });
+  }
+
+  function renderPresets() {
+    const list = document.getElementById('presetList');
+    if (allPresets.length === 0) {
+      list.innerHTML = `<p style="color:#4a5568;font-size:0.82rem;margin-top:10px">${window.t('editor.preset_none')}</p>`;
+      return;
+    }
+    list.innerHTML = `<div class="preset-grid">${allPresets.map(p => {
+      const n = p.conditions?.length || 0;
+      const meta = [
+        p.altitude_m != null ? `${p.altitude_m} m` : null,
+        p.lat != null        ? `${p.lat.toFixed(3)}°N ${p.lon.toFixed(3)}°E` : null,
+      ].filter(Boolean).join(' · ');
+      return `<div class="preset-card">
+        <div class="preset-card-name">${esc(p.name)}</div>
+        ${meta        ? `<div class="preset-card-meta">${meta}</div>` : ''}
+        ${p.description ? `<div class="preset-card-desc">${esc(p.description)}</div>` : ''}
+        <div class="preset-card-footer">
+          <span class="preset-card-conds">${_presetCondStr(n)}</span>
+          <button class="btn btn-add" data-pid="${esc(p.id)}">${window.t('editor.preset_use')}</button>
+        </div>
+      </div>`;
+    }).join('')}</div>`;
+
+    list.querySelectorAll('button[data-pid]').forEach(btn => {
+      btn.addEventListener('click', () => applyPreset(btn.dataset.pid));
+    });
+  }
+
+  function applyPreset(presetId) {
+    const preset = allPresets.find(p => p.id === presetId);
+    if (!preset) return;
+
+    // Fill name
+    document.getElementById('rsName').value = preset.name;
+
+    // Fill location
+    if (preset.lat != null && preset.lon != null) {
+      document.getElementById('rsLat').value = preset.lat.toFixed(5);
+      document.getElementById('rsLon').value = preset.lon.toFixed(5);
+      initPinFromInputs();
+    }
+    if (preset.altitude_m != null) document.getElementById('rsAlt').value = preset.altitude_m;
+
+    // Set site type
+    setSiteType(preset.site_type || 'launch');
+
+    // Clear and rebuild conditions from preset
+    document.getElementById('conditionList').innerHTML = '';
+    groupSeq = 0; condSeq = 0;
+    const sorted = [...(preset.conditions || [])].sort((a, b) => a.sort_order - b.sort_order);
+    const seenGroupIds = new Set();
+    for (const c of sorted) {
+      if (!c.group_id) {
+        makeCondGroup([c]);
+      } else if (!seenGroupIds.has(c.group_id)) {
+        seenGroupIds.add(c.group_id);
+        makeCondGroup(sorted.filter(x => x.group_id === c.group_id));
+      }
+    }
+    redrawMapOverlays();
+
+    // Show active banner
+    document.getElementById('presetActiveName').textContent =
+      window.t('editor.preset_active', { name: preset.name });
+    document.getElementById('presetActiveBanner').style.display = 'flex';
+
+    // Collapse preset list
+    togglePresets(false);
+  }
+
+  function togglePresets(forceOpen) {
+    presetsOpen = forceOpen ?? !presetsOpen;
+    document.getElementById('presetList').style.display = presetsOpen ? 'block' : 'none';
+    document.getElementById('presetToggleBtn').textContent = presetsOpen
+      ? window.t('editor.preset_hide')
+      : window.t('editor.preset_browse');
+  }
+
+  document.getElementById('presetToggleBtn').addEventListener('click', () => togglePresets());
+  document.getElementById('presetClearBtn').addEventListener('click', () => {
+    document.getElementById('presetActiveBanner').style.display = 'none';
+  });
+
+  // ── Admin preset toggle ────────────────────────────────────────────────
+  document.getElementById('rsIsPreset').addEventListener('change', async (e) => {
+    if (!editId) return;
+    try {
+      await fetchAuth(`/api/rulesets/${editId}/set_preset?is_preset=${e.target.checked}`, { method: 'PUT' });
+    } catch { /* ignore */ }
+  });
+
   await loadStations();
   await loadLandingRulesets();
   renderLandingPicker();
   drawStationMarkersOnEditorMap();
-  if (editId) await loadEdit(editId);
+
+  if (editId) {
+    // Editing existing: hide preset picker entirely
+    document.getElementById('presetPanel').style.display = 'none';
+    document.getElementById('presetActiveBanner').style.display = 'none';
+    await loadEdit(editId);
+  } else {
+    // New ruleset: load and show preset panel
+    try {
+      const res = await fetchAuth('/api/rulesets/presets');
+      if (res.ok) allPresets = await res.json();
+    } catch { /* ignore */ }
+    renderPresets();
+  }
 </script>
 </body>
 </html>

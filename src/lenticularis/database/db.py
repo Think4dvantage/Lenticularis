@@ -25,6 +25,10 @@ def _run_column_migrations(engine) -> None:
             conn.execute(text("ALTER TABLE rulesets ADD COLUMN site_type TEXT NOT NULL DEFAULT 'launch'"))
             conn.commit()
             logger.info("Migration: added rulesets.site_type column")
+        if "is_preset" not in cols:
+            conn.execute(text("ALTER TABLE rulesets ADD COLUMN is_preset BOOLEAN NOT NULL DEFAULT FALSE"))
+            conn.commit()
+            logger.info("Migration: added rulesets.is_preset column")
 
 
 def init_db(db_path: str) -> None:

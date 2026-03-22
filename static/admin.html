@@ -177,6 +177,7 @@
       <button class="tab-btn active" onclick="switchTab('users')" id="tab-users" data-i18n="admin.tabs.users"></button>
       <button class="tab-btn" onclick="switchTab('collectors')" id="tab-collectors" data-i18n="admin.tabs.collectors"></button>
       <button class="tab-btn" onclick="switchTab('foehn_config')" id="tab-foehn_config" data-i18n="admin.tabs.foehn_config"></button>
+      <button class="tab-btn" onclick="switchTab('presets')" id="tab-presets" data-i18n="admin.tabs.presets"></button>
     </div>
 
     <!-- Users tab -->
@@ -227,6 +228,31 @@
         </table>
       </div>
       <div class="note" data-i18n="admin.collectors.temporary_note"></div>
+    </div>
+
+    <!-- Presets tab -->
+    <div class="tab-panel" id="panel-presets">
+      <div id="presetsError" class="error-msg" style="display:none"></div>
+      <div style="display:flex; align-items:center; gap:12px; margin-bottom:18px; flex-wrap:wrap;">
+        <p class="note" style="margin:0" data-i18n="admin.presets.hint"></p>
+      </div>
+      <div class="table-wrap">
+        <table id="presetsTable">
+          <thead>
+            <tr>
+              <th data-i18n="admin.presets.col_name"></th>
+              <th data-i18n="admin.presets.col_description"></th>
+              <th data-i18n="admin.presets.col_conditions"></th>
+              <th data-i18n="admin.presets.col_webcams"></th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="presetsBody">
+            <tr><td colspan="5" class="empty-msg" data-i18n="common.loading"></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div id="presetsCount" class="note"></div>
     </div>
 
     <!-- Föhn Config tab -->
@@ -296,12 +322,17 @@ if (!user || user.role !== 'admin') {
 // Tab switching
 // ---------------------------------------------------------------------------
 let _foehnConfigLoaded = false;
+let _presetsLoaded = false;
 window.switchTab = function(name) {
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.id === `tab-${name}`));
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === `panel-${name}`));
   if (name === 'foehn_config' && !_foehnConfigLoaded) {
     _foehnConfigLoaded = true;
     loadFoehnConfig();
+  }
+  if (name === 'presets' && !_presetsLoaded) {
+    _presetsLoaded = true;
+    loadPresets();
   }
 };
 
@@ -535,6 +566,65 @@ function escHtml(str) {
   return String(str ?? '').replace(/[&<>"']/g, c =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
+
+// ---------------------------------------------------------------------------
+// Presets
+// ---------------------------------------------------------------------------
+async function loadPresets() {
+  const res = await fetchAuth('/api/rulesets/presets');
+  if (!res.ok) {
+    document.getElementById('presetsError').textContent = `Error ${res.status}`;
+    document.getElementById('presetsError').style.display = 'block';
+    document.getElementById('presetsBody').innerHTML =
+      `<tr><td colspan="5" class="empty-msg">${window.t('admin.presets.no_presets')}</td></tr>`;
+    return;
+  }
+  const presets = await res.json();
+  renderPresets(presets);
+}
+
+function renderPresets(presets) {
+  document.getElementById('presetsCount').textContent =
+    window.t('admin.presets.total', { n: presets.length });
+
+  if (!presets.length) {
+    document.getElementById('presetsBody').innerHTML =
+      `<tr><td colspan="5" class="empty-msg">${window.t('admin.presets.no_presets')}</td></tr>`;
+    return;
+  }
+
+  document.getElementById('presetsBody').innerHTML = presets.map(p => `
+    <tr>
+      <td><a href="/rulesets/${escHtml(p.id)}" style="color:#90cdf4;text-decoration:none"
+           title="${window.t('admin.presets.view_tip')}">${escHtml(p.name)}</a></td>
+      <td style="color:#a0aec0">${escHtml(p.description || '—')}</td>
+      <td>${p.conditions?.length ?? 0}</td>
+      <td>${p.webcams?.length ?? 0}</td>
+      <td>
+        <button class="trigger-btn" onclick="removePreset('${escHtml(p.id)}', this)"
+          title="${window.t('admin.presets.remove_tip')}">
+          ${window.t('admin.presets.remove')}
+        </button>
+      </td>
+    </tr>`).join('');
+}
+
+window.removePreset = async function(id, btn) {
+  btn.disabled = true;
+  btn.textContent = '…';
+  const res = await fetchAuth(`/api/rulesets/${id}/set_preset?is_preset=false`, { method: 'PUT' });
+  if (!res.ok) {
+    btn.disabled = false;
+    btn.textContent = window.t('admin.presets.remove');
+    const err = await res.json().catch(() => ({}));
+    document.getElementById('presetsError').textContent = err.detail || `Error ${res.status}`;
+    document.getElementById('presetsError').style.display = 'block';
+  } else {
+    document.getElementById('presetsError').style.display = 'none';
+    _presetsLoaded = false;
+    loadPresets();
+  }
+};
 
 // ---------------------------------------------------------------------------
 // Föhn config

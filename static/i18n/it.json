@@ -187,7 +187,25 @@
       "green": "🟢 Verde",
       "orange": "🟠 Arancione",
       "red": "🔴 Rosso"
-    }
+    },
+    "section_webcams": "Webcam",
+    "webcam_url_placeholder": "https://livecam.roundshot.com/beatenberg/?bearing=180",
+    "webcam_label_placeholder": "Etichetta (opzionale, es. vista N)",
+    "webcam_add": "＋ Aggiungi webcam",
+    "webcam_remove": "✕",
+    "webcam_hint": "Incolla l'URL completo incluso il parametro di direzione. Si apre in una nuova scheda dalla pagina di analisi.",
+    "preset_heading": "Inizia da un sito predefinito",
+    "preset_hint": "Scegli un sito di decollo curato — tutte le soglie rimangono modificabili.",
+    "preset_browse": "Sfoglia siti predefiniti",
+    "preset_hide": "Nascondi predefiniti",
+    "preset_use": "Usa questo sito",
+    "preset_none": "Nessun sito predefinito disponibile.",
+    "preset_active": "Basato su predefinito: {name}",
+    "preset_active_hint": "Tutte le condizioni e le soglie sono modificabili.",
+    "preset_clear": "Cancella",
+    "preset_conds": "{n} condizione",
+    "preset_conds_plural": "{n} condizioni",
+    "preset_mark_admin": "⭐ Sito di sistema"
   },
   "station_detail": {
     "loading": "Caricamento…",
@@ -438,7 +456,9 @@
     "min_ago": "{n} min fa",
     "h_ago": "{n} h fa",
     "cond_group_n": "Gruppo condizioni {n}",
-    "cond_group_triggered": " — attivato"
+    "cond_group_triggered": " — attivato",
+    "webcams_title": "Webcam",
+    "webcam_open": "↗ Apri"
   },
   "admin": {
     "title": "Pannello admin",
@@ -447,7 +467,8 @@
     "tabs": {
       "users": "Utenti",
       "collectors": "Collettori",
-      "foehn_config": "Config föhn"
+      "foehn_config": "Config föhn",
+      "presets": "Siti preset"
     },
     "foehn_config": {
       "save": "Salva",
@@ -489,6 +510,18 @@
       "auth_oauth": "OAuth",
       "you": "(tu)",
       "no_users": "Nessun utente trovato."
+    },
+    "presets": {
+      "hint": "I siti preset di sistema sono mostrati a tutti i piloti nel modulo nuovo regolamento. Promuovi un regolamento tramite ⭐ nell'editor.",
+      "total": "{n} siti preset",
+      "col_name": "Nome",
+      "col_description": "Descrizione",
+      "col_conditions": "Condizioni",
+      "col_webcams": "Webcam",
+      "view_tip": "Apri analisi regolamento",
+      "remove": "Rimuovi preset",
+      "remove_tip": "Rimuovi dai preset di sistema (il regolamento viene mantenuto)",
+      "no_presets": "Nessun sito preset definito."
     },
     "collectors": {
       "col_collector": "Collettore",

@@ -303,23 +303,30 @@ Pilot-owned launch site CRUD; site markers on map with distinct icon.
 - `api/routers/admin.py`: `GET/PUT /api/admin/users`, `GET/PUT /api/admin/collectors`, `GET/PUT/DELETE /api/admin/foehn-config`
 - Collector trigger-now button in admin panel
 
-### v1.2 — Webcam Integration (planned)
+### v1.2 — Webcam Links + Preset Launch Sites + Map Fixes ✅ Shipped
 
-**Goal:** Link external webcam URLs to launch sites; show them in map popups and site detail.
+**Webcam integration**
+- New `ruleset_webcams` SQLite table: `id`, `ruleset_id`, `url`, `label`, `sort_order`; migration in `db.py`
+- `PUT /api/rulesets/{id}/webcams` — full-replace list; pilots manage their own rulesets
+- Ruleset editor: webcam section with URL + label rows, add/remove buttons
+- Ruleset analysis page: webcam cards grid; Roundshot URLs get a blue "Roundshot" badge; "↗ Open" link
+- `WebcamBase` / `WebcamOut` / `WebcamsReplaceRequest` Pydantic schemas; `webcams` field on `RuleSetDetail`
 
-- New SQLite table `site_webcams`: `id`, `ruleset_id` (FK → rulesets), `url`, `label`, `provider`, `sort_order`, `is_active`, `added_by_id` (FK → users)
-- **Pilots** can add/edit/delete webcams on their own sites via the ruleset editor
-- **Admins** can add webcams to any site via the admin panel
-- Map popup: webcam thumbnail link (static preview image URL if provider supports it, e.g. Roundshot `?latest=1`) + "Open cam" button
-- API: `GET/POST /api/rulesets/{id}/webcams`, `PUT/DELETE /api/rulesets/{id}/webcams/{wid}`
-- i18n keys for all 4 languages
+**Preset launch sites**
+- `is_preset` boolean column on `rulesets` table; idempotent migration
+- `GET /api/rulesets/presets` — returns `list[RuleSetDetail]` (with conditions) for all pilots
+- `PUT /api/rulesets/{id}/set_preset?is_preset=bool` — admin-only toggle
+- Ruleset editor: collapsible preset picker panel; admin ⭐ toggle; active-preset banner
+- Admin panel: "Preset Sites" tab — table of current presets with condition/webcam counts and "Remove preset" action
 
-**Critical files:**
-- `src/lenticularis/database/models.py` — add `SiteWebcam` ORM model + migration
-- `src/lenticularis/api/routers/rulesets.py` — add webcam sub-routes
-- `static/map.js` or `static/index.html` — extend ruleset popup to show webcam link
-- `static/ruleset-editor.html` — add webcam URL management section
-- `static/admin.html` — webcam management for admin (any site)
+**Decision history + forecast API**
+- `GET /api/rulesets/{id}/history?hours=N` — queries `rule_decisions` from InfluxDB; parses `condition_results_json`; annotates `in_active_window` via sunrise if lat/lon set
+- `GET /api/rulesets/{id}/forecast?hours=N` — calls `run_forecast_evaluation`; returns `{ steps, active_window_hours }`
+- Fixed frontend spinner hang on non-OK response in `loadHistory`
+
+**Map fixes**
+- `/evaluate` endpoint now evaluates linked landing rulesets and returns `landing_decisions` + `best_landing_decision` → restores the landing-site ring on launch site markers
+- Custom Leaflet pane `rulesetPane` at z-index 450 (below default markerPane 600) → weather arrows always render in front of ruleset dots
 
 ### v1.3 — Forecast Accuracy Dashboard (planned)
 
@@ -364,12 +371,10 @@ def query_forecast_vs_actual(
 - Rule editor gains rule-type toggle; condition builder UX is identical
 - Evaluator writes to `rule_decisions` with tag `rule_type` = risk/opportunity
 
-### v1.5 — Pre-seeded Launch Site Defaults (planned)
+### v1.5 — Pre-seeded Launch Site Defaults (superseded by v1.2)
 
-- Admin can define a default ruleset template per launch site (or a global fallback)
-- New SQLite table: `site_default_rulesets` (`site_id` nullable, `ruleset_json`, `created_by_admin_id`)
-- When a pilot adds a site that has a default template, the template is cloned into their account as an editable starting point
-- Admin UI: Default Rules tab per site in admin panel
+Core preset functionality shipped in v1.2 (`is_preset` flag, preset picker in editor, admin panel tab).
+Future extension: auto-clone a preset when a pilot creates a new site near a known launch location.
 
 ### v1.6 — AI Rule Building + AI Weather Analysis + Trusted Users (planned)
 
