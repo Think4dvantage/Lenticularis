@@ -402,34 +402,46 @@ class CollectorScheduler:
             health["last_measurement_count"] = 0
             return
 
+        interval_minutes = health.get("interval_minutes") or 60
+        spread_seconds = interval_minutes * 60.0
         logger.info(
-            "Running forecast collector: %s for %d stations, horizon %dh",
-            name, len(stations_with_coords), horizon_hours,
+            "Running forecast collector: %s for %d stations, horizon %dh, spread %.0fs",
+            name, len(stations_with_coords), horizon_hours, spread_seconds,
         )
+
+        total_points = 0
+        errors = 0
         try:
-            points = await collector.collect_all(stations_with_coords, horizon_hours)
-            if points:
-                self._influx.write_forecast(points)
-                logger.info("%s: wrote %d forecast points", name, len(points))
-                health["status"] = "ok"
-            else:
-                logger.info("%s: no forecast points returned", name)
-                health["status"] = "ok_no_data"
+            async for station, pts in collector.collect_all_iter(
+                stations_with_coords, horizon_hours, spread_seconds=spread_seconds
+            ):
+                if pts:
+                    self._influx.write_forecast(pts)
+                    total_points += len(pts)
+                    logger.debug("%s: wrote %d points for %s", name, len(pts), station.station_id)
+                else:
+                    errors += 1
 
             finished_at = datetime.now(timezone.utc)
-            health["last_finished_at"] = finished_at
-            health["last_success_at"] = finished_at
-            health["last_error_at"] = None
-            health["last_error"] = None
-            health["last_measurement_count"] = len(points)
-            health["consecutive_failures"] = 0
+            health.update({
+                "status": "ok" if total_points > 0 else "ok_no_data",
+                "last_finished_at": finished_at,
+                "last_success_at": finished_at,
+                "last_error_at": None,
+                "last_error": None,
+                "last_measurement_count": total_points,
+                "consecutive_failures": 0,
+            })
+            logger.info("%s: wrote %d forecast points total (%d station errors)", name, total_points, errors)
         except Exception as exc:
             finished_at = datetime.now(timezone.utc)
-            health["status"] = "error"
-            health["last_finished_at"] = finished_at
-            health["last_error_at"] = finished_at
-            health["last_error"] = str(exc)
-            health["consecutive_failures"] = int(health.get("consecutive_failures", 0)) + 1
+            health.update({
+                "status": "error",
+                "last_finished_at": finished_at,
+                "last_error_at": finished_at,
+                "last_error": str(exc),
+                "consecutive_failures": int(health.get("consecutive_failures", 0)) + 1,
+            })
             logger.error("Forecast collector %s failed: %s", name, exc, exc_info=True)
 
     def update_collector_runtime(

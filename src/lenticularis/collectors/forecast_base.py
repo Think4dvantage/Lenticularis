@@ -15,6 +15,7 @@ Design
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 from abc import ABC, abstractmethod
 from typing import Optional
@@ -66,6 +67,7 @@ class BaseForecastCollector(ABC):
         self,
         stations: list[WeatherStation],
         horizon_hours: int = 120,
+        spread_seconds: float = 0.0,
     ) -> list[ForecastPoint]:
         """
         Collect forecast for every station in the list.
@@ -73,11 +75,47 @@ class BaseForecastCollector(ABC):
         Falls back to calling ``collect_for_station`` per station. Subclasses
         that support batch HTTP requests can override this for better performance.
         Stations without lat/lon are silently skipped.
+
+        ``spread_seconds`` distributes requests evenly over a time window instead
+        of firing them all at once.  When > 0, the method sleeps
+        ``spread_seconds / N`` between each station fetch (where N is the number
+        of eligible stations).  Pass the collector's interval duration in seconds
+        to avoid rate-limit bursts — e.g. a 60-minute interval with 50 stations
+        yields a ~72 s gap between requests.
         """
         points: list[ForecastPoint] = []
-        for station in stations:
-            if station.latitude is None or station.longitude is None:
-                continue
+        async for _station, pts in self.collect_all_iter(stations, horizon_hours, spread_seconds):
+            points.extend(pts)
+        return points
+
+    async def collect_all_iter(
+        self,
+        stations: list[WeatherStation],
+        horizon_hours: int = 120,
+        spread_seconds: float = 0.0,
+    ):
+        """
+        Async-generator version of ``collect_all``.
+
+        Yields ``(station, points)`` for each eligible station so the caller
+        can write to InfluxDB immediately after each fetch — avoiding a full
+        hour of buffering when ``spread_seconds`` is large.
+
+        On per-station errors, yields ``(station, [])`` and logs the exception.
+        """
+        eligible = [
+            s for s in stations
+            if s.latitude is not None and s.longitude is not None
+        ]
+        delay = spread_seconds / len(eligible) if spread_seconds > 0 and eligible else 0.0
+
+        for i, station in enumerate(eligible):
+            if i > 0 and delay > 0:
+                self.logger.debug(
+                    "Forecast spread: sleeping %.1fs before station %s (%d/%d)",
+                    delay, station.station_id, i + 1, len(eligible),
+                )
+                await asyncio.sleep(delay)
             try:
                 pts = await self.collect_for_station(
                     station.station_id,
@@ -86,12 +124,12 @@ class BaseForecastCollector(ABC):
                     station.longitude,
                     horizon_hours,
                 )
-                points.extend(pts)
+                yield station, pts
             except Exception as exc:
                 self.logger.error(
                     "Forecast collection failed for %s: %s", station.station_id, exc
                 )
-        return points
+                yield station, []
 
     # ------------------------------------------------------------------
     # Shared HTTP helpers (mirrors BaseCollector)
