@@ -223,6 +223,45 @@ async def get_replay(
     }
 
 
+@router.get("/{station_id}/forecast-accuracy")
+async def get_forecast_accuracy(
+    station_id: str,
+    request: Request,
+    from_: Optional[str] = Query(default=None, alias="from"),
+    to: Optional[str] = Query(default=None),
+):
+    """
+    Return actual observations and 24 h / 48 h / 72 h lead-time forecasts for
+    accuracy comparison.  ``from`` and ``to`` are ISO 8601 strings; max 31 days.
+    Defaults to the 24 h window ending at UTC midnight today.
+    """
+    influx = _get_influx(request)
+    now = datetime.now(timezone.utc)
+
+    if from_ and to:
+        try:
+            start = datetime.fromisoformat(from_.replace("Z", "+00:00"))
+            end   = datetime.fromisoformat(to.replace("Z", "+00:00"))
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid ISO 8601 date format")
+        if end <= start:
+            raise HTTPException(status_code=400, detail="'to' must be after 'from'")
+        if (end - start).total_seconds() > 31 * 24 * 3600:
+            raise HTTPException(status_code=400, detail="Date range too large (max 31 days)")
+    else:
+        end   = now.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=1)
+        start = end - timedelta(hours=24)
+
+    data = influx.query_forecast_accuracy(station_id, start, end)
+    return {
+        "station_id": station_id,
+        "from":       start.isoformat(),
+        "to":         end.isoformat(),
+        "actual":     data["actual"],
+        "forecasts":  data["forecasts"],
+    }
+
+
 @router.get("/{station_id}/forecast")
 async def get_station_forecast(
     station_id: str,

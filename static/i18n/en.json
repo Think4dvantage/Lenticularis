@@ -207,6 +207,22 @@
     "preset_conds_plural": "{n} conditions",
     "preset_mark_admin": "⭐ System preset"
   },
+  "forecast_accuracy": {
+    "title": "Forecast Accuracy",
+    "subtitle": "Compare past forecasts against observed values for any station and time range.",
+    "pick_station": "Select a station to get started",
+    "station_label": "Station",
+    "from_label": "From",
+    "show": "Show:",
+    "no_data": "No data for the selected station and time range.",
+    "loading": "Loading…",
+    "legend_actual": "Actual",
+    "legend_forecast": "Forecast (model)",
+    "legend_fc_date": "Forecast {date}",
+    "legend_fc_24h": "Forecast 24 h",
+    "legend_fc_48h": "Forecast 48 h",
+    "legend_fc_72h": "Forecast 72 h"
+  },
   "station_detail": {
     "loading": "Loading…",
     "show": "Show:",
@@ -220,6 +236,7 @@
       "30days": "30 days"
     },
     "forecast_button": "📡 Forecast",
+    "accuracy_button": "📊 Accuracy",
     "charts": {
       "wind": "Wind speed & gust (km/h)",
       "wind_direction_heatmap": "Wind Direction — Heatmap",

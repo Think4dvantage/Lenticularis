@@ -53,7 +53,8 @@ _COLLECTOR_REGISTRY = {
 
 # Registry: forecast collector name → class
 _FORECAST_REGISTRY = {
-    "open-meteo": ForecastOpenMeteoCollector,
+    "open-meteo":       ForecastOpenMeteoCollector,
+    "open-meteo-short": ForecastOpenMeteoCollector,  # same class, short-horizon frequent refreshes
 }
 
 # Jitter range in seconds applied to each job's first run

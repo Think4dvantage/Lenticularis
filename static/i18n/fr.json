@@ -207,6 +207,22 @@
     "preset_conds_plural": "{n} conditions",
     "preset_mark_admin": "⭐ Site système"
   },
+  "forecast_accuracy": {
+    "title": "Précision des prévisions",
+    "subtitle": "Comparer les prévisions passées aux valeurs observées.",
+    "pick_station": "Sélectionner une station",
+    "station_label": "Station",
+    "from_label": "Dès",
+    "show": "Afficher :",
+    "no_data": "Aucune donnée pour la station et la période sélectionnées.",
+    "loading": "Chargement…",
+    "legend_actual": "Mesuré",
+    "legend_forecast": "Prévision (modèle)",
+    "legend_fc_date": "Prévision {date}",
+    "legend_fc_24h": "Prévision 24 h",
+    "legend_fc_48h": "Prévision 48 h",
+    "legend_fc_72h": "Prévision 72 h"
+  },
   "station_detail": {
     "loading": "Chargement…",
     "show": "Afficher :",
@@ -220,6 +236,7 @@
       "30days": "30 jours"
     },
     "forecast_button": "📡 Prévisions",
+    "accuracy_button": "📊 Précision",
     "charts": {
       "wind": "Vitesse du vent et rafales (km/h)",
       "wind_direction_heatmap": "Direction du vent — Carte de chaleur",

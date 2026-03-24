@@ -12,11 +12,21 @@ influxdb:
   timeout: 10000  # milliseconds
 
 # Forecast Collectors
+# Layered approach: short-horizon runs every 3 h for the next ~30 h (where fresh data matters),
+# extended run once per day for the full 5-day window.
+# Within the same calendar day (init_date), later writes overwrite earlier ones in InfluxDB,
+# so the most recent model run always wins for any given valid_time.
 forecast_collectors:
+  - name: "open-meteo-short"
+    enabled: true
+    interval_minutes: 180   # every 3 h — aligns with ICON-seamless update cadence
+    horizon_hours: 30       # covers the next ~30 h where forecast freshness is most important
+    config: {}
+
   - name: "open-meteo"
     enabled: true
-    interval_minutes: 60    # how often to refresh forecasts
-    horizon_hours: 120      # how many hours ahead to fetch (max 120 = 5 days)
+    interval_minutes: 1440  # once per day — extended window changes slowly
+    horizon_hours: 120      # full 5-day horizon
     config: {}
 
 # Weather Data Collectors

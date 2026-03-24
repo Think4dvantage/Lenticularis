@@ -328,39 +328,25 @@ Pilot-owned launch site CRUD; site markers on map with distinct icon.
 - `/evaluate` endpoint now evaluates linked landing rulesets and returns `landing_decisions` + `best_landing_decision` → restores the landing-site ring on launch site markers
 - Custom Leaflet pane `rulesetPane` at z-index 450 (below default markerPane 600) → weather arrows always render in front of ruleset dots
 
-### v1.3 — Forecast Accuracy Dashboard (planned)
+### v1.3 — Forecast Accuracy Dashboard ✅ Shipped
 
-**Goal:** For any past time window, show how closely 1-day-ahead / 2-day-ahead / 3-day-ahead forecasts matched observed values. Also show per-ruleset decision accuracy.
+**Goal:** For any past time window, show how closely past model runs matched observed values per station and field.
 
-**Architecture — data already exists:**
+**Architecture:**
 - `weather_data` = observed (tags: `station_id`, `network`, `canton`)
-- `weather_forecast` = forecasts (tags: `station_id`, `source`, `model`; field: `init_time` for deduplication)
-- A past forecast for `valid_time=T` made at `init_time=T-24h` is queried by filtering `init_time ≤ T-22h AND init_time ≥ T-26h`
+- `weather_forecast` = forecasts, now tagged with `init_date` (YYYY-MM-DD) so each calendar day of model runs is its own InfluxDB series — enabling per-day accuracy comparisons without overwriting history
+- `query_forecast_accuracy()` in `influx.py` fetches actuals + per-init_date forecast series for a station/window; handles legacy data (no `init_date` tag) as a fallback series
 
-**New InfluxDB query method** (`database/influx.py`):
-```python
-def query_forecast_vs_actual(
-    self, station_id: str, field: str,
-    start: datetime, end: datetime,
-    lead_hours: list[int] = [24, 48, 72]
-) -> list[dict]:
-    # Returns: [{timestamp, actual, fc_24h, fc_48h, fc_72h}, ...]
-```
+**Shipped:**
+- `GET /api/stations/{id}/forecast-accuracy?from=&to=` — returns `{actual, forecasts: [{init_date, data}]}` sorted newest-first; defaults to 2-days-ago window so both observations and forecasts are always available
+- `static/forecast-accuracy.html` + `static/forecast-accuracy.js` — station picker, date picker, per-field Chart.js charts with actual (solid) + one overlaid line per model-run day; cursor crosshair plugin; "📊 Accuracy" button on station-detail page
+- All 4 i18n files updated (`forecast_accuracy.*` keys, `station_detail.accuracy_button`)
 
-**New API endpoint** (`api/routers/stations.py`):
-- `GET /api/stations/{id}/forecast-accuracy?field=wind_speed&from=&to=`
-
-**New page** `static/forecast-accuracy.html`:
-- Station picker + field picker + date range selector
-- Chart: overlaid lines — actual (solid blue), 1-day forecast (dashed amber), 2-day (dotted orange), 3-day (dotted red)
-- Summary card: RMSE and bias per lead time
-- Ruleset tab: for each user's rulesets, % of hours where forecast decision matched actual decision
-
-**Critical files:**
-- `src/lenticularis/database/influx.py` — add `query_forecast_vs_actual()`
-- `src/lenticularis/api/routers/stations.py` — add `/forecast-accuracy` endpoint
-- `static/forecast-accuracy.html` — new page
-- `static/i18n/*.json` — add keys
+**Collector improvements (shipped alongside v1.3):**
+- `write_forecast` now tags `init_date` (YYYY-MM-DD) so same-day runs overwrite each other in InfluxDB; cross-day runs are kept independently
+- Layered forecast schedule: `open-meteo-short` (180 min, 30h horizon) refreshes near-term data every 3 h; `open-meteo` (1440 min, 120h horizon) updates the extended window once per day — aligns with ICON-seamless update cadence and reduces API calls from 24×/day to 9×/day per station
+- `collect_all_iter` distributes per-station HTTP requests evenly across the interval (`spread_seconds = interval_minutes × 60`) to avoid rate-limit bursts; writes to InfluxDB immediately after each station fetch
+- Fixed `query_forecast_replay`: adding `init_date` to the pivot `rowKey` broke old-format data (no `init_date` tag) — reverted rowKey to the original 5-column set; Python dedup handles multiple `init_date` series correctly across tables
 
 ### v1.4 — Rule Types: Risk + Opportunity (planned)
 

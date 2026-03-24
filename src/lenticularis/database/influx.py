@@ -658,13 +658,14 @@ from(bucket: "{self._cfg.bucket}")
         """
         Write a batch of ForecastPoint objects to the ``weather_forecast`` measurement.
 
-        Tags:   ``station_id``, ``network``, ``source``, ``model``
+        Tags:   ``station_id``, ``network``, ``source``, ``model``, ``init_date``
         Time:   ``valid_time`` (the future moment the forecast applies to)
         Fields: weather fields + ``init_time`` (ISO string) for deduplication
 
-        Every model run is stored independently — old runs are never overwritten.
-        The query layer picks the latest ``init_time`` per ``valid_time`` for
-        live evaluation, while all runs remain available for accuracy analysis.
+        ``init_date`` (YYYY-MM-DD UTC) is a tag so that each calendar day of model
+        runs forms its own InfluxDB series.  Within a day, later runs overwrite
+        earlier ones (same tags + timestamp), but runs from different days are kept
+        independently — enabling per-day forecast accuracy comparisons.
         """
         if not points:
             return
@@ -677,6 +678,7 @@ from(bucket: "{self._cfg.bucket}")
                 .tag("network", fp.network)
                 .tag("source", fp.source)
                 .tag("model", fp.model)
+                .tag("init_date", fp.init_time.astimezone(timezone.utc).strftime("%Y-%m-%d"))
                 .time(int(fp.valid_time.timestamp()), "s")
             )
             field_map = {
@@ -748,7 +750,7 @@ from(bucket: "{self._cfg.bucket}")
                     k: v
                     for k, v in record.values.items()
                     if not k.startswith("_")
-                    and k not in ("result", "table", "station_id", "network", "source", "model", "init_time")
+                    and k not in ("result", "table", "station_id", "network", "source", "model", "init_time", "init_date")
                 }
                 fields["_init_time"] = init_time_str
 
@@ -801,13 +803,17 @@ from(bucket: "{self._cfg.bucket}")
         station_filter = " or ".join(
             f'r.station_id == "{sid}"' for sid in station_ids
         )
+        # Limit to runs from the last 3 days so we don't pull all historical init_dates.
+        # Old-format data (no init_date tag) is included via the `not exists` branch.
+        three_days_ago = (datetime.now(timezone.utc) - timedelta(days=3)).strftime("%Y-%m-%d")
 
         flux = f"""
 from(bucket: "{self._cfg.bucket}")
   |> range(start: {start_str}, stop: {end_str})
   |> filter(fn: (r) => r._measurement == "{MEASUREMENT_FORECAST}")
   |> filter(fn: (r) => {station_filter})
-  |> pivot(rowKey: ["_time", "station_id", "network", "source", "model"], columnKey: ["_field"], valueColumn: "_value")
+  |> filter(fn: (r) => not exists r.init_date or r.init_date >= "{three_days_ago}")
+  |> pivot(rowKey: ["_time", "station_id", "network", "source", "model", "init_date"], columnKey: ["_field"], valueColumn: "_value")
   |> sort(columns: ["_time"])
 """
         try:
@@ -828,7 +834,7 @@ from(bucket: "{self._cfg.bucket}")
                     k: v
                     for k, v in record.values.items()
                     if not k.startswith("_")
-                    and k not in ("result", "table", "station_id", "network", "source", "model", "init_time")
+                    and k not in ("result", "table", "station_id", "network", "source", "model", "init_time", "init_date")
                 }
                 fields["_init_time"] = init_time_str
 
@@ -843,6 +849,124 @@ from(bucket: "{self._cfg.bucket}")
             sid: {vt: {k: v for k, v in row.items() if k != "_init_time"} for vt, row in by_vt.items()}
             for sid, by_vt in raw.items()
         }
+
+    def query_forecast_accuracy(
+        self, station_id: str, start: datetime, end: datetime
+    ) -> dict:
+        """
+        Return actual observations and per-init_date model forecasts for the window.
+
+        New-format data (written after the ``init_date`` tag was added to
+        ``write_forecast``) is grouped by init_date so each calendar day of model
+        runs is a separate series.  Legacy data (no ``init_date`` tag) is returned
+        as a single fallback series.
+
+        Returns::
+
+            {
+                "actual":   [{"timestamp": ISO, "wind_speed": float, …}, …],
+                "forecasts": [
+                    {"init_date": "2025-03-21", "data": [{"timestamp": ISO, …}, …]},
+                    …  (sorted newest first; legacy entries have init_date=None)
+                ],
+            }
+        """
+        _WEATHER_FIELDS = {
+            "wind_speed", "wind_gust", "wind_direction",
+            "temperature", "humidity", "pressure_qnh", "precipitation", "snow_depth",
+        }
+        start_str = start.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        end_str   = end.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        # -- Actual observations --------------------------------------------------
+        flux_actual = f"""
+from(bucket: "{self._cfg.bucket}")
+  |> range(start: {start_str}, stop: {end_str})
+  |> filter(fn: (r) => r._measurement == "{MEASUREMENT_WEATHER}")
+  |> filter(fn: (r) => r.station_id == "{station_id}")
+  |> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")
+  |> sort(columns: ["_time"])
+"""
+        actual: list[dict] = []
+        try:
+            for table in self._query_api.query(flux_actual, org=self._cfg.org):
+                for record in table.records:
+                    entry: dict = {"timestamp": record.get_time().isoformat()}
+                    entry.update({
+                        k: v for k, v in record.values.items()
+                        if k in _WEATHER_FIELDS and v is not None
+                    })
+                    actual.append(entry)
+        except Exception as exc:
+            logger.error("query_forecast_accuracy actual error for %s: %s", station_id, exc)
+
+        # -- New-format forecasts (grouped by init_date tag) ----------------------
+        flux_fc_new = f"""
+from(bucket: "{self._cfg.bucket}")
+  |> range(start: {start_str}, stop: {end_str})
+  |> filter(fn: (r) => r._measurement == "{MEASUREMENT_FORECAST}")
+  |> filter(fn: (r) => r.station_id == "{station_id}")
+  |> filter(fn: (r) => exists r.init_date)
+  |> pivot(rowKey: ["_time", "station_id", "network", "source", "model", "init_date"],
+           columnKey: ["_field"], valueColumn: "_value")
+  |> sort(columns: ["_time"])
+"""
+        # raw_new[init_date][valid_time_iso] = fields — last written run of that day wins
+        raw_new: dict[str, dict[str, dict]] = {}
+        try:
+            for table in self._query_api.query(flux_fc_new, org=self._cfg.org):
+                for record in table.records:
+                    init_date = record.values.get("init_date", "") or ""
+                    if not init_date:
+                        continue
+                    vt_iso = record.get_time().isoformat()
+                    fields: dict = {"timestamp": vt_iso}
+                    fields.update({
+                        k: v for k, v in record.values.items()
+                        if k in _WEATHER_FIELDS and v is not None
+                    })
+                    raw_new.setdefault(init_date, {})[vt_iso] = fields
+        except Exception as exc:
+            logger.error("query_forecast_accuracy new-format error for %s: %s", station_id, exc)
+
+        # -- Legacy forecasts (no init_date tag — old data written before schema change) --
+        flux_fc_legacy = f"""
+from(bucket: "{self._cfg.bucket}")
+  |> range(start: {start_str}, stop: {end_str})
+  |> filter(fn: (r) => r._measurement == "{MEASUREMENT_FORECAST}")
+  |> filter(fn: (r) => r.station_id == "{station_id}")
+  |> filter(fn: (r) => not exists r.init_date)
+  |> pivot(rowKey: ["_time", "station_id", "network", "source", "model"],
+           columnKey: ["_field"], valueColumn: "_value")
+  |> sort(columns: ["_time"])
+"""
+        raw_legacy: dict[str, dict] = {}
+        try:
+            for table in self._query_api.query(flux_fc_legacy, org=self._cfg.org):
+                for record in table.records:
+                    vt_iso = record.get_time().isoformat()
+                    fields_l: dict = {"timestamp": vt_iso}
+                    fields_l.update({
+                        k: v for k, v in record.values.items()
+                        if k in _WEATHER_FIELDS and v is not None
+                    })
+                    existing = raw_legacy.get(vt_iso)
+                    if existing is None or len(fields_l) > len(existing):
+                        raw_legacy[vt_iso] = fields_l
+        except Exception as exc:
+            logger.error("query_forecast_accuracy legacy error for %s: %s", station_id, exc)
+
+        # -- Assemble forecasts list (newest init_date first) ---------------------
+        forecasts: list[dict] = []
+        for init_date in sorted(raw_new.keys(), reverse=True):
+            data = [row for _, row in sorted(raw_new[init_date].items())]
+            if data:
+                forecasts.append({"init_date": init_date, "data": data})
+        if raw_legacy:
+            legacy_data = [row for _, row in sorted(raw_legacy.items())]
+            forecasts.append({"init_date": None, "data": legacy_data})
+
+        return {"actual": actual, "forecasts": forecasts}
 
     # ------------------------------------------------------------------
     # Storage / ingestion stats

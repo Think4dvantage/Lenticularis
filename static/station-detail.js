@@ -663,6 +663,12 @@ function setRefreshLabel() {
     window.t('common.updated') + ' ' + new Date().toLocaleTimeString();
 }
 
+function openAccuracy() {
+  if (_stationId) {
+    window.location.href = `/forecast-accuracy?station_id=${encodeURIComponent(_stationId)}`;
+  }
+}
+
 function hexToRgba(hex, alpha) {
   const r = parseInt(hex.slice(1, 3), 16);
   const g = parseInt(hex.slice(3, 5), 16);

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Lenticularis — Station Detail</title>
+  <title>Lenticularis — Forecast Accuracy</title>
   <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
   <!-- date-fns adapter for Chart.js time axis -->
@@ -19,162 +19,7 @@
       min-height: 100vh;
     }
 
-    .station-header {
-      background: #1a1f2e;
-      border-bottom: 1px solid #2d3748;
-      padding: 12px 24px;
-      display: flex;
-      align-items: center;
-      gap: 16px;
-      flex-wrap: wrap;
-    }
-
-    .header-title {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-    }
-
-    .header-title h1 {
-      font-size: 1.2rem;
-      font-weight: 600;
-      color: #90cdf4;
-    }
-
-    .header-meta {
-      display: flex;
-      gap: 12px;
-      font-size: 0.78rem;
-      color: #718096;
-      align-items: center;
-      flex-wrap: wrap;
-    }
-
-    .network-badge {
-      display: inline-block;
-      padding: 2px 7px;
-      border-radius: 4px;
-      font-size: 0.72rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-    }
-    .network-meteoswiss { background: #2a4365; color: #90cdf4; }
-    .network-metar      { background: #2f855a; color: #c6f6d5; }
-    .network-holfuy     { background: #22543d; color: #9ae6b4; }
-    .network-slf        { background: #44337a; color: #d6bcfa; }
-    .network-windline   { background: #1f4e5f; color: #b2f5ea; }
-    .network-ecovitt    { background: #7b341e; color: #fbd38d; }
-    .network-unknown    { background: #2d3748; color: #a0aec0; }
-
-    .status-bar {
-      margin-left: auto;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 0.78rem;
-      color: #718096;
-    }
-    .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
-    .dot.green { background: #48bb78; }
-    .dot.grey  { background: #4a5568; }
-
-    .time-range-bar {
-      background: #1a1f2e;
-      padding: 10px 24px;
-      border-bottom: 1px solid #2d3748;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .time-range-bar span {
-      font-size: 0.8rem;
-      color: #718096;
-      margin-right: 4px;
-    }
-
-    .range-btn {
-      background: #2d3748;
-      border: 1px solid #4a5568;
-      border-radius: 6px;
-      color: #a0aec0;
-      padding: 5px 12px;
-      font-size: 0.82rem;
-      cursor: pointer;
-      transition: background 0.15s, color 0.15s;
-    }
-    .range-btn:hover { background: #3a4a5e; color: #e2e8f0; }
-    .range-btn.active { background: #2b6cb0; border-color: #3182ce; color: #fff; }
-
-    .charts-grid {
-      padding: 20px 24px;
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(560px, 1fr));
-      gap: 20px;
-    }
-
-    .chart-card {
-      background: #1a1f2e;
-      border: 1px solid #2d3748;
-      border-radius: 8px;
-      padding: 16px;
-    }
-
-    .chart-card h2 {
-      font-size: 0.88rem;
-      font-weight: 600;
-      color: #a0aec0;
-      margin-bottom: 12px;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-    }
-
-    .chart-wrapper {
-      position: relative;
-      height: 200px;
-    }
-
-    .chart-wrapper-rose {
-      position: relative;
-      height: 300px;
-    }
-
-    .loading-overlay {
-      text-align: center;
-      padding: 60px 0;
-      color: #4a5568;
-    }
-
-    .spinner {
-      border: 2px solid #2d3748;
-      border-top: 2px solid #63b3ed;
-      border-radius: 50%;
-      width: 24px;
-      height: 24px;
-      animation: spin 0.8s linear infinite;
-      display: inline-block;
-      margin-bottom: 12px;
-    }
-
-    @keyframes spin { to { transform: rotate(360deg); } }
-
-    .error-banner {
-      background: #742a2a;
-      color: #feb2b2;
-      padding: 12px 24px;
-      font-size: 0.85rem;
-      display: none;
-    }
-
-    .no-data-note {
-      text-align: center;
-      padding: 30px 0;
-      color: #4a5568;
-      font-size: 0.82rem;
-    }
-
-    /* ── Shared nav ───────────────────────────── */
+    /* ── Nav ─────────────────────────────────── */
     .top-nav {
       background: #1a1f2e;
       border-bottom: 1px solid #2d3748;
@@ -204,19 +49,232 @@
     .nav-link:hover { background: #2d3748; color: #e2e8f0; }
     .nav-link.active { background: #2d4a6e; color: #90cdf4; font-weight: 500; }
     .nav-user { display: flex; align-items: center; gap: 10px; margin-left: auto; }
-    .nav-user-name { font-size: 0.85rem; color: #90cdf4; }
     .nav-btn { background: transparent; border: 1px solid #4a5568; color: #a0aec0; font-size: 0.8rem; padding: 4px 10px; border-radius: 5px; cursor: pointer; transition: background 0.15s; }
     .nav-btn:hover { background: #2d3748; color: #e2e8f0; }
     #navLangPicker { display: flex; gap: 2px; margin-left: 8px; }
     .lang-btn { background: transparent; border: 1px solid #4a5568; color: #718096; font-size: 0.72rem; padding: 3px 7px; border-radius: 4px; cursor: pointer; transition: background 0.15s; }
     .lang-btn:hover { background: #2d3748; color: #e2e8f0; }
     .lang-btn.active { background: #2d4a6e; color: #90cdf4; border-color: #4a7bab; }
+
+    /* ── Station header ───────────────────────── */
+    .station-header {
+      background: #1a1f2e;
+      border-bottom: 1px solid #2d3748;
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .header-title { display: flex; flex-direction: column; gap: 2px; }
+    .header-title h1 { font-size: 1.1rem; font-weight: 600; color: #90cdf4; }
+    .header-meta {
+      display: flex;
+      gap: 12px;
+      font-size: 0.78rem;
+      color: #718096;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .network-badge {
+      display: inline-block;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .network-meteoswiss { background: #2a4365; color: #90cdf4; }
+    .network-metar      { background: #2f855a; color: #c6f6d5; }
+    .network-holfuy     { background: #22543d; color: #9ae6b4; }
+    .network-slf        { background: #44337a; color: #d6bcfa; }
+    .network-windline   { background: #1f4e5f; color: #b2f5ea; }
+    .network-ecovitt    { background: #7b341e; color: #fbd38d; }
+    .network-unknown    { background: #2d3748; color: #a0aec0; }
+    .status-bar {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.78rem;
+      color: #718096;
+    }
+    .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+    .dot.green { background: #48bb78; }
+    .dot.grey  { background: #4a5568; }
+
+    /* ── Controls bar ────────────────────────── */
+    .controls-bar {
+      background: #1a1f2e;
+      padding: 10px 24px;
+      border-bottom: 1px solid #2d3748;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .controls-bar label {
+      font-size: 0.8rem;
+      color: #718096;
+      white-space: nowrap;
+    }
+
+    .station-select {
+      background: #2d3748;
+      border: 1px solid #4a5568;
+      border-radius: 6px;
+      color: #e2e8f0;
+      padding: 5px 10px;
+      font-size: 0.82rem;
+      cursor: pointer;
+      min-width: 220px;
+      max-width: 340px;
+    }
+    .station-select:focus { outline: none; border-color: #63b3ed; }
+
+    .date-input {
+      background: #2d3748;
+      border: 1px solid #4a5568;
+      border-radius: 6px;
+      color: #e2e8f0;
+      padding: 5px 10px;
+      font-size: 0.82rem;
+      cursor: pointer;
+    }
+    .date-input:focus { outline: none; border-color: #63b3ed; }
+
+    .divider-v {
+      width: 1px;
+      height: 20px;
+      background: #2d3748;
+      flex-shrink: 0;
+    }
+
+    .range-btn {
+      background: #2d3748;
+      border: 1px solid #4a5568;
+      border-radius: 6px;
+      color: #a0aec0;
+      padding: 5px 12px;
+      font-size: 0.82rem;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    .range-btn:hover { background: #3a4a5e; color: #e2e8f0; }
+    .range-btn.active { background: #2b6cb0; border-color: #3182ce; color: #fff; }
+
+    /* ── Legend strip ────────────────────────── */
+    .legend-strip {
+      background: #161b29;
+      border-bottom: 1px solid #2d3748;
+      padding: 8px 24px;
+      display: flex;
+      gap: 20px;
+      flex-wrap: wrap;
+      font-size: 0.78rem;
+      color: #a0aec0;
+    }
+    .legend-item { display: flex; align-items: center; gap: 6px; }
+    .legend-line {
+      display: inline-block;
+      width: 28px;
+      height: 2px;
+    }
+    .legend-line.dashed {
+      background: repeating-linear-gradient(
+        to right,
+        currentColor 0,
+        currentColor 6px,
+        transparent 6px,
+        transparent 10px
+      );
+    }
+    .legend-line.dotted {
+      background: repeating-linear-gradient(
+        to right,
+        currentColor 0,
+        currentColor 3px,
+        transparent 3px,
+        transparent 7px
+      );
+    }
+    .legend-line.dotted2 {
+      background: repeating-linear-gradient(
+        to right,
+        currentColor 0,
+        currentColor 2px,
+        transparent 2px,
+        transparent 6px
+      );
+    }
+
+    /* ── Charts ──────────────────────────────── */
+    .charts-grid {
+      padding: 20px 24px;
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 20px;
+    }
+    .chart-card {
+      background: #1a1f2e;
+      border: 1px solid #2d3748;
+      border-radius: 8px;
+      padding: 16px;
+    }
+    .chart-card h2 {
+      font-size: 0.88rem;
+      font-weight: 600;
+      color: #a0aec0;
+      margin-bottom: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .chart-wrapper { position: relative; height: 280px; }
+
+    /* ── States ──────────────────────────────── */
+    .loading-overlay {
+      text-align: center;
+      padding: 60px 0;
+      color: #4a5568;
+    }
+    .spinner {
+      border: 2px solid #2d3748;
+      border-top: 2px solid #63b3ed;
+      border-radius: 50%;
+      width: 24px;
+      height: 24px;
+      animation: spin 0.8s linear infinite;
+      display: inline-block;
+      margin-bottom: 12px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .error-banner {
+      background: #742a2a;
+      color: #feb2b2;
+      padding: 12px 24px;
+      font-size: 0.85rem;
+      display: none;
+    }
+    .no-data-note {
+      text-align: center;
+      padding: 30px 0;
+      color: #4a5568;
+      font-size: 0.82rem;
+    }
+    .pick-station-note {
+      text-align: center;
+      padding: 60px 0;
+      color: #4a5568;
+      font-size: 0.9rem;
+    }
   </style>
 </head>
 <body>
 
 <nav class="top-nav">
-  <span class="nav-brand">🪁 Lenticularis</span>
+  <a href="/" class="nav-brand">🪁 Lenticularis</a>
   <div class="nav-links">
     <a href="/" class="nav-link" data-i18n="nav.map">Map</a>
     <a href="/stations" class="nav-link" data-i18n="nav.stations">Stations</a>
@@ -230,12 +288,11 @@
 
 <header class="station-header">
   <div class="header-title">
-    <h1 id="stationName" data-i18n="station_detail.loading">Loading…</h1>
+    <h1 id="stationName" data-i18n="forecast_accuracy.title">Forecast Accuracy</h1>
     <div class="header-meta">
       <span id="networkBadge"></span>
       <span id="stationCanton"></span>
       <span id="stationElevation"></span>
-      <span id="stationId" style="font-family:monospace;font-size:0.72rem;color:#718096"></span>
     </div>
   </div>
   <div class="status-bar">
@@ -246,22 +303,36 @@
 
 <div class="error-banner" id="errorBanner"></div>
 
-<div class="time-range-bar">
-  <span data-i18n="station_detail.show">Show:</span>
-  <button class="range-btn" data-hours="6"   onclick="setRange(6)"   data-i18n="station_detail.ranges.6h">6 h</button>
+<div class="controls-bar">
+  <label data-i18n="forecast_accuracy.station_label">Station</label>
+  <select class="station-select" id="stationPicker" onchange="onStationChange()">
+    <option value="" data-i18n="forecast_accuracy.pick_station">Select a station to get started</option>
+  </select>
+
+  <div class="divider-v"></div>
+
+  <label for="fromDate" data-i18n="forecast_accuracy.from_label">From</label>
+  <input type="date" class="date-input" id="fromDate" onchange="onDateChange()" />
+
+  <div class="divider-v"></div>
+
+  <span data-i18n="forecast_accuracy.show">Show:</span>
   <button class="range-btn active" data-hours="24"  onclick="setRange(24)"  data-i18n="station_detail.ranges.24h">24 h</button>
-  <button class="range-btn" data-hours="48"  onclick="setRange(48)"  data-i18n="station_detail.ranges.48h">48 h</button>
-  <button class="range-btn" data-hours="168" onclick="setRange(168)" data-i18n="station_detail.ranges.7days">7 days</button>
-  <button class="range-btn" data-hours="720" onclick="setRange(720)" data-i18n="station_detail.ranges.30days">30 days</button>
-  <span style="width:1px;height:20px;background:#2d3748;flex-shrink:0;margin:0 4px"></span>
-  <button class="range-btn" id="forecastBtn" onclick="toggleForecast()" data-i18n="station_detail.forecast_button">📡 Forecast</button>
-  <span style="width:1px;height:20px;background:#2d3748;flex-shrink:0;margin:0 4px"></span>
-  <button class="range-btn" id="accuracyBtn" onclick="openAccuracy()" data-i18n="station_detail.accuracy_button">📊 Accuracy</button>
+  <button class="range-btn"        data-hours="48"  onclick="setRange(48)"  data-i18n="station_detail.ranges.48h">48 h</button>
+  <button class="range-btn"        data-hours="168" onclick="setRange(168)" data-i18n="station_detail.ranges.7days">7 days</button>
+  <button class="range-btn"        data-hours="720" onclick="setRange(720)" data-i18n="station_detail.ranges.30days">30 days</button>
 </div>
 
-<div id="loadingOverlay" class="loading-overlay">
+<!-- Global legend strip — populated dynamically by forecast-accuracy.js -->
+<div class="legend-strip" id="legendStrip" style="display:none"></div>
+
+<div id="pickStationNote" class="pick-station-note" data-i18n="forecast_accuracy.pick_station">
+  Select a station to get started
+</div>
+
+<div id="loadingOverlay" class="loading-overlay" style="display:none">
   <div class="spinner"></div>
-  <p data-i18n="station_detail.loading_history">Loading history…</p>
+  <p data-i18n="forecast_accuracy.loading">Loading…</p>
 </div>
 
 <div class="charts-grid" id="chartsGrid" style="display:none">
@@ -271,13 +342,7 @@
     <div class="chart-wrapper"><canvas id="chart-wind"></canvas></div>
   </div>
 
-  <!-- Wind direction rose (heatmap) -->
-  <div class="chart-card" id="card-wind_direction" style="display:none">
-    <h2 data-i18n="station_detail.charts.wind_direction_heatmap">Wind Direction — Heatmap</h2>
-    <div class="chart-wrapper-rose"><canvas id="chart-wind_direction"></canvas></div>
-  </div>
-
-  <!-- Wind direction line chart -->
+  <!-- Wind direction line -->
   <div class="chart-card" id="card-wind_direction_line" style="display:none">
     <h2 data-i18n="station_detail.charts.wind_direction_history">Wind Direction — History</h2>
     <div class="chart-wrapper"><canvas id="chart-wind_direction_line"></canvas></div>
@@ -314,17 +379,18 @@
   </div>
 </div>
 
-<div id="noDataNote" class="no-data-note" style="display:none" data-i18n="station_detail.no_data">
-  No data available for the selected time range.
+<div id="noDataNote" class="no-data-note" style="display:none" data-i18n="forecast_accuracy.no_data">
+  No data for the selected station and time range.
 </div>
 
-<script src="/static/station-detail.js"></script>
+<script src="/static/forecast-accuracy.js"></script>
 <script type="module">
   import { initI18n, renderLangPicker } from '/static/i18n.js';
   import { renderNavAuth } from '/static/auth.js';
   await initI18n();
   renderNavAuth('stations');
   renderLangPicker();
+
 </script>
 </body>
 </html>

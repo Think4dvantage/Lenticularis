@@ -12,6 +12,7 @@ Paragliding weather decision-support system for Switzerland. Collects data from 
 - **Föhn monitor** — virtual föhn stations computed from N–S pressure deltas; dedicated `foehn.html` dashboard with live/historical/forecast modes and editable thresholds
 - **Webcam links** — attach webcam URLs (incl. Roundshot with bearing) to any ruleset; shown as cards in the analysis view with a Roundshot badge
 - **Preset launch sites** — admin-curated ruleset templates; pilots pick a preset when creating a new site and customise thresholds freely; admin panel "Preset Sites" tab to manage
+- **Forecast accuracy dashboard** — compare past forecasts against observed values per station and field; overlaid Chart.js lines (actual + per-init_date model runs); accessible from station-detail via "📊 Accuracy" button
 - **Admin panel** — user management (roles: pilot / customer / admin), collector status and runtime control, Föhn config editor, preset site management
 - **Multilanguage UI** — EN / DE / FR / IT; auto-detected from browser, switchable from nav, persisted to `localStorage`
 - **Auth** — JWT register/login; pilot-owned sites and rule sets; admin role for user/collector management
@@ -112,7 +113,7 @@ static/
 | v1.0 — Multilanguage EN/DE/FR/IT + mobile-responsive UI | ✅ Shipped |
 | v1.1 — Admin panel + customer role + Föhn config editor | ✅ Shipped |
 | v1.2 — Webcam links + preset launch sites + map fixes | ✅ Shipped |
-| v1.3 — Forecast accuracy dashboard | Planned |
+| v1.3 — Forecast accuracy dashboard | ✅ Shipped |
 | v1.4 — Rule types: Risk + Opportunity | Planned |
 | v1.5 — Pre-seeded launch site defaults | Planned |
 | v1.6 — AI rule building + AI weather analysis + trusted users | Planned |

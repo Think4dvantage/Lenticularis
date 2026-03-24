@@ -226,6 +226,10 @@ def create_app() -> FastAPI:
         @app.get("/admin", include_in_schema=False)
         async def serve_admin():
             return FileResponse(str(static_dir / "admin.html"))
+
+        @app.get("/forecast-accuracy", include_in_schema=False)
+        async def serve_forecast_accuracy():
+            return FileResponse(str(static_dir / "forecast-accuracy.html"))
     else:
         @app.get("/", include_in_schema=False)
         async def root():
