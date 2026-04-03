@@ -403,6 +403,26 @@ Pilot-owned launch site CRUD; site markers on map with distinct icon.
 
 ## Backlog (unordered — pick any item next)
 
+### VKPI Safetychat replacement (high priority for VKPI org)
+
+These features replace the current WhatsApp-based go/no-go coordination workflow described at vkpi.ch/safety/vkpi-safetychat/.
+
+- **TIMEOUT button**: prominent button on org dashboard; any org member can trigger; requires a reason (free text or quick-pick: Outflow / Wind / Front approaching / Landing turbulence); sends push notification to all org members immediately; stored with timestamp and caller identity.
+
+- **In-app voting**: 10-minute voting window opens after a TIMEOUT; each daily lead pilot casts one vote (🔴 Stop / 🟠 Continue with caution); auto-tally at 10 min with VKPI tie-break (tie = Red); non-responding companies counted as accepting majority; result and full vote record stored permanently. New SQLite table: `org_timeouts` (`id`, `org_id`, `called_by`, `reason`, `called_at`, `voting_closes_at`, `outcome`, `weather_snapshot_json`); `org_timeout_votes` (`id`, `timeout_id`, `company_id`, `pilot_id`, `vote`, `cast_at`).
+
+- **Daily lead pilot designation**: org members can mark themselves as daily lead for the day; only the daily lead can cast their company's vote in a TIMEOUT; visible on org dashboard so all members know who is responsible. New column `is_daily_lead` (boolean, reset at midnight) on `users` or a separate `daily_leads` table scoped per org per day.
+
+- **Automatic TIMEOUT suggestion**: when Lenticularis detects a Green → Orange or Green → Red transition on any org ruleset, surface a "⚠ Conditions changed — call TIMEOUT?" prompt to all logged-in org members (no forced trigger, human still decides).
+
+- **Resumption tracking**: after a Red decision, dashboard shows a 30-minute countdown; monitors org rulesets; sends push notification when conditions recover to Green ("Conditions improved — resumption possible").
+
+- **Decision audit log**: every TIMEOUT event stored with: caller, reason, live weather snapshot at trigger time (wind/gust/direction from key stations pulled from InfluxDB), per-company votes, outcome, resumption timestamp. Exportable as CSV. Replaces WhatsApp chat history as the official decision record. Endpoint: `GET /api/org/{slug}/timeouts?from=&to=`.
+
+- **Company layer within org**: lightweight grouping of users into companies within an org (e.g. "Air Taxi Interlaken", "Paragliding Interlaken" under VKPI umbrella); one-vote-per-company logic in TIMEOUT; company name shown on dashboard. New SQLite table: `org_companies` (`id`, `org_id`, `name`); `company_id` FK on `users`.
+
+
+
 - **Org statistics page**: per-organisation flyability statistics (same metrics as personal stats but aggregated across all org rulesets); accessible at `/org/{slug}/stats` for org members
 
 - **Customer role — scoped access**: `customer` users can only see rulesets explicitly shared with them; admin assigns which rulesets a customer can view; no rule editing, no gallery; read-only analysis + map view
