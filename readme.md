@@ -13,7 +13,9 @@ Paragliding weather decision-support system for Switzerland. Collects data from 
 - **Webcam links** — attach webcam URLs (incl. Roundshot with bearing) to any ruleset; shown as cards in the analysis view with a Roundshot badge
 - **Preset launch sites** — admin-curated ruleset templates; pilots pick a preset when creating a new site and customise thresholds freely; admin panel "Preset Sites" tab to manage
 - **Forecast accuracy dashboard** — compare past forecasts against observed values per station and field; overlaid Chart.js lines (actual + per-init_date model runs); accessible from station-detail via "📊 Accuracy" button
-- **Multi-tenant org system** — `Organisation` model with `org_admin` / `org_pilot` roles; each org gets a subdomain (`vkpi.lenti.cloud`); public traffic-light dashboard + authenticated condition breakdown + 24h history strip; org-scoped ruleset editor (no personal rules mixed in)
+- **Multi-tenant org system** — `Organisation` model with `org_admin` / `org_pilot` roles; each org gets a subdomain (`vkpi.lenti.cloud`); public traffic-light dashboard + authenticated condition breakdown + 24h history strip; org-scoped ruleset editor (personal and org rules fully isolated)
+- **AI rule suggestions** — natural-language condition input powered by local Ollama; backend pre-processing pipeline resolves Swiss German wind terminology (Südkomponente, Windböen, etc.) to explicit degrees/units before the LLM call; fuzzy station name matching; geographic station lookup by location name (50+ Swiss sites); multilanguage (DE/FR/IT/EN)
+- **Help / FAQ** — `/help` page with 12 accordion sections and anchor deep-links; contextual `?` tooltip buttons on rule editor, Föhn page, and stats page
 - **Admin panel** — user management (roles: pilot / customer / admin / org_admin / org_pilot), organisation management (create org, assign users), collector status and runtime control, Föhn config editor, preset site management
 - **Multilanguage UI** — EN / DE / FR / IT; auto-detected from browser, switchable from nav, persisted to `localStorage`
 - **Auth** — JWT register/login; pilot-owned sites and rule sets; admin role for user/collector management; `org_id` embedded in JWT for org-scoped access
@@ -118,6 +120,7 @@ static/
 | v1.3 — Forecast accuracy dashboard | ✅ Shipped |
 | v1.4 — Opportunity site type + AI rule suggestions (Ollama) | ✅ Shipped |
 | v1.5 — Multi-tenant org system (VKPI) | ✅ Shipped |
+| v1.6 — Help/FAQ page + AI input improvements + org ruleset isolation fix | ✅ Shipped |
 
 Remaining work items are tracked as an unordered backlog in [plan-lenticularisStructure.prompt.md](plan-lenticularisStructure.prompt.md).
 

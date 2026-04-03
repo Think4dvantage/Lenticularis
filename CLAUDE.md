@@ -148,9 +148,9 @@ Use the same nested key structure as existing keys (e.g. `"admin.users.col_trust
 
 ---
 
-## Current Version: v1.5 (shipped)
+## Current Version: v1.6 (shipped)
 
-Shipped so far: v0.1 → v1.5 incl. multi-tenant org system (VKPI), Opportunity site type, AI rule suggestions (Ollama), multilanguage UI, admin panel, forecast accuracy, föhn monitor, webcams, preset sites.
+Shipped so far: v0.1 → v1.6 incl. Help/FAQ, AI input improvements, multi-tenant org system (VKPI), Opportunity site type, AI rule suggestions (Ollama), multilanguage UI, admin panel, forecast accuracy, föhn monitor, webcams, preset sites.
 
 ### Org system (v1.5) — key patterns
 
@@ -159,5 +159,24 @@ Shipped so far: v0.1 → v1.5 incl. multi-tenant org system (VKPI), Opportunity 
 - **Landing picker in org mode**: `loadLandingRulesets()` fetches from `/api/org/{slug}/rulesets` instead of `/api/rulesets` so only org-owned landing zones appear.
 - **Editor in org mode**: Opportunity button and Public/Private toggle are hidden.
 - **Subdomain routing**: `vkpi.lenti.cloud` / `vkpi.lenti-dev.lg4.ch` serve `org-dashboard.html` via `Host` header detection in `main.py`. Direct path `/org/{slug}` also works for dev.
+- **Org ruleset isolation**: `GET /api/rulesets` filters `org_id IS NULL` — org-scoped rulesets never appear on the personal map or ruleset list.
+
+### AI rule suggestions (v1.6) — key patterns
+
+`routers/ai.py` — single Ollama call with three layers of Python pre-processing:
+
+1. **`_normalize_description()`** — regex pipeline that annotates natural-language wind terms with explicit degrees before the prompt is built. Handles DE/FR/IT/EN. Examples: `Südkomponente → Südkomponente [in_direction_range 113–248°, SE–SW]`, `Windböen unter 25km/h → wind_gust < 25 km/h`. Add new patterns to `_DIR_PATTERNS` / `_SPEED_PATTERNS`.
+2. **`_fuzzy_station_hints()`** — prefix/substring match of description words against station names, resolves abbreviations (e.g. "amis" → Amisbühl). Operates on the normalised description.
+3. **`_geo_station_hints()`** — detects known Swiss location names (`_KNOWN_LOCATIONS` dict) in the description, runs haversine distance against stations with coordinates, returns nearest stations within `_GEO_RADIUS_KM` (20 km). Elevation-filtered when "same height / gleiche Höhe" is in the description. Extend `_KNOWN_LOCATIONS` to add more sites.
+- **`StationHint`** carries `latitude`, `longitude`, `elevation` (sent by the frontend from `allStations`).
+- **`_validate_conditions()`** is the hard guard — rejects any condition with invalid field/operator/colour regardless of what the model returned.
+- User input is wrapped in `<input>…</input>` delimiters to signal to the model that it is data, not instructions (prompt injection mitigation).
+
+### Help page (v1.6) — key patterns
+
+- `static/help.html` — standalone FAQ page, accordion via `<details>/<summary>`, anchor IDs for deep-linking.
+- `shared.css` — `.help-tip` class for inline `?` tooltip buttons used on editor, Föhn, and stats pages.
+- All `?` links open `/help#<anchor>` in a new tab.
+- Nav link `nav.help` present in all 4 locale files and all HTML pages.
 
 Next work items are tracked as an unordered backlog in `plan-lenticularisStructure.prompt.md`.

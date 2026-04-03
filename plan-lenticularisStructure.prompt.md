@@ -362,6 +362,17 @@ Pilot-owned launch site CRUD; site markers on map with distinct icon.
 - InfluxDB `rule_decisions` now tagged with `site_type` (launch/landing/opportunity)
 - AI rule suggestions (`POST /api/ai/suggest-conditions`) also shipped in this cycle (Ollama-powered)
 
+### v1.6 — Help / FAQ + AI Input Improvements ✅ Shipped
+
+- `static/help.html`: accordion FAQ page (12 sections, jump bar, anchor deep-links); `/help` route in `main.py`; `nav.help` key in all 4 locales; Help nav link on all pages
+- Contextual `?` tooltip buttons (`.help-tip`) on rule editor, Föhn page, stats page linking to relevant help anchors
+- **AI input normaliser** (`_normalize_description`): regex pipeline converts natural-language wind direction terms (DE/FR/IT/EN) to explicit degree ranges before the Ollama prompt is built — e.g. `Südkomponente → [in_direction_range 113–248°]`, `Windböen unter 25km/h → wind_gust < 25 km/h`
+- **Fuzzy station name matching** (`_fuzzy_station_hints`): resolves abbreviations/local names (e.g. "amis" → Amisbühl) via prefix/substring match
+- **Geographic station matching** (`_geo_station_hints`): detects Swiss location names in description, returns nearby stations by haversine distance; elevation-filtered when "same height / gleiche Höhe" mentioned; `_KNOWN_LOCATIONS` table covers ~50 Swiss PG/mountain sites
+- `StationHint` extended with `latitude`, `longitude`, `elevation`; frontend passes these from `allStations`
+- System prompt hardened: multilanguage input, compass reference table with broad-sector shortcuts, "one condition per station" rule for group references, prompt injection mitigation via `<input>` delimiters
+- **Bug fix**: `GET /api/rulesets` now filters `org_id IS NULL` — org rulesets no longer appear on the personal map
+
 ### v1.5 — Multi-tenant Org System (VKPI) ✅ Shipped
 
 **Goal**: Replace WhatsApp-based go/no-go coordination for commercial tandem operators (VKPI Interlaken) with a dedicated subdomain dashboard. Generic org layer to scale to future customers.
