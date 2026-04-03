@@ -95,13 +95,14 @@
 <body>
 
 <nav class="top-nav">
-  <span class="nav-brand">🪁 Lenticularis</span>
-  <div class="nav-links">
+  <span class="nav-brand" id="navBrand">🪁 Lenticularis</span>
+  <div class="nav-links" id="navLinks">
     <a href="/" class="nav-link" data-i18n="nav.map">Map</a>
     <a href="/stations" class="nav-link" data-i18n="nav.stations">Stations</a>
     <a href="/rulesets" class="nav-link active" data-i18n="nav.rulesets">Rule Sets</a>
     <a href="/stats" class="nav-link" data-i18n="nav.stats">Statistics</a>
     <a href="/foehn" class="nav-link" data-i18n="nav.foehn">Föhn</a>
+    <a href="/help" class="nav-link" data-i18n="nav.help">Help</a>
   </div>
   <div id="navLangPicker"></div>
   <div class="nav-user" id="navUser"></div>
@@ -116,12 +117,18 @@
 
   <!-- Main content (hidden until authenticated) -->
   <div id="mainContent" style="display:none">
+    <!-- Org context banner (hidden in personal mode) -->
+    <div id="orgBanner" style="display:none;margin-bottom:20px;padding:10px 16px;background:#1a2535;border:1px solid #2d4a6e;border-radius:8px;display:none;align-items:center;gap:12px">
+      <span style="color:#90cdf4;font-size:0.85rem" id="orgBannerText"></span>
+      <a id="orgBannerBack" href="#" style="color:#718096;font-size:0.82rem;text-decoration:none;margin-left:auto" data-i18n="rulesets.back_to_org">← Back to dashboard</a>
+    </div>
+
     <div class="page-header">
       <div>
-        <h1 data-i18n="rulesets.title">My Rule Sets</h1>
-        <p data-i18n="rulesets.subtitle">Each rule set defines conditions for one launch site or flying area.</p>
+        <h1 id="pageTitle" data-i18n="rulesets.title">My Rule Sets</h1>
+        <p id="pageSubtitle" data-i18n="rulesets.subtitle">Each rule set defines conditions for one launch site or flying area.</p>
       </div>
-      <a href="/ruleset-editor" class="btn btn-primary" data-i18n="rulesets.new_ruleset">＋ New rule set</a>
+      <a id="newRulesetBtn" href="/ruleset-editor" class="btn btn-primary" data-i18n="rulesets.new_ruleset">＋ New rule set</a>
     </div>
 
     <div class="cards" id="cardList">
@@ -131,7 +138,7 @@
     <div class="empty-state" id="emptyState" style="display:none">
       <div class="big">🏔️</div>
       <p data-i18n="rulesets.no_rulesets">No rule sets yet. Create your first one to start getting flyability decisions.</p>
-      <a href="/ruleset-editor" class="btn btn-primary" data-i18n="rulesets.create_first">＋ Create rule set</a>
+      <a id="createFirstBtn" href="/ruleset-editor" class="btn btn-primary" data-i18n="rulesets.create_first">＋ Create rule set</a>
     </div>
   </div>
 </div>
@@ -143,16 +150,69 @@
   renderNavAuth('rulesets');
   renderLangPicker();
 
+  // Detect org context from ?org= param OR from subdomain (e.g. vkpi.lenti-dev.lg4.ch)
+  function _detectOrgSlug() {
+    const fromParam = new URLSearchParams(location.search).get('org');
+    if (fromParam) return fromParam;
+    const host = window.location.hostname;
+    const parts = host.split('.');
+    const mainHosts = new Set(['localhost', 'lenti', 'lenti-dev', 'www', '127']);
+    if (parts.length >= 2 && !mainHosts.has(parts[0])) return parts[0];
+    return null;
+  }
+  const orgSlug = _detectOrgSlug();
   const user = getUser();
+
   if (!user) {
     document.getElementById('authGate').classList.add('visible');
   } else {
     document.getElementById('mainContent').style.display = '';
+    if (orgSlug) setupOrgMode(orgSlug);
     loadRuleSets();
   }
 
+  function setupOrgMode(slug) {
+    const banner = document.getElementById('orgBanner');
+    banner.style.display = 'flex';
+    document.getElementById('orgBannerText').textContent = slug.toUpperCase();
+    document.getElementById('orgBannerBack').href = `/org/${slug}`;
+
+    const title = document.getElementById('pageTitle');
+    title.textContent = window.t('rulesets.org_title');
+    title.removeAttribute('data-i18n');
+
+    const subtitle = document.getElementById('pageSubtitle');
+    subtitle.textContent = window.t('rulesets.org_subtitle', { name: slug.toUpperCase() });
+    subtitle.removeAttribute('data-i18n');
+
+    const editorUrl = `/ruleset-editor?org=${slug}`;
+    document.getElementById('newRulesetBtn').href = editorUrl;
+    document.getElementById('createFirstBtn').href = editorUrl;
+
+    applyOrgNav(slug, '/rulesets');
+  }
+
+  function applyOrgNav(slug, personalPath) {
+    const host = window.location.hostname;
+    const mainHost = host.startsWith(slug + '.') ? host.slice(slug.length + 1) : host;
+    const port = window.location.port ? `:${window.location.port}` : '';
+    const personalUrl = `${window.location.protocol}//${mainHost}${port}${personalPath}`;
+    const orgDashUrl = host.startsWith(slug + '.') ? `${window.location.protocol}//${host}${port}/` : `/org/${slug}`;
+    const orgRulesUrl = `/rulesets?org=${slug}`;
+
+    const brand = document.getElementById('navBrand');
+    brand.innerHTML = `<a href="${orgDashUrl}" style="color:#90cdf4;text-decoration:none">${slug.toUpperCase()}</a>`;
+
+    const navLinks = document.getElementById('navLinks');
+    navLinks.innerHTML = `
+      <a href="${orgDashUrl}" class="nav-link">${slug.toUpperCase()}</a>
+      <a href="${orgRulesUrl}" class="nav-link active">${slug.toUpperCase()} ${window.t('nav.rulesets')}</a>
+      <a href="${personalUrl}" class="nav-link">${window.t('nav.personal_rulesets')}</a>`;
+  }
+
   async function loadRuleSets() {
-    const res = await fetchAuth('/api/rulesets');
+    const url = orgSlug ? `/api/org/${orgSlug}/rulesets` : '/api/rulesets';
+    const res = await fetchAuth(url);
     if (!res.ok) return;
     const sets = await res.json();
     render(sets);
@@ -163,14 +223,19 @@
     const empty = document.getElementById('emptyState');
     if (sets.length === 0) { empty.style.display = ''; return; }
     list.innerHTML = sets.map(rs => {
-      const isLanding = rs.site_type === 'landing';
+      const isLanding     = rs.site_type === 'landing';
+      const isOpportunity = rs.site_type === 'opportunity';
+      const siteIcon  = isOpportunity ? '✦' : isLanding ? '⛑' : '▲';
+      const siteBadge = isOpportunity
+        ? `<span class="badge" style="background:#1f2a1a;color:#a0e070;border:1px solid #4a7a20">${window.t('editor.opportunity_site')}</span>`
+        : `<span class="badge" style="background:#1a2530;color:#90cdf4;border:1px solid #2a4a6e">${isLanding ? window.t('rulesets.landing_zone') : window.t('rulesets.launch')}</span>`;
       return `
       <div class="card" id="card-${rs.id}">
-        <div class="card-icon" style="font-size:1.2rem">${isLanding ? '⛑' : '▲'}</div>
+        <div class="card-icon" style="font-size:1.2rem">${siteIcon}</div>
         <a class="card-body" href="/ruleset-analysis?id=${rs.id}">
           <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
             <span class="card-title">${esc(rs.name)}</span>
-            <span class="badge" style="background:#1a2530;color:#90cdf4;border:1px solid #2a4a6e">${isLanding ? window.t('rulesets.landing_zone') : window.t('rulesets.launch')}</span>
+            ${siteBadge}
             <span class="badge ${rs.is_public ? 'badge-public' : 'badge-private'}">${rs.is_public ? window.t('rulesets.public') : window.t('rulesets.private')}</span>
             <span class="decision-badge badge-loading" id="decision-${rs.id}">⏳ …</span>
             <span id="landing-badges-${rs.id}"></span>

@@ -8,7 +8,10 @@
     "admin": "Admin",
     "sign_in": "Anmelden",
     "sign_out": "Abmelden",
-    "connecting": "Verbinde…"
+    "connecting": "Verbinde…",
+    "personal_workspace": "Persönlicher Bereich →",
+    "personal_rulesets": "Persönliche Regelwerke",
+    "help": "Hilfe"
   },
   "common": {
     "save": "Speichern",
@@ -124,7 +127,10 @@
     "delete_confirm": "Dieses Regelwerk und alle Bedingungen löschen?",
     "badge_launch_green": "🟢 START",
     "badge_launch_orange": "🟠 START",
-    "badge_launch_red": "🔴 START"
+    "badge_launch_red": "🔴 START",
+    "org_title": "Organisations-Regelwerke",
+    "org_subtitle": "Regelwerke für {name}",
+    "back_to_org": "← Zurück zum Dashboard"
   },
   "editor": {
     "new_title": "Neues Regelwerk",
@@ -477,6 +483,26 @@
     "webcams_title": "Webcams",
     "webcam_open": "↗ Öffnen"
   },
+  "org": {
+    "status_green": "Fliegen erlaubt",
+    "status_orange": "Vorsicht — Bedingungen beobachten",
+    "status_red": "Fliegen gestoppt",
+    "last_updated": "Zuletzt aktualisiert",
+    "minutes_ago": "vor {n} Min.",
+    "just_now": "gerade eben",
+    "login_for_details": "Anmelden für Details",
+    "manage_rules": "Regeln verwalten",
+    "conditions_title": "Aktive Bedingungen",
+    "timeline_title": "48-Stunden-Übersicht",
+    "no_rulesets": "Noch keine Regeln konfiguriert.",
+    "no_conditions": "Keine Bedingungen definiert.",
+    "loading": "Status wird geladen…",
+    "col_station": "Station",
+    "col_field": "Feld",
+    "col_condition": "Bedingung",
+    "col_actual": "Aktuell",
+    "col_triggered": "Ausgelöst"
+  },
   "admin": {
     "title": "Admin-Panel",
     "subtitle": "Benutzer und Kollektor-Konfiguration verwalten.",
@@ -485,7 +511,25 @@
       "users": "Benutzer",
       "collectors": "Kollektoren",
       "foehn_config": "Föhn-Konfig",
-      "presets": "Startplätze"
+      "presets": "Startplätze",
+      "orgs": "Organisationen"
+    },
+    "orgs": {
+      "title": "Organisationen",
+      "hint": "Jede Organisation erhält eine Subdomain (z. B. vkpi.lenti.cloud) mit eigenem Dashboard.",
+      "total": "{n} Organisationen",
+      "col_slug": "Slug",
+      "col_name": "Name",
+      "col_description": "Beschreibung",
+      "col_created": "Erstellt",
+      "no_orgs": "Noch keine Organisationen.",
+      "create_title": "Organisation erstellen",
+      "slug_placeholder": "z. B. vkpi",
+      "name_placeholder": "z. B. VKPI Interlaken",
+      "description_placeholder": "Optionale Beschreibung",
+      "create_btn": "Erstellen",
+      "creating": "Wird erstellt…",
+      "slug_hint": "Slug wird zur Subdomain — Kleinbuchstaben, keine Leerzeichen."
     },
     "foehn_config": {
       "save": "Speichern",
@@ -523,6 +567,10 @@
       "role_pilot": "Pilot",
       "role_customer": "Kunde",
       "role_admin": "Admin",
+      "role_org_admin": "Org-Admin",
+      "role_org_pilot": "Org-Pilot",
+      "col_org": "Organisation",
+      "no_org": "—",
       "auth_local": "Lokal",
       "auth_oauth": "OAuth",
       "you": "(du)",

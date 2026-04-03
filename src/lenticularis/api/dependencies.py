@@ -50,11 +50,35 @@ def require_admin(current_user: User = Depends(get_current_user)) -> User:
 
 
 def require_pilot(current_user: User = Depends(get_current_user)) -> User:
-    """Blocks customer-role users from write operations. Pilots and admins pass."""
-    if current_user.role == "customer":
+    """Blocks customer-role and org_pilot users from write operations. Pilots and admins pass."""
+    if current_user.role in ("customer", "org_pilot"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Read-only account — rule set editing is not permitted",
+        )
+    return current_user
+
+
+def require_org_admin(current_user: User = Depends(get_current_user)) -> User:
+    """Requires org_admin role (or system admin) with an org_id assigned."""
+    if current_user.role == "admin":
+        return current_user
+    if current_user.role != "org_admin" or not current_user.org_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Organisation admin access required",
+        )
+    return current_user
+
+
+def require_org_member(current_user: User = Depends(get_current_user)) -> User:
+    """Requires org_admin, org_pilot, or system admin role with an org_id assigned."""
+    if current_user.role == "admin":
+        return current_user
+    if current_user.role not in ("org_admin", "org_pilot") or not current_user.org_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Organisation member access required",
         )
     return current_user
 

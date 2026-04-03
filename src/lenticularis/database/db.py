@@ -20,6 +20,7 @@ _SessionLocal = None
 def _run_column_migrations(engine) -> None:
     """Add columns introduced after the initial schema — safe to re-run (idempotent)."""
     with engine.connect() as conn:
+        # ── rulesets ──
         cols = {row[1] for row in conn.execute(text("PRAGMA table_info(rulesets)")).fetchall()}
         if "site_type" not in cols:
             conn.execute(text("ALTER TABLE rulesets ADD COLUMN site_type TEXT NOT NULL DEFAULT 'launch'"))
@@ -29,6 +30,17 @@ def _run_column_migrations(engine) -> None:
             conn.execute(text("ALTER TABLE rulesets ADD COLUMN is_preset BOOLEAN NOT NULL DEFAULT FALSE"))
             conn.commit()
             logger.info("Migration: added rulesets.is_preset column")
+        if "org_id" not in cols:
+            conn.execute(text("ALTER TABLE rulesets ADD COLUMN org_id TEXT REFERENCES organizations(id)"))
+            conn.commit()
+            logger.info("Migration: added rulesets.org_id column")
+
+        # ── users ──
+        ucols = {row[1] for row in conn.execute(text("PRAGMA table_info(users)")).fetchall()}
+        if "org_id" not in ucols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN org_id TEXT REFERENCES organizations(id)"))
+            conn.commit()
+            logger.info("Migration: added users.org_id column")
 
 
 def init_db(db_path: str) -> None:
@@ -52,3 +64,10 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+def get_session_factory():
+    """Return the SQLAlchemy session factory (for use outside FastAPI dependency injection)."""
+    if _SessionLocal is None:
+        raise RuntimeError("Database not initialised — call init_db() during startup")
+    return _SessionLocal

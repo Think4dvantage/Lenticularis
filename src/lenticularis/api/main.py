@@ -20,7 +20,7 @@ import logging.config
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
@@ -34,7 +34,9 @@ from lenticularis.api.routers import health as health_router
 from lenticularis.api.routers import foehn as foehn_router
 from lenticularis.api.routers import stats as stats_router
 from lenticularis.api.routers import admin as admin_router
-from lenticularis.database.db import init_db
+from lenticularis.api.routers import ai as ai_router
+from lenticularis.api.routers import org as org_router
+from lenticularis.database.db import init_db, get_session_factory
 from lenticularis.collectors.foehn import _VIRTUAL_WEATHER_STATIONS
 
 
@@ -108,7 +110,7 @@ async def lifespan(app: FastAPI):
     logger.info("Station registry primed with %d foehn virtual stations", len(_VIRTUAL_WEATHER_STATIONS))
 
     # Scheduler
-    scheduler = CollectorScheduler(cfg, influx, app.state.station_registry)
+    scheduler = CollectorScheduler(cfg, influx, app.state.station_registry, get_session_factory())
     app.state.scheduler = scheduler
 
     # Patch scheduler to update station registry after each collect run
@@ -165,15 +167,28 @@ def create_app() -> FastAPI:
     app.include_router(foehn_router.router)
     app.include_router(stats_router.router)
     app.include_router(admin_router.router)
+    app.include_router(ai_router.router)
+    app.include_router(org_router.router)
 
     # Static files (frontend)
     static_dir = Path(__file__).parent.parent.parent.parent / "static"
     if static_dir.exists():
         app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
+        # Subdomains that belong to the main app — everything else is an org slug
+        _MAIN_SUBDOMAINS = {"www", "lenti", "lenti-dev", "localhost", ""}
+
         @app.get("/", include_in_schema=False)
-        async def serve_root():
+        async def serve_root(request: Request):
+            host = request.headers.get("host", "").split(":")[0]
+            subdomain = host.split(".")[0] if "." in host else ""
+            if subdomain not in _MAIN_SUBDOMAINS:
+                return FileResponse(str(static_dir / "org-dashboard.html"))
             return FileResponse(str(static_dir / "index.html"))
+
+        @app.get("/org/{slug}", include_in_schema=False)
+        async def serve_org_dashboard(slug: str):
+            return FileResponse(str(static_dir / "org-dashboard.html"))
 
         @app.get("/map", include_in_schema=False)
         async def serve_map():
@@ -230,6 +245,10 @@ def create_app() -> FastAPI:
         @app.get("/forecast-accuracy", include_in_schema=False)
         async def serve_forecast_accuracy():
             return FileResponse(str(static_dir / "forecast-accuracy.html"))
+
+        @app.get("/help", include_in_schema=False)
+        async def serve_help():
+            return FileResponse(str(static_dir / "help.html"))
     else:
         @app.get("/", include_in_schema=False)
         async def root():

@@ -153,3 +153,11 @@ api:
   host: "0.0.0.0"
   port: 8000
   reload: false   # Set true only in local dev (not in Docker)
+
+# Ollama AI assistant (optional — powers "Text Creation with AI" in the rule editor)
+# When running the backend inside Docker, use host.docker.internal instead of localhost.
+ollama:
+  enabled: true
+  url: "http://host.docker.internal:11434"   # or http://localhost:11434 outside Docker
+  model: "qwen2.5:3b"
+  timeout_seconds: 60

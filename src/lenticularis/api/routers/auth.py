@@ -39,6 +39,7 @@ def _user_out(user: User) -> UserOut:
         is_active=user.is_active,
         created_at=user.created_at,
         has_password=user.hashed_password is not None,
+        org_id=user.org_id,
     )
 
 

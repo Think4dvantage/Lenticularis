@@ -27,6 +27,11 @@ services:
       - "traefik.http.routers.lenticularis-dev.rule=Host(`lenti-dev.lg4.ch`)"
       - "traefik.http.routers.lenticularis-dev.entrypoints=websecure"
       - "traefik.http.routers.lenticularis-dev.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.lenticularis-dev.service=lenticularis-dev"
+      - "traefik.http.routers.lenticularis-dev-vkpi.rule=Host(`vkpi.lenti-dev.lg4.ch`)"
+      - "traefik.http.routers.lenticularis-dev-vkpi.entrypoints=websecure"
+      - "traefik.http.routers.lenticularis-dev-vkpi.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.lenticularis-dev-vkpi.service=lenticularis-dev"
       - "traefik.http.services.lenticularis-dev.loadbalancer.server.port=8000"
     networks:
       - default

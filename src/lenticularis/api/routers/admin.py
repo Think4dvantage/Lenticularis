@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 
 from lenticularis.api.dependencies import require_admin
 from lenticularis.database.db import get_db
-from lenticularis.database.models import User
+from lenticularis.database.models import Organization, User
 from lenticularis.foehn_detection import (
     get_foehn_config_dict,
     set_foehn_config,
@@ -42,13 +42,31 @@ class UserAdminOut(BaseModel):
     has_password: bool
     created_at: str
     updated_at: Optional[str] = None
+    org_id: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
 
 class UserAdminUpdate(BaseModel):
-    role: Optional[Literal["pilot", "customer", "admin"]] = None
+    role: Optional[Literal["pilot", "customer", "admin", "org_admin", "org_pilot"]] = None
     is_active: Optional[bool] = None
+    org_id: Optional[str] = None  # set to "" to clear org assignment
+
+
+class OrgCreate(BaseModel):
+    slug: str
+    name: str
+    description: Optional[str] = None
+
+
+class OrgOut(BaseModel):
+    id: str
+    slug: str
+    name: str
+    description: Optional[str] = None
+    created_at: str
+
+    model_config = {"from_attributes": True}
 
 
 class CollectorUpdate(BaseModel):
@@ -66,6 +84,7 @@ def _serialise_user(u: User) -> UserAdminOut:
         has_password=u.hashed_password is not None,
         created_at=u.created_at.isoformat() if u.created_at else "",
         updated_at=u.updated_at.isoformat() if u.updated_at else None,
+        org_id=u.org_id,
     )
 
 
@@ -114,11 +133,69 @@ def update_user(
         target.role = body.role
     if body.is_active is not None:
         target.is_active = body.is_active
+    if body.org_id is not None:
+        # Empty string clears the org assignment
+        target.org_id = body.org_id if body.org_id else None
 
     target.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(target)
     return _serialise_user(target)
+
+
+# ---------------------------------------------------------------------------
+# Organisations
+# ---------------------------------------------------------------------------
+
+@router.get("/orgs")
+def list_orgs(
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    orgs = db.execute(select(Organization).order_by(Organization.created_at)).scalars().all()
+    return {
+        "orgs": [
+            OrgOut(
+                id=o.id,
+                slug=o.slug,
+                name=o.name,
+                description=o.description,
+                created_at=o.created_at.isoformat() if o.created_at else "",
+            )
+            for o in orgs
+        ],
+        "total": len(orgs),
+    }
+
+
+@router.post("/orgs", status_code=201)
+def create_org(
+    body: OrgCreate,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    import uuid as _uuid
+    existing = db.execute(
+        select(Organization).where(Organization.slug == body.slug)
+    ).scalar_one_or_none()
+    if existing:
+        raise HTTPException(status_code=409, detail="Organisation slug already exists")
+    org = Organization(
+        id=str(_uuid.uuid4()),
+        slug=body.slug.lower().strip(),
+        name=body.name.strip(),
+        description=body.description,
+    )
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+    return OrgOut(
+        id=org.id,
+        slug=org.slug,
+        name=org.name,
+        description=org.description,
+        created_at=org.created_at.isoformat() if org.created_at else "",
+    )
 
 
 # ---------------------------------------------------------------------------

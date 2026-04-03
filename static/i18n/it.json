@@ -8,7 +8,10 @@
     "admin": "Admin",
     "sign_in": "Accedi",
     "sign_out": "Esci",
-    "connecting": "Connessione…"
+    "connecting": "Connessione…",
+    "personal_workspace": "Area personale →",
+    "personal_rulesets": "Regole personali",
+    "help": "Aiuto"
   },
   "common": {
     "save": "Salva",
@@ -59,6 +62,8 @@
       "launch": "Decollo",
       "landing_zone": "Zona di atterraggio",
       "landable": "Atterrabile",
+      "decision": "Decisione",
+      "opportunity": "Opportunità",
       "no_data": "nessun dato",
       "analysis": "Analisi →",
       "edit": "Modifica",
@@ -124,7 +129,10 @@
     "delete_confirm": "Eliminare questo insieme di regole e tutte le sue condizioni?",
     "badge_launch_green": "🟢 DECOLLO",
     "badge_launch_orange": "🟠 DECOLLO",
-    "badge_launch_red": "🔴 DECOLLO"
+    "badge_launch_red": "🔴 DECOLLO",
+    "org_title": "Regole dell'organizzazione",
+    "org_subtitle": "Regole per {name}",
+    "back_to_org": "← Torna alla dashboard"
   },
   "editor": {
     "new_title": "Nuova regola",
@@ -141,6 +149,9 @@
     "launch_site": "▲ Sito di decollo",
     "landing_zone_btn": "⚑ Zona di atterraggio",
     "combination_hint": "Logica di combinazione: il peggio vince — se una condizione attiva ROSSO il sito è ROSSO; se ARANCIONE, è ARANCIONE.",
+    "opportunity_site": "✦ Opportunità",
+    "opportunity_btn": "✦ Opportunità",
+    "opportunity_hint": "Un luogo speciale o una finestra di condizioni — es. uno spot termico, una finestra di volo di distanza, o qualsiasi condizione favorevole da monitorare.",
     "private_label": "Privato (solo tu)",
     "public_label": "Pubblico (galleria)",
     "linked_landings": "Zone di atterraggio collegate",
@@ -205,7 +216,18 @@
     "preset_clear": "Cancella",
     "preset_conds": "{n} condizione",
     "preset_conds_plural": "{n} condizioni",
-    "preset_mark_admin": "⭐ Sito di sistema"
+    "preset_mark_admin": "⭐ Sito di sistema",
+    "ai_btn": "✨ Creazione testo con IA",
+    "ai_modal_title": "Crea condizioni con l'IA",
+    "ai_modal_hint": "Descrivi il tuo sito di volo e le condizioni in linguaggio naturale. L'IA suggerirà le condizioni delle regole.",
+    "ai_modal_placeholder": "es. Vento da sud-sudovest (180–225°) tra 15 e 30 km/h. Nessuna precipitazione. Temperatura superiore a 5°C.",
+    "ai_modal_submit": "Genera condizioni",
+    "ai_modal_loading": "Elaborazione…",
+    "ai_modal_error_empty": "Inserisci una descrizione.",
+    "ai_modal_explanation_label": "Spiegazione IA:",
+    "ai_modal_added": "{n} condizione/i aggiunta/e.",
+    "ai_modal_close": "Chiudi",
+    "ai_modal_cancel": "Annulla"
   },
   "forecast_accuracy": {
     "title": "Precisione previsioni",
@@ -477,6 +499,26 @@
     "webcams_title": "Webcam",
     "webcam_open": "↗ Apri"
   },
+  "org": {
+    "status_green": "Volo consentito",
+    "status_orange": "Attenzione — monitorare le condizioni",
+    "status_red": "Volo fermato",
+    "last_updated": "Ultimo aggiornamento",
+    "minutes_ago": "{n} min fa",
+    "just_now": "proprio ora",
+    "login_for_details": "Accedi per i dettagli",
+    "manage_rules": "Gestisci regole",
+    "conditions_title": "Condizioni attive",
+    "timeline_title": "Panoramica 48 ore",
+    "no_rulesets": "Nessuna regola configurata.",
+    "no_conditions": "Nessuna condizione definita.",
+    "loading": "Caricamento stato…",
+    "col_station": "Stazione",
+    "col_field": "Campo",
+    "col_condition": "Condizione",
+    "col_actual": "Attuale",
+    "col_triggered": "Attivata"
+  },
   "admin": {
     "title": "Pannello admin",
     "subtitle": "Gestione utenti e configurazione dei collettori.",
@@ -485,7 +527,25 @@
       "users": "Utenti",
       "collectors": "Collettori",
       "foehn_config": "Config föhn",
-      "presets": "Siti preset"
+      "presets": "Siti preset",
+      "orgs": "Organizzazioni"
+    },
+    "orgs": {
+      "title": "Organizzazioni",
+      "hint": "Ogni organizzazione ottiene un sottodominio (es. vkpi.lenti.cloud) con il proprio dashboard.",
+      "total": "{n} organizzazioni",
+      "col_slug": "Slug",
+      "col_name": "Nome",
+      "col_description": "Descrizione",
+      "col_created": "Creato",
+      "no_orgs": "Nessuna organizzazione.",
+      "create_title": "Crea organizzazione",
+      "slug_placeholder": "es. vkpi",
+      "name_placeholder": "es. VKPI Interlaken",
+      "description_placeholder": "Descrizione opzionale",
+      "create_btn": "Crea",
+      "creating": "Creazione…",
+      "slug_hint": "Lo slug diventa il sottodominio — minuscolo, senza spazi."
     },
     "foehn_config": {
       "save": "Salva",
@@ -523,6 +583,10 @@
       "role_pilot": "Pilota",
       "role_customer": "Cliente",
       "role_admin": "Admin",
+      "role_org_admin": "Admin org",
+      "role_org_pilot": "Pilota org",
+      "col_org": "Organizzazione",
+      "no_org": "—",
       "auth_local": "Locale",
       "auth_oauth": "OAuth",
       "you": "(tu)",

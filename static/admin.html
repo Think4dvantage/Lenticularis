@@ -154,6 +154,7 @@
     <a href="/rulesets" class="nav-link" data-i18n="nav.rulesets"></a>
     <a href="/stats" class="nav-link" data-i18n="nav.stats"></a>
     <a href="/foehn" class="nav-link" data-i18n="nav.foehn"></a>
+    <a href="/help" class="nav-link" data-i18n="nav.help"></a>
     <a href="/admin" class="nav-link active" data-i18n="nav.admin"></a>
   </div>
   <div class="nav-user" id="navUser"></div>
@@ -178,6 +179,7 @@
       <button class="tab-btn" onclick="switchTab('collectors')" id="tab-collectors" data-i18n="admin.tabs.collectors"></button>
       <button class="tab-btn" onclick="switchTab('foehn_config')" id="tab-foehn_config" data-i18n="admin.tabs.foehn_config"></button>
       <button class="tab-btn" onclick="switchTab('presets')" id="tab-presets" data-i18n="admin.tabs.presets"></button>
+      <button class="tab-btn" onclick="switchTab('orgs')" id="tab-orgs" data-i18n="admin.tabs.orgs"></button>
     </div>
 
     <!-- Users tab -->
@@ -190,17 +192,59 @@
               <th data-i18n="admin.users.col_name"></th>
               <th data-i18n="admin.users.col_email"></th>
               <th data-i18n="admin.users.col_role"></th>
+              <th data-i18n="admin.users.col_org"></th>
               <th data-i18n="admin.users.col_active"></th>
               <th data-i18n="admin.users.col_password"></th>
               <th data-i18n="admin.users.col_created"></th>
             </tr>
           </thead>
           <tbody id="usersBody">
-            <tr><td colspan="6" class="empty-msg" data-i18n="common.loading"></td></tr>
+            <tr><td colspan="7" class="empty-msg" data-i18n="common.loading"></td></tr>
           </tbody>
         </table>
       </div>
       <div id="userCount" class="note"></div>
+    </div>
+
+    <!-- Organisations tab -->
+    <div class="tab-panel" id="panel-orgs">
+      <div id="orgsError" class="error-msg" style="display:none"></div>
+      <div style="margin-bottom:24px; background:#1a1f2e; border:1px solid #2d3748; border-radius:8px; padding:20px;">
+        <div style="font-weight:600; margin-bottom:12px; font-size:0.9rem;" data-i18n="admin.orgs.create_title"></div>
+        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end;">
+          <div>
+            <label style="display:block; font-size:0.78rem; color:#718096; margin-bottom:4px;" data-i18n="admin.orgs.col_slug"></label>
+            <input id="orgSlugInput" class="fi medium" type="text" style="width:140px">
+          </div>
+          <div>
+            <label style="display:block; font-size:0.78rem; color:#718096; margin-bottom:4px;" data-i18n="admin.orgs.col_name"></label>
+            <input id="orgNameInput" class="fi medium" type="text" style="width:220px">
+          </div>
+          <div>
+            <label style="display:block; font-size:0.78rem; color:#718096; margin-bottom:4px;" data-i18n="admin.orgs.col_description"></label>
+            <input id="orgDescInput" class="fi medium" type="text" style="width:240px">
+          </div>
+          <button class="btn-primary" id="orgCreateBtn" onclick="createOrg()" data-i18n="admin.orgs.create_btn"></button>
+        </div>
+        <div class="note" style="margin-top:8px;" data-i18n="admin.orgs.slug_hint"></div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th data-i18n="admin.orgs.col_slug"></th>
+              <th data-i18n="admin.orgs.col_name"></th>
+              <th data-i18n="admin.orgs.col_description"></th>
+              <th data-i18n="admin.orgs.col_created"></th>
+              <th>Dashboard</th>
+            </tr>
+          </thead>
+          <tbody id="orgsBody">
+            <tr><td colspan="5" class="empty-msg" data-i18n="common.loading"></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div id="orgsCount" class="note"></div>
     </div>
 
     <!-- Collectors tab -->
@@ -323,6 +367,7 @@ if (!user || user.role !== 'admin') {
 // ---------------------------------------------------------------------------
 let _foehnConfigLoaded = false;
 let _presetsLoaded = false;
+let _orgsLoaded = false;
 window.switchTab = function(name) {
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.id === `tab-${name}`));
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === `panel-${name}`));
@@ -333,6 +378,10 @@ window.switchTab = function(name) {
   if (name === 'presets' && !_presetsLoaded) {
     _presetsLoaded = true;
     loadPresets();
+  }
+  if (name === 'orgs' && !_orgsLoaded) {
+    _orgsLoaded = true;
+    loadOrgs();
   }
 };
 
@@ -359,7 +408,16 @@ function ageSince(iso) {
 // ---------------------------------------------------------------------------
 // Users
 // ---------------------------------------------------------------------------
+let _orgList = [];
+
 async function loadUsers() {
+  // Fetch orgs first so the dropdown is populated when rendering users
+  const orgRes = await fetchAuth('/api/admin/orgs');
+  if (orgRes.ok) {
+    const od = await orgRes.json();
+    _orgList = od.orgs || [];
+  }
+
   const res = await fetchAuth('/api/admin/users');
   if (!res.ok) {
     document.getElementById('usersError').style.display = 'block';
@@ -380,17 +438,29 @@ function renderUsers(users, total) {
   }
 
   const roleLabels = {
-    pilot:    window.t('admin.users.role_pilot'),
-    customer: window.t('admin.users.role_customer'),
-    admin:    window.t('admin.users.role_admin'),
+    pilot:     window.t('admin.users.role_pilot'),
+    customer:  window.t('admin.users.role_customer'),
+    admin:     window.t('admin.users.role_admin'),
+    org_admin: window.t('admin.users.role_org_admin'),
+    org_pilot: window.t('admin.users.role_org_pilot'),
   };
+
+  // Build org options from cached org list
+  const orgOpts = [
+    `<option value="">${window.t('admin.users.no_org')}</option>`,
+    ..._orgList.map(o => `<option value="${escHtml(o.id)}">${escHtml(o.name)}</option>`),
+  ].join('');
 
   document.getElementById('usersBody').innerHTML = users.map(u => {
     const isMe = u.id === user.id;
     const youTag = isMe ? `<span class="you-tag">${window.t('admin.users.you')}</span>` : '';
-    const roleOpts = ['pilot', 'customer', 'admin'].map(r =>
+    const roleOpts = ['pilot', 'customer', 'admin', 'org_admin', 'org_pilot'].map(r =>
       `<option value="${r}" ${u.role === r ? 'selected' : ''}>${roleLabels[r]}</option>`
     ).join('');
+    const orgOptsForUser = orgOpts.replace(
+      `value="${escHtml(u.org_id || '')}"`,
+      `value="${escHtml(u.org_id || '')}" selected`
+    );
 
     return `<tr>
       <td>${escHtml(u.display_name)}${youTag}</td>
@@ -399,6 +469,11 @@ function renderUsers(users, total) {
         <select class="role-select" data-user-id="${u.id}" onchange="updateUserRole(this)"
           ${isMe ? 'disabled' : ''}>
           ${roleOpts}
+        </select>
+      </td>
+      <td>
+        <select class="role-select" data-user-id="${u.id}" onchange="updateUserOrg(this)">
+          ${orgOptsForUser}
         </select>
       </td>
       <td>
@@ -424,6 +499,23 @@ window.updateUserRole = async function(select) {
   });
   if (!res.ok) {
     select.value = select.querySelector('[selected]')?.value || select.value;
+    const err = await res.json().catch(() => ({}));
+    document.getElementById('usersError').style.display = 'block';
+    document.getElementById('usersError').textContent = err.detail || `Error ${res.status}`;
+  } else {
+    document.getElementById('usersError').style.display = 'none';
+  }
+};
+
+window.updateUserOrg = async function(select) {
+  const userId = select.dataset.userId;
+  const org_id = select.value || '';
+  const res = await fetchAuth(`/api/admin/users/${userId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ org_id }),
+  });
+  if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     document.getElementById('usersError').style.display = 'block';
     document.getElementById('usersError').textContent = err.detail || `Error ${res.status}`;
@@ -560,6 +652,81 @@ window.updateCollectorInterval = async function(input) {
   } else {
     document.getElementById('collectorsError').style.display = 'none';
   }
+};
+
+// ---------------------------------------------------------------------------
+// Organisations
+// ---------------------------------------------------------------------------
+async function loadOrgs() {
+  const res = await fetchAuth('/api/admin/orgs');
+  if (!res.ok) {
+    document.getElementById('orgsError').style.display = 'block';
+    document.getElementById('orgsError').textContent = `Error ${res.status}`;
+    return;
+  }
+  const data = await res.json();
+  _orgList = data.orgs || [];
+  renderOrgs(data.orgs, data.total);
+}
+
+function renderOrgs(orgs, total) {
+  document.getElementById('orgsCount').textContent =
+    window.t('admin.orgs.total', { n: total });
+
+  if (!orgs.length) {
+    document.getElementById('orgsBody').innerHTML =
+      `<tr><td colspan="5" class="empty-msg">${window.t('admin.orgs.no_orgs')}</td></tr>`;
+    return;
+  }
+
+  document.getElementById('orgsBody').innerHTML = orgs.map(o => `
+    <tr>
+      <td><code>${escHtml(o.slug)}</code></td>
+      <td><strong>${escHtml(o.name)}</strong></td>
+      <td style="color:#a0aec0">${escHtml(o.description || '—')}</td>
+      <td>${fmtDate(o.created_at)}</td>
+      <td><a href="/org/${escHtml(o.slug)}" target="_blank" style="color:#90cdf4; font-size:0.82rem;">↗ Dashboard</a></td>
+    </tr>`).join('');
+}
+
+window.createOrg = async function() {
+  const slug = document.getElementById('orgSlugInput').value.trim().toLowerCase();
+  const name = document.getElementById('orgNameInput').value.trim();
+  const description = document.getElementById('orgDescInput').value.trim() || null;
+  const errEl = document.getElementById('orgsError');
+  errEl.style.display = 'none';
+
+  if (!slug || !name) {
+    errEl.textContent = 'Slug and name are required.';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  const btn = document.getElementById('orgCreateBtn');
+  btn.disabled = true;
+  btn.textContent = window.t('admin.orgs.creating');
+
+  const res = await fetchAuth('/api/admin/orgs', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ slug, name, description }),
+  });
+
+  btn.disabled = false;
+  btn.textContent = window.t('admin.orgs.create_btn');
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    errEl.textContent = err.detail || `Error ${res.status}`;
+    errEl.style.display = 'block';
+    return;
+  }
+
+  document.getElementById('orgSlugInput').value = '';
+  document.getElementById('orgNameInput').value = '';
+  document.getElementById('orgDescInput').value = '';
+  _orgsLoaded = false;
+  loadOrgs();
 };
 
 function escHtml(str) {

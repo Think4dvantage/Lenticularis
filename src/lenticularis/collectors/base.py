@@ -63,7 +63,10 @@ class BaseCollector(ABC):
     async def _ensure_client(self) -> None:
         """Lazily create the shared ``httpx.AsyncClient``."""
         if self._http_client is None:
-            self._http_client = httpx.AsyncClient(timeout=30.0)
+            self._http_client = httpx.AsyncClient(
+                timeout=30.0,
+                headers={"User-Agent": "lenticularis/1.4 (https://lenti.cloud)"},
+            )
 
     async def _get(self, url: str, params: Optional[dict] = None) -> dict:
         """

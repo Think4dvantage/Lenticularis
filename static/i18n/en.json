@@ -8,7 +8,10 @@
     "admin": "Admin",
     "sign_in": "Sign in",
     "sign_out": "Sign out",
-    "connecting": "Connecting…"
+    "connecting": "Connecting…",
+    "personal_workspace": "Personal workspace →",
+    "personal_rulesets": "Personal rule sets",
+    "help": "Help"
   },
   "common": {
     "save": "Save",
@@ -124,7 +127,10 @@
     "delete_confirm": "Delete this rule set and all its conditions?",
     "badge_launch_green": "🟢 LAUNCH",
     "badge_launch_orange": "🟠 LAUNCH",
-    "badge_launch_red": "🔴 LAUNCH"
+    "badge_launch_red": "🔴 LAUNCH",
+    "org_title": "Organisation Rules",
+    "org_subtitle": "Rules for {name}",
+    "back_to_org": "← Back to dashboard"
   },
   "editor": {
     "new_title": "New Rule Set",
@@ -477,6 +483,26 @@
     "webcams_title": "Webcams",
     "webcam_open": "↗ Open"
   },
+  "org": {
+    "status_green": "Flying permitted",
+    "status_orange": "Caution — monitor conditions",
+    "status_red": "Flying stopped",
+    "last_updated": "Last updated",
+    "minutes_ago": "{n} min ago",
+    "just_now": "just now",
+    "login_for_details": "Log in to see details",
+    "manage_rules": "Manage rules",
+    "conditions_title": "Active conditions",
+    "timeline_title": "48-hour overview",
+    "no_rulesets": "No rules configured yet.",
+    "no_conditions": "No conditions defined.",
+    "loading": "Loading status…",
+    "col_station": "Station",
+    "col_field": "Field",
+    "col_condition": "Condition",
+    "col_actual": "Actual",
+    "col_triggered": "Triggered"
+  },
   "admin": {
     "title": "Admin Panel",
     "subtitle": "Manage users and collector configuration.",
@@ -485,7 +511,25 @@
       "users": "Users",
       "collectors": "Collectors",
       "foehn_config": "Föhn Config",
-      "presets": "Preset Sites"
+      "presets": "Preset Sites",
+      "orgs": "Organisations"
+    },
+    "orgs": {
+      "title": "Organisations",
+      "hint": "Each organisation gets a subdomain (e.g. vkpi.lenti.cloud) with its own dashboard.",
+      "total": "{n} organisations",
+      "col_slug": "Slug",
+      "col_name": "Name",
+      "col_description": "Description",
+      "col_created": "Created",
+      "no_orgs": "No organisations yet.",
+      "create_title": "Create organisation",
+      "slug_placeholder": "e.g. vkpi",
+      "name_placeholder": "e.g. VKPI Interlaken",
+      "description_placeholder": "Optional description",
+      "create_btn": "Create",
+      "creating": "Creating…",
+      "slug_hint": "Slug becomes the subdomain — lowercase, no spaces."
     },
     "foehn_config": {
       "save": "Save",
@@ -523,6 +567,10 @@
       "role_pilot": "Pilot",
       "role_customer": "Customer",
       "role_admin": "Admin",
+      "role_org_admin": "Org Admin",
+      "role_org_pilot": "Org Pilot",
+      "col_org": "Organisation",
+      "no_org": "—",
       "auth_local": "Local",
       "auth_oauth": "OAuth",
       "you": "(you)",

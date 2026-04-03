@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lenticularis — Help &amp; FAQ</title>
+  <link rel="stylesheet" href="/static/shared.css" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: #0f1117;
+      color: #e2e8f0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Nav ─────────────────────────────────────────────────────────── */
+    .top-nav {
+      background: #1a1f2e; border-bottom: 1px solid #2d3748;
+      padding: 0 24px; display: flex; align-items: center; height: 48px; flex-shrink: 0;
+    }
+    .nav-brand { font-size: 1.1rem; font-weight: 600; color: #90cdf4; margin-right: 24px; text-decoration: none; }
+    .nav-links { display: flex; gap: 2px; flex: 1; }
+    .nav-link { color: #718096; text-decoration: none; font-size: 0.85rem; padding: 6px 14px; border-radius: 6px; transition: background 0.15s, color 0.15s; }
+    .nav-link:hover  { background: #2d3748; color: #e2e8f0; }
+    .nav-link.active { background: #2d4a6e; color: #90cdf4; font-weight: 500; }
+    .nav-user { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+    .nav-btn { background: transparent; border: 1px solid #4a5568; color: #a0aec0; font-size: 0.8rem; padding: 4px 10px; border-radius: 5px; cursor: pointer; }
+    .nav-btn:hover { background: #2d3748; color: #e2e8f0; }
+    #navLangPicker { display: flex; gap: 2px; margin-left: 8px; }
+    .lang-btn { background: transparent; border: 1px solid #4a5568; color: #718096; font-size: 0.72rem; padding: 3px 7px; border-radius: 4px; cursor: pointer; transition: background 0.15s; }
+    .lang-btn:hover { background: #2d3748; color: #e2e8f0; }
+    .lang-btn.active { background: #2d4a6e; color: #90cdf4; border-color: #4a7bab; }
+
+    /* ── Layout ──────────────────────────────────────────────────────── */
+    .page-content {
+      flex: 1;
+      padding: 28px 28px 60px;
+      max-width: 860px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    .page-header { margin-bottom: 8px; }
+    .page-header h1 { font-size: 1.5rem; font-weight: 600; }
+    .page-subtitle { font-size: 0.88rem; color: #718096; margin-bottom: 32px; margin-top: 4px; }
+
+    /* ── Section jump bar ────────────────────────────────────────────── */
+    .jump-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 36px;
+      padding: 14px 16px;
+      background: #1a1f2e;
+      border: 1px solid #2d3748;
+      border-radius: 10px;
+    }
+    .jump-link {
+      font-size: 0.78rem;
+      color: #90cdf4;
+      text-decoration: none;
+      padding: 3px 8px;
+      border-radius: 4px;
+      border: 1px solid #2d4a6e;
+      transition: background 0.15s;
+    }
+    .jump-link:hover { background: #2d4a6e; }
+
+    /* ── FAQ sections ────────────────────────────────────────────────── */
+    .help-section {
+      margin-bottom: 36px;
+      scroll-margin-top: 64px;
+    }
+    .help-section h2 {
+      font-size: 1rem;
+      font-weight: 600;
+      color: #90cdf4;
+      margin-bottom: 10px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #2d3748;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .section-icon { font-size: 1.1rem; }
+
+    /* ── Accordion (details/summary) ─────────────────────────────────── */
+    details {
+      background: #1a1f2e;
+      border: 1px solid #2d3748;
+      border-radius: 8px;
+      margin-bottom: 5px;
+      overflow: hidden;
+    }
+    details + details { }
+    summary {
+      cursor: pointer;
+      padding: 11px 16px;
+      font-weight: 500;
+      color: #e2e8f0;
+      font-size: 0.88rem;
+      list-style: none;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      user-select: none;
+    }
+    summary::before {
+      content: '▸';
+      color: #718096;
+      font-size: 0.75rem;
+      transition: transform 0.15s;
+      flex-shrink: 0;
+      width: 12px;
+    }
+    details[open] > summary::before { transform: rotate(90deg); }
+    summary::-webkit-details-marker { display: none; }
+    details:hover > summary { background: #1e2535; }
+    details[open] > summary { color: #90cdf4; border-bottom: 1px solid #2d3748; }
+
+    .faq-answer {
+      padding: 14px 16px 14px 36px;
+      font-size: 0.86rem;
+      color: #a0aec0;
+      line-height: 1.65;
+    }
+    .faq-answer p { margin-bottom: 8px; }
+    .faq-answer p:last-child { margin-bottom: 0; }
+    .faq-answer ul, .faq-answer ol { padding-left: 20px; margin: 6px 0 8px; }
+    .faq-answer li { margin-bottom: 4px; }
+    .faq-answer strong { color: #e2e8f0; }
+    .faq-answer code {
+      background: #0f1117;
+      border: 1px solid #2d3748;
+      border-radius: 3px;
+      padding: 1px 5px;
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 0.83em;
+      color: #90cdf4;
+    }
+    .faq-answer a { color: #90cdf4; }
+    .faq-answer a:hover { text-decoration: underline; }
+
+    .tl-green  { color: #48bb78; font-weight: 600; }
+    .tl-orange { color: #ed8936; font-weight: 600; }
+    .tl-red    { color: #fc8181; font-weight: 600; }
+
+    .pill {
+      display: inline-block;
+      font-size: 0.75rem;
+      padding: 1px 7px;
+      border-radius: 10px;
+      font-weight: 600;
+      vertical-align: middle;
+    }
+    .pill-green  { background: #1c4532; color: #68d391; }
+    .pill-orange { background: #4a2800; color: #fbd38d; }
+    .pill-red    { background: #4a0000; color: #fc8181; }
+    .pill-blue   { background: #1a2e4a; color: #90cdf4; }
+    .pill-gray   { background: #2d3748; color: #a0aec0; }
+
+    /* ── Tip box ─────────────────────────────────────────────────────── */
+    .tip-box {
+      background: #1a2e4a;
+      border: 1px solid #2d4a6e;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 0.84rem;
+      color: #90cdf4;
+      margin: 8px 0 4px;
+    }
+    .tip-box strong { color: #bee3f8; }
+
+    /* ── Data table ──────────────────────────────────────────────────── */
+    .faq-table { width: 100%; border-collapse: collapse; font-size: 0.83rem; margin: 8px 0; }
+    .faq-table th { text-align: left; padding: 6px 10px; color: #718096; border-bottom: 1px solid #2d3748; font-weight: 500; }
+    .faq-table td { padding: 6px 10px; border-bottom: 1px solid #1e2535; color: #a0aec0; vertical-align: top; }
+    .faq-table tr:last-child td { border-bottom: none; }
+    .faq-table td strong { color: #e2e8f0; }
+  </style>
+</head>
+<body>
+
+<nav class="top-nav">
+  <a href="/" class="nav-brand">🪁 Lenticularis</a>
+  <div class="nav-links">
+    <a href="/" class="nav-link" data-i18n="nav.map">Map</a>
+    <a href="/stations" class="nav-link" data-i18n="nav.stations">Stations</a>
+    <a href="/rulesets" class="nav-link" data-i18n="nav.rulesets">Rule Sets</a>
+    <a href="/stats" class="nav-link" data-i18n="nav.stats">Statistics</a>
+    <a href="/foehn" class="nav-link" data-i18n="nav.foehn">Föhn</a>
+    <a href="/help" class="nav-link active" data-i18n="nav.help">Help</a>
+  </div>
+  <div id="navLangPicker"></div>
+  <div class="nav-user" id="navUser"></div>
+</nav>
+
+<div class="page-content">
+  <div class="page-header">
+    <h1>Help &amp; FAQ</h1>
+  </div>
+  <p class="page-subtitle">Answers to common questions about Lenticularis. Click any question to expand it.</p>
+
+  <!-- Jump bar -->
+  <nav class="jump-bar" aria-label="Jump to section">
+    <a class="jump-link" href="#getting-started">Getting Started</a>
+    <a class="jump-link" href="#traffic-light">Traffic Lights</a>
+    <a class="jump-link" href="#rule-sets">Rule Sets</a>
+    <a class="jump-link" href="#conditions">Conditions</a>
+    <a class="jump-link" href="#combination-logic">Combination Logic</a>
+    <a class="jump-link" href="#site-types">Site Types</a>
+    <a class="jump-link" href="#pressure-delta">Pressure Delta</a>
+    <a class="jump-link" href="#foehn">Föhn Monitor</a>
+    <a class="jump-link" href="#forecast">Forecast</a>
+    <a class="jump-link" href="#statistics">Statistics</a>
+    <a class="jump-link" href="#data-sources">Data Sources</a>
+    <a class="jump-link" href="#roles">Roles &amp; Orgs</a>
+  </nav>
+
+  <!-- ── Getting Started ───────────────────────────────────────────── -->
+  <div class="help-section" id="getting-started">
+    <h2><span class="section-icon">🚀</span> Getting Started</h2>
+
+    <details>
+      <summary>What is Lenticularis?</summary>
+      <div class="faq-answer">
+        <p>Lenticularis is a paragliding weather decision-support system for Switzerland. It collects data from multiple weather networks every 5–30 minutes, lets you build graphical rule sets for your launch sites, and shows a <span class="tl-green">GREEN</span> / <span class="tl-orange">ORANGE</span> / <span class="tl-red">RED</span> traffic-light decision that updates automatically.</p>
+        <p>The key differentiator: you define your own rules using real station data — no one-size-fits-all logic imposed on you.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>Do I need an account?</summary>
+      <div class="faq-answer">
+        <p>You can browse the map and station data without an account. To create and save rule sets for your own launch sites, you need a free <strong>Pilot</strong> account — register at <a href="/register">/register</a>.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>How do I get started with my first launch site?</summary>
+      <div class="faq-answer">
+        <ol>
+          <li>Sign in and go to <a href="/rulesets">Rule Sets</a>.</li>
+          <li>Click <strong>＋ New rule set</strong>.</li>
+          <li>Enter a name (e.g. <em>Beatenberg Südstart</em>) and click the map to pin your site.</li>
+          <li>Optionally pick a <strong>preset site</strong> to pre-fill conditions for a nearby launch — you can edit every threshold afterwards.</li>
+          <li>Add conditions in the Rule Engine section — pick a station, choose a field (wind speed, direction, etc.), set an operator and threshold.</li>
+          <li>Save. The map will show a traffic-light badge for your site within the next evaluation cycle (usually &lt; 5 minutes).</li>
+        </ol>
+      </div>
+    </details>
+  </div>
+
+  <!-- ── Traffic Lights ────────────────────────────────────────────── -->
+  <div class="help-section" id="traffic-light">
+    <h2><span class="section-icon">🚦</span> Traffic Lights</h2>
+
+    <details>
+      <summary>What do GREEN, ORANGE, and RED mean?</summary>
+      <div class="faq-answer">
+        <p>Each colour reflects the outcome of evaluating <em>all</em> conditions in your rule set against live station data:</p>
+        <ul>
+          <li><span class="tl-green">GREEN</span> — all conditions pass. Conditions at this site look flyable according to your rules.</li>
+          <li><span class="tl-orange">ORANGE</span> — at least one condition returned ORANGE. Caution; monitor closely.</li>
+          <li><span class="tl-red">RED</span> — at least one condition returned RED. Flying not recommended by your rules.</li>
+        </ul>
+        <div class="tip-box"><strong>Remember:</strong> traffic lights reflect your rule set only. Always apply your own pilot judgement and check official forecasts before flying.</div>
+      </div>
+    </details>
+
+    <details>
+      <summary>The traffic light shows no colour / unknown. Why?</summary>
+      <div class="faq-answer">
+        <p>This usually means one of:</p>
+        <ul>
+          <li>The rule set has not been evaluated yet — evaluations run on a scheduler; wait a few minutes and refresh.</li>
+          <li>One or more stations referenced in your conditions have not sent data recently. Check <a href="/stations">Stations</a> to see the last-seen timestamp for each station.</li>
+          <li>You have no conditions defined in the rule set.</li>
+        </ul>
+      </div>
+    </details>
+
+    <details>
+      <summary>How often is the traffic light updated?</summary>
+      <div class="faq-answer">
+        <p>The scheduler evaluates all active rule sets roughly every 5–10 minutes, in sync with the fastest collector (MeteoSwiss every 10 min, Holfuy every 5 min). The timestamp shown on the map popup and analysis page tells you exactly when the last evaluation ran.</p>
+      </div>
+    </details>
+  </div>
+
+  <!-- ── Rule Sets ─────────────────────────────────────────────────── -->
+  <div class="help-section" id="rule-sets">
+    <h2><span class="section-icon">📋</span> Rule Sets</h2>
+
+    <details>
+      <summary>What is a rule set?</summary>
+      <div class="faq-answer">
+        <p>A rule set is a named collection of weather conditions attached to one launch site, landing zone, or opportunity area. Each rule set evaluates to a single traffic-light colour based on live (and forecast) station data.</p>
+        <p>Rule sets are pilot-owned and private by default. You can publish them to the public gallery for others to clone and adapt.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>Can I use data from more than one station in a single rule set?</summary>
+      <div class="faq-answer">
+        <p>Yes — this is a core feature. Each condition row has its own independent station picker. You can freely mix stations from different networks in the same rule set. For example:</p>
+        <ul>
+          <li>Condition 1: <em>Beatenberg</em> wind speed &lt; 30 km/h</li>
+          <li>Condition 2: <em>Niesen</em> wind direction in 250–310°</li>
+          <li>Condition 3: <em>Interlaken METAR</em> wind gust &lt; 40 km/h</li>
+        </ul>
+      </div>
+    </details>
+
+    <details>
+      <summary>What are preset sites?</summary>
+      <div class="faq-answer">
+        <p>Preset sites are admin-curated rule set templates for well-known launch sites. When creating a new rule set you can browse presets, pick one that matches your site, and all conditions (with sensible default thresholds) are pre-filled — you can then edit every value freely.</p>
+        <p>Presets are a shortcut; they do not lock you in to any specific configuration.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>How do I share or clone a rule set?</summary>
+      <div class="faq-answer">
+        <p>In the rule set editor, toggle <strong>Public (gallery)</strong>. Your rule set then appears in the community gallery where other pilots can browse and clone it. Cloning creates an independent copy in the other pilot's account — changes made by either side do not affect the other.</p>
+      </div>
+    </details>
+  </div>
+
+  <!-- ── Conditions ─────────────────────────────────────────────────── -->
+  <div class="help-section" id="conditions">
+    <h2><span class="section-icon">⚙️</span> Conditions &amp; the Rule Engine</h2>
+
+    <details>
+      <summary>What fields can I use in a condition?</summary>
+      <div class="faq-answer">
+        <table class="faq-table">
+          <thead><tr><th>Field</th><th>Unit</th><th>Notes</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Wind speed</strong></td><td>km/h</td><td>Average wind speed at the station.</td></tr>
+            <tr><td><strong>Wind gust</strong></td><td>km/h</td><td>Peak gust in the measurement window.</td></tr>
+            <tr><td><strong>Wind direction</strong></td><td>°</td><td>Use the <em>in direction range</em> operator with compass graphic.</td></tr>
+            <tr><td><strong>Temperature</strong></td><td>°C</td><td></td></tr>
+            <tr><td><strong>Humidity</strong></td><td>%</td><td></td></tr>
+            <tr><td><strong>Pressure (QNH)</strong></td><td>hPa</td><td>Sea-level pressure.</td></tr>
+            <tr><td><strong>Pressure delta</strong></td><td>hPa</td><td>Difference between two stations — used for Föhn detection. See <a href="#pressure-delta">Pressure Delta</a>.</td></tr>
+            <tr><td><strong>Precipitation</strong></td><td>mm</td><td></td></tr>
+            <tr><td><strong>Snow depth</strong></td><td>cm</td><td>From SLF stations; useful for high-alpine sites.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </details>
+
+    <details>
+      <summary>What operators are available?</summary>
+      <div class="faq-answer">
+        <table class="faq-table">
+          <thead><tr><th>Operator</th><th>When to use</th></tr></thead>
+          <tbody>
+            <tr><td><strong>&gt; / &lt; / ≥ / ≤</strong></td><td>Simple threshold — "wind speed &lt; 30".</td></tr>
+            <tr><td><strong>= equals</strong></td><td>Exact match (rarely useful for continuous values).</td></tr>
+            <tr><td><strong>between A and B</strong></td><td>Value is within [A, B] inclusive. Use for safe ranges (e.g. temperature between 5 and 25).</td></tr>
+            <tr><td><strong>not between A and B</strong></td><td>Value is outside [A, B]. Use to flag dangerous ranges.</td></tr>
+            <tr><td><strong>in direction A–B°</strong></td><td>Wind direction falls within the arc from A to B (clockwise). Shows a compass graphic. Use for directional flying windows.</td></tr>
+          </tbody>
+        </table>
+        <div class="tip-box"><strong>Direction tip:</strong> N = 0°, NE = 45°, E = 90°, SE = 135°, S = 180°, SW = 225°, W = 270°, NW = 315°. For a range that crosses North (e.g. 330°–30°), enter A = 330, B = 30.</div>
+      </div>
+    </details>
+
+    <details>
+      <summary>What do AND/OR condition groups do?</summary>
+      <div class="faq-answer">
+        <p>Conditions inside the same group are <strong>AND-linked</strong> — all of them must pass for the group to be satisfied. You can add multiple groups; each group behaves as one logical block.</p>
+        <p>Groups themselves are combined according to the <a href="#combination-logic">combination logic</a> setting (worst wins / majority vote).</p>
+        <p>Example — "site is GREEN only when wind is calm AND from the south":</p>
+        <ul>
+          <li>Group 1: wind speed &lt; 20 km/h <strong>AND</strong> wind direction in 160–200°</li>
+        </ul>
+      </div>
+    </details>
+
+    <details>
+      <summary>What result colour should I assign to a condition?</summary>
+      <div class="faq-answer">
+        <p>Each condition row has a result colour (<span class="pill pill-green">GREEN</span> / <span class="pill pill-orange">ORANGE</span> / <span class="pill pill-red">RED</span>) that is used <em>when the condition is triggered</em> (i.e. when the threshold is crossed).</p>
+        <ul>
+          <li>Assign <span class="pill pill-red">RED</span> to hard limits that make flying dangerous (e.g. wind gust &gt; 50 km/h).</li>
+          <li>Assign <span class="pill pill-orange">ORANGE</span> to advisory limits that warrant caution (e.g. wind gust &gt; 35 km/h).</li>
+          <li>Assign <span class="pill pill-green">GREEN</span> to positive confirmation conditions (e.g. wind direction in the flyable arc) — the condition is triggered only when the direction IS correct, contributing GREEN to the overall result.</li>
+        </ul>
+      </div>
+    </details>
+  </div>
+
+  <!-- ── Combination Logic ──────────────────────────────────────────── -->
+  <div class="help-section" id="combination-logic">
+    <h2><span class="section-icon">🔀</span> Combination Logic</h2>
+
+    <details open>
+      <summary>What is "Worst wins"?</summary>
+      <div class="faq-answer">
+        <p><strong>Worst wins</strong> is the default and most conservative logic. The overall site colour equals the worst individual condition result:</p>
+        <ul>
+          <li>Any condition returns <span class="tl-red">RED</span> → site is <span class="tl-red">RED</span>.</li>
+          <li>No RED but any <span class="tl-orange">ORANGE</span> → site is <span class="tl-orange">ORANGE</span>.</li>
+          <li>All <span class="tl-green">GREEN</span> → site is <span class="tl-green">GREEN</span>.</li>
+        </ul>
+        <p>Use this when <em>all</em> conditions must be met simultaneously for a safe flight.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>What is "Majority vote"?</summary>
+      <div class="faq-answer">
+        <p><strong>Majority vote</strong> picks the colour that appears most often across all condition results. It is useful when you have a large set of advisory conditions and want an overall indicator rather than a strict all-or-nothing check.</p>
+        <div class="tip-box"><strong>Example:</strong> 5 conditions return GREEN, 2 return ORANGE, 1 returns RED → overall result is GREEN (majority).</div>
+      </div>
+    </details>
+  </div>
+
+  <!-- ── Site Types ─────────────────────────────────────────────────── -->
+  <div class="help-section" id="site-types">
+    <h2><span class="section-icon">📍</span> Site Types</h2>
+
+    <details>
+      <summary>What is a Launch site?</summary>
+      <div class="faq-answer">
+        <p>A <strong>Launch site</strong> (<span class="pill pill-blue">▲ Launch</span>) represents the takeoff point. It appears on the map as a circle with a traffic-light colour. You can link one or more landing zones to it — the map then shows a coloured ring around the launch marker based on the best available landing decision.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>What is a Landing zone?</summary>
+      <div class="faq-answer">
+        <p>A <strong>Landing zone</strong> (<span class="pill pill-gray">⚑ Landing</span>) is typically the valley landing field. It shows its own traffic-light badge and can be linked from any number of launch sites. Conditions on a landing zone might monitor low-level wind or obstacles.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>What is an Opportunity site?</summary>
+      <div class="faq-answer">
+        <p>An <strong>Opportunity</strong> (<span class="pill pill-green">✦ Opportunity</span>) is a special location or condition window — for example a thermal trigger, an XC window, or a favourable airspace corridor — that is not a specific takeoff or landing. It renders as a diamond marker on the map with a subtle glow when GREEN.</p>
+        <p>Unlike launch/landing semantics, an opportunity rule set is purely advisory: "conditions are right for this kind of flying."</p>
+      </div>
+    </details>
+  </div>
+
+  <!-- ── Pressure Delta ─────────────────────────────────────────────── -->
+  <div class="help-section" id="pressure-delta">
+    <h2><span class="section-icon">🌡️</span> Pressure Delta (Föhn Detection)</h2>
+
+    <details>
+      <summary>What is the "Pressure delta" field?</summary>
+      <div class="faq-answer">
+        <p>The <strong>Pressure delta</strong> field shows a second station picker (<em>Station B</em>). At evaluation time, the system computes <code>|pressure_A − pressure_B|</code> (absolute difference in hPa) and applies your operator/threshold to that derived value.</p>
+        <p>This is the standard method for detecting cross-alpine Föhn: a north–south pressure gradient above ~4 hPa indicates föhn risk.</p>
+        <div class="tip-box"><strong>Typical setup:</strong> Station A = Locarno/Monti (south), Station B = Interlaken (north), threshold ≥ 4 hPa → RED or ORANGE.</div>
+      </div>
+    </details>
+
+    <details>
+      <summary>Which stations are best for pressure delta / Föhn detection?</summary>
+      <div class="faq-answer">
+        <p>For the classic south Föhn corridor, use valley-level stations on opposite sides of the Alps to get a clean cross-alpine gradient:</p>
+        <ul>
+          <li><strong>South:</strong> Locarno-Monti, Lugano, or Bellinzona (Ticino, MeteoSwiss)</li>
+          <li><strong>North:</strong> Interlaken, Bern, or Altdorf (Bernese Oberland / Uri, MeteoSwiss or METAR)</li>
+        </ul>
+        <p>Avoid high-altitude stations (e.g. Jungfraujoch) for pressure delta — they introduce altitude effects that mask the gradient signal.</p>
+      </div>
+    </details>
+  </div>
+
+  <!-- ── Föhn Monitor ───────────────────────────────────────────────── -->
+  <div class="help-section" id="foehn">
+    <h2><span class="section-icon">💨</span> Föhn Monitor</h2>
+
+    <details>
+      <summary>What is Föhn?</summary>
+      <div class="faq-answer">
+        <p>Föhn is a warm, dry downslope wind that occurs when air masses are forced over the Alps. In Switzerland, south Föhn flows from Italy through mountain valleys (Reuss, Rhine, Rhône) to the north. It is characterised by:</p>
+        <ul>
+          <li>Strong, gusty winds in alpine valleys — dangerous for paragliding</li>
+          <li>Rapidly clearing skies and exceptional visibility north of the Alps</li>
+          <li>A strong north–south pressure gradient across the Alps</li>
+          <li>Characteristic lenticular (lens-shaped) clouds above the ridge — the source of the app's name</li>
+        </ul>
+      </div>
+    </details>
+
+    <details>
+      <summary>How are virtual Föhn stations computed?</summary>
+      <div class="faq-answer">
+        <p>Virtual Föhn stations do not have physical sensors. Instead, the backend reads real station measurements for each corridor and checks them against configurable thresholds:</p>
+        <ul>
+          <li><strong>Wind conditions:</strong> one or more stations in the valley must report gust ≥ threshold from the föhn direction sector.</li>
+          <li><strong>Pressure gradient:</strong> <code>|P_south − P_north| ≥ threshold_hPa</code> (typically 4 hPa), indicating the cross-alpine gradient that drives föhn.</li>
+        </ul>
+        <p>A corridor is labelled <strong>Active</strong> only when ALL station conditions in that corridor are met simultaneously. If some but not all are met, it shows as <strong>Partial</strong>.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>How do I read the colour coding on the Föhn dashboard?</summary>
+      <div class="faq-answer">
+        <ul>
+          <li><span class="tl-green">Green</span> — no föhn signal; all corridors below thresholds. Safe.</li>
+          <li><span class="tl-orange">Orange</span> — partial föhn indicators or pressure gradient building. Monitor closely.</li>
+          <li><span class="tl-red">Red</span> — föhn confirmed in at least one corridor. Exercise caution in affected valleys.</li>
+        </ul>
+        <p>The pressure chart at the top shows the raw OTL − INT gradient over time, with the threshold line marked.</p>
+      </div>
+    </details>
+  </div>
+
+  <!-- ── Forecast ───────────────────────────────────────────────────── -->
+  <div class="help-section" id="forecast">
+    <h2><span class="section-icon">📡</span> Forecast</h2>
+
+    <details>
+      <summary>How far ahead does the forecast go?</summary>
+      <div class="faq-answer">
+        <p>The system runs two forecast collectors from <strong>Open-Meteo (ICON seamless)</strong>:</p>
+        <ul>
+          <li><strong>Short-range:</strong> 30-hour horizon, refreshed every 3 hours — best for today and tomorrow.</li>
+          <li><strong>Extended:</strong> 5-day (120-hour) horizon, refreshed once per day — useful for planning trips.</li>
+        </ul>
+        <p>On the map you can use the day/hour slider to replay both past observations and the forecast window.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>What is the Forecast Accuracy page?</summary>
+      <div class="faq-answer">
+        <p>The <a href="/forecast-accuracy">Forecast Accuracy</a> page lets you compare past model runs against what actually happened. For any station and date range, it overlays:</p>
+        <ul>
+          <li>A solid line for observed values</li>
+          <li>One line per model-run day (colour-coded), showing what the model predicted at each lead time</li>
+        </ul>
+        <p>This helps you understand how reliable the forecast is for a specific station — some high-Alpine or valley stations have worse model skill than open-terrain stations.</p>
+      </div>
+    </details>
+  </div>
+
+  <!-- ── Statistics ─────────────────────────────────────────────────── -->
+  <div class="help-section" id="statistics">
+    <h2><span class="section-icon">📊</span> Statistics Dashboard</h2>
+
+    <details>
+      <summary>What counts as a "flyable day"?</summary>
+      <div class="faq-answer">
+        <p>A calendar day is counted as flyable if at least one evaluation of your rule set returned <span class="tl-green">GREEN</span> on that day. Evaluations that fall outside the daylight window (sunrise−1h to sunset+1h) are marked with a moon icon and excluded from the daylight-filtered counts.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>How is the hourly heatmap read?</summary>
+      <div class="faq-answer">
+        <p>The hourly heatmap shows the percentage of evaluations that returned <span class="tl-green">GREEN</span> for each hour of the day (UTC), aggregated across the selected time period. Darker green = more often flyable at that hour historically.</p>
+        <p>Note: times are in <strong>UTC</strong>. Swiss local time is UTC+1 in winter and UTC+2 in summer.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>What is the Condition trigger leaderboard?</summary>
+      <div class="faq-answer">
+        <p>The trigger leaderboard ranks each condition in your rule set by how often it voted non-GREEN (ORANGE or RED), and attributes each trigger to the station that provided the data. This tells you which station and which field is most often the bottleneck — useful for tuning thresholds.</p>
+      </div>
+    </details>
+  </div>
+
+  <!-- ── Data Sources ───────────────────────────────────────────────── -->
+  <div class="help-section" id="data-sources">
+    <h2><span class="section-icon">🛰️</span> Data Sources</h2>
+
+    <details>
+      <summary>Which weather networks does Lenticularis use?</summary>
+      <div class="faq-answer">
+        <table class="faq-table">
+          <thead><tr><th>Network</th><th>Interval</th><th>Key measurements</th><th>Coverage</th></tr></thead>
+          <tbody>
+            <tr><td><strong>MeteoSwiss</strong></td><td>10 min</td><td>Wind, temp, humidity, pressure</td><td>~150 Swiss automatic stations</td></tr>
+            <tr><td><strong>SLF</strong></td><td>30 min</td><td>Wind, snow depth, temp</td><td>High-alpine sites, often near passes</td></tr>
+            <tr><td><strong>METAR / AviationWeather</strong></td><td>15 min</td><td>Wind, QNH, temperature</td><td>Swiss airports and airfields</td></tr>
+            <tr><td><strong>Wunderground / Ecovitt</strong></td><td>15 min</td><td>Full sensor data from personal stations</td><td>User-submitted PWS; shown as personal stations on map</td></tr>
+            <tr><td><strong>Open-Meteo (ICON)</strong></td><td>3 h / 24 h</td><td>All fields (forecast)</td><td>All active stations; 5-day horizon</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </details>
+
+    <details>
+      <summary>How fresh is the data? What if a station is stale?</summary>
+      <div class="faq-answer">
+        <p>Each station shows a <em>last seen</em> timestamp on the <a href="/stations">Stations</a> page. If a station hasn't reported in the last 60–90 minutes it may be:</p>
+        <ul>
+          <li>Temporarily offline or under maintenance</li>
+          <li>Experiencing network issues at the remote site</li>
+          <li>Rate-limited (Wunderground / personal stations)</li>
+        </ul>
+        <p>If a condition references a stale station, the rule set evaluation will show a warning and the result may be UNKNOWN for that condition.</p>
+      </div>
+    </details>
+  </div>
+
+  <!-- ── Roles & Organisations ──────────────────────────────────────── -->
+  <div class="help-section" id="roles">
+    <h2><span class="section-icon">👥</span> Roles &amp; Organisations</h2>
+
+    <details>
+      <summary>What can each user role do?</summary>
+      <div class="faq-answer">
+        <table class="faq-table">
+          <thead><tr><th>Role</th><th>Can do</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Pilot</strong></td><td>Full access: create sites, build rule sets, view stats, publish to gallery. Default role after registration.</td></tr>
+            <tr><td><strong>Customer</strong></td><td>Read-only: sees only rule sets assigned by an admin. Cannot create or edit rules.</td></tr>
+            <tr><td><strong>Org Pilot</strong></td><td>Member of an organisation: can view org dashboard and condition details. Cannot edit org rules.</td></tr>
+            <tr><td><strong>Org Admin</strong></td><td>Manages rule sets for their organisation. Cannot access other pilots' personal rules.</td></tr>
+            <tr><td><strong>Admin</strong></td><td>Full system access: manage users, organisations, collectors, Föhn config, and preset sites.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </details>
+
+    <details>
+      <summary>What is an Organisation?</summary>
+      <div class="faq-answer">
+        <p>An <strong>Organisation</strong> is a shared workspace for commercial operators or clubs — for example a tandem paragliding school. Each org gets:</p>
+        <ul>
+          <li>Its own subdomain (e.g. <code>vkpi.lenti.cloud</code>) with a public traffic-light dashboard.</li>
+          <li>A set of org-owned rule sets managed by org admins.</li>
+          <li>Org members (org pilots) who can log in to see condition details and history.</li>
+        </ul>
+        <p>Personal pilot accounts and organisation accounts are independent — an org admin can also have a personal pilot workspace.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>The org dashboard shows a single traffic light. How is it computed?</summary>
+      <div class="faq-answer">
+        <p>The org dashboard aggregates the latest evaluation results from all rule sets belonging to that organisation and picks the <strong>worst colour</strong> (worst wins). If any launch site is RED, the overall org status is RED.</p>
+        <p>Logged-in org members can see the per-rule-set breakdown and condition details below the main traffic light.</p>
+      </div>
+    </details>
+  </div>
+
+</div><!-- /page-content -->
+
+<script type="module">
+  import { initI18n, renderLangPicker } from '/static/i18n.js';
+  import { renderNavAuth } from '/static/auth.js';
+
+  await initI18n();
+  renderLangPicker('navLangPicker');
+  renderNavAuth('help');
+
+  // Open accordion items matching the URL hash, and scroll into view
+  function applyHash(hash) {
+    if (!hash || hash === '#') return;
+    const target = document.querySelector(hash);
+    if (!target) return;
+    // Open parent <details> elements
+    let el = target;
+    while (el) {
+      if (el.tagName === 'DETAILS') el.open = true;
+      el = el.parentElement;
+    }
+    // If the target is a section, open its first details child
+    if (target.classList.contains('help-section')) {
+      target.querySelector('details')?.setAttribute('open', '');
+    }
+    setTimeout(() => target.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+  }
+
+  applyHash(location.hash);
+  window.addEventListener('hashchange', () => applyHash(location.hash));
+</script>
+</body>
+</html>

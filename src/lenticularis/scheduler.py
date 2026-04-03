@@ -80,6 +80,11 @@ class CollectorScheduler:
     ``station_registry`` is the shared dict (populated by observation collectors)
     that forecast collectors use to discover station lat/lon.  Pass the same
     dict reference that ``app.state.station_registry`` holds.
+
+    ``session_factory`` is the SQLAlchemy session factory from ``db.get_session_factory()``.
+    When provided, a periodic ruleset evaluation job is registered that writes
+    ``rule_decisions`` to InfluxDB every 10 minutes — populating the history strip
+    on the org dashboard and personal ruleset analysis pages.
     """
 
     def __init__(
@@ -87,10 +92,12 @@ class CollectorScheduler:
         cfg: MainConfig,
         influx: "InfluxClient",
         station_registry: Optional[dict] = None,
+        session_factory=None,
     ) -> None:
         self._cfg = cfg
         self._influx = influx
         self._station_registry: dict = station_registry if station_registry is not None else {}
+        self._session_factory = session_factory
         self._scheduler = AsyncIOScheduler()
         self._collectors: list = []
         self._forecast_collectors: list = []
@@ -225,6 +232,34 @@ class CollectorScheduler:
         )
         logger.info("Registered foehn status collector with 10-minute interval")
 
+        # ---- ruleset evaluator (writes rule_decisions to InfluxDB) ----------
+        if self._session_factory is not None:
+            self._collector_health["ruleset_evaluator"] = {
+                "collector": "ruleset_evaluator",
+                "type": "derived",
+                "enabled": True,
+                "interval_minutes": 10,
+                "status": "scheduled",
+                "last_started_at": None,
+                "last_finished_at": None,
+                "last_success_at": None,
+                "last_error_at": None,
+                "last_error": None,
+                "last_measurement_count": None,
+                "consecutive_failures": 0,
+            }
+            self._scheduler.add_job(
+                func=self._run_ruleset_evaluator,
+                trigger=IntervalTrigger(minutes=10),
+                id="collector_ruleset_evaluator",
+                name="ruleset evaluator",
+                misfire_grace_time=180,
+                coalesce=True,
+                max_instances=1,
+                next_run_time=None,
+            )
+            logger.info("Registered ruleset evaluator with 10-minute interval")
+
         self._scheduler.start()
 
         # Trigger first runs with jitter
@@ -255,6 +290,13 @@ class CollectorScheduler:
             random.uniform(_JITTER_SECONDS, _JITTER_SECONDS * 2),
             lambda: asyncio.ensure_future(self._trigger_now("collector_foehn")),
         )
+
+        # Ruleset evaluator starts after collectors have written fresh data
+        if self._session_factory is not None:
+            asyncio.get_event_loop().call_later(
+                random.uniform(_JITTER_SECONDS * 2, _JITTER_SECONDS * 3),
+                lambda: asyncio.ensure_future(self._trigger_now("collector_ruleset_evaluator")),
+            )
 
         logger.info(
             "Scheduler started — %d observation collector(s), %d forecast collector(s), föhn collector",
@@ -309,6 +351,56 @@ class CollectorScheduler:
                 "consecutive_failures": int(health.get("consecutive_failures", 0)) + 1,
             })
             logger.error("FoehnCollector failed: %s", exc)
+
+    async def _run_ruleset_evaluator(self) -> None:
+        """Evaluate all rulesets with conditions and write decisions to InfluxDB."""
+        health = self._collector_health.get("ruleset_evaluator")
+        if health:
+            health["status"] = "running"
+            health["last_started_at"] = datetime.now(timezone.utc)
+
+        db = self._session_factory()
+        count = 0
+        try:
+            from sqlalchemy import select
+            from lenticularis.database.models import RuleSet
+            from lenticularis.rules.evaluator import run_evaluation, write_decision
+
+            rulesets = db.execute(select(RuleSet)).scalars().all()
+            for rs in rulesets:
+                if not rs.conditions:
+                    continue
+                try:
+                    result = run_evaluation(rs, self._influx)
+                    write_decision(rs, result, self._influx)
+                    count += 1
+                except Exception as exc:
+                    logger.error("Ruleset evaluator: failed to evaluate %s: %s", rs.id, exc)
+
+            finished_at = datetime.now(timezone.utc)
+            if health:
+                health.update({
+                    "status": "ok",
+                    "last_finished_at": finished_at,
+                    "last_success_at": finished_at,
+                    "last_error": None,
+                    "last_measurement_count": count,
+                    "consecutive_failures": 0,
+                })
+            logger.info("Ruleset evaluator: evaluated %d rulesets", count)
+        except Exception as exc:
+            finished_at = datetime.now(timezone.utc)
+            if health:
+                health.update({
+                    "status": "error",
+                    "last_finished_at": finished_at,
+                    "last_error_at": finished_at,
+                    "last_error": str(exc),
+                    "consecutive_failures": int(health.get("consecutive_failures", 0)) + 1,
+                })
+            logger.error("Ruleset evaluator job failed: %s", exc)
+        finally:
+            db.close()
 
     async def _run_collector(self, collector) -> None:
         """Execute a single observation collector run and write results to InfluxDB."""

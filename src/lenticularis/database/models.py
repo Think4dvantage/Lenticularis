@@ -3,6 +3,7 @@ SQLAlchemy ORM models for Lenticularis.
 
 Tables
 ------
+organizations        — customer organisations (multi-tenant)
 users                — pilot and admin accounts (local + social login)
 oauth_identities     — one row per linked social provider per user
 rulesets             — pilot's rule set (includes site name + coordinates)
@@ -25,6 +26,25 @@ class Base(DeclarativeBase):
     pass
 
 
+class Organization(Base):
+    """One row per customer organisation (e.g. VKPI Interlaken)."""
+
+    __tablename__ = "organizations"
+
+    id          = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    slug        = Column(String, unique=True, nullable=False, index=True)   # e.g. "vkpi"
+    name        = Column(String, nullable=False)                            # e.g. "VKPI Interlaken"
+    description = Column(String, nullable=True)
+    created_at  = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+
+    members  = relationship("User",    back_populates="organization")
+    rulesets = relationship("RuleSet", back_populates="organization")
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -33,8 +53,13 @@ class User(Base):
     display_name = Column(String, nullable=False)
     # Null for social-login-only accounts (no local password set)
     hashed_password = Column(String, nullable=True)
-    role = Column(String, nullable=False, default="pilot")   # "pilot" | "customer" | "admin"
+    # "pilot" | "customer" | "admin" | "org_admin" | "org_pilot"
+    role = Column(String, nullable=False, default="pilot")
     is_active = Column(Boolean, nullable=False, default=True)
+
+    # Organisation membership (null for regular pilots/admins)
+    org_id       = Column(String, ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True)
+    organization = relationship("Organization", back_populates="members")
     created_at = Column(
         DateTime(timezone=True),
         nullable=False,
@@ -92,7 +117,7 @@ class RuleSet(Base):
     lon = Column(Float, nullable=True)
     altitude_m = Column(Integer, nullable=True)
 
-    # Site type: "launch" (default) or "landing"
+    # Site type: "launch" | "landing" | "opportunity"
     site_type = Column(String, nullable=False, default="launch")
 
     # Evaluation
@@ -105,6 +130,10 @@ class RuleSet(Base):
 
     # Preset — admin-curated template visible to all pilots in the new-ruleset form
     is_preset = Column(Boolean, nullable=False, default=False)
+
+    # Organisation ownership (null for personal rulesets)
+    org_id       = Column(String, ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True)
+    organization = relationship("Organization", back_populates="rulesets")
 
     created_at = Column(
         DateTime(timezone=True),

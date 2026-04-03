@@ -12,8 +12,11 @@ Core differentiator: **rules are fully pilot-owned and self-served** through a g
 
 | Role | Responsibilities |
 |---|---|
-| **Pilot (user)** | Manage own launch sites, build own rule sets, view stats, configure notifications, share/clone rule sets |
-| **Admin** | Manage user accounts, enable/disable collectors and collection intervals — no involvement in rules or sites |
+| **Pilot** | Manage own launch sites, build own rule sets, view stats, configure notifications, share/clone rule sets |
+| **Customer** | Read-only; sees only rulesets assigned by admin |
+| **Admin** | Manage user accounts, organisations, enable/disable collectors — no involvement in personal rules |
+| **Org Admin** | Manage rules for their organisation (`org_id` required); sees org rulesets; org-scoped editor |
+| **Org Pilot** | Read-only member of an organisation; can see org dashboard detail view |
 
 ---
 
@@ -114,10 +117,11 @@ A condition with field `pressure_delta` shows two station pickers. The runtime e
 
 ### SQLite tables
 
-- `users` — `id`, `username`, `email`, `hashed_password`, `role`, `created_at`
+- `organizations` — `id`, `slug` (unique), `name`, `description`, `created_at`
+- `users` — `id`, `username`, `email`, `hashed_password`, `role`, `org_id` FK → organizations, `created_at`
 - `weather_stations` — `station_id`, `name`, `network`, `latitude`, `longitude`, `elevation`, `canton`, `active`
 - `launch_sites` — `id`, `name`, `latitude`, `longitude`, `owner_id` FK → users
-- `rulesets` — `id`, `name`, `description`, `launch_site_id`, `owner_id`, `combination_logic`, `is_public`, `clone_count`, `cloned_from_id`, `created_at`, `updated_at`
+- `rulesets` — `id`, `name`, `description`, `launch_site_id`, `owner_id`, `org_id` FK → organizations, `combination_logic`, `is_public`, `clone_count`, `cloned_from_id`, `created_at`, `updated_at`
 - `rule_conditions` — `id`, `ruleset_id`, `group_id` (nullable), `station_id`, `station_b_id` (nullable), `field`, `operator`, `value_a`, `value_b` (nullable), `result_colour`, `sort_order`
 - `condition_groups` — `id`, `ruleset_id`, `parent_group_id` (nullable), `logic` (AND/OR), `sort_order`
 - `notification_configs` — `id`, `user_id`, `launch_site_id`, `channel`, `config_json`, `on_transitions_json`
@@ -348,155 +352,77 @@ Pilot-owned launch site CRUD; site markers on map with distinct icon.
 - `collect_all_iter` distributes per-station HTTP requests evenly across the interval (`spread_seconds = interval_minutes × 60`) to avoid rate-limit bursts; writes to InfluxDB immediately after each station fetch
 - Fixed `query_forecast_replay`: adding `init_date` to the pivot `rowKey` broke old-format data (no `init_date` tag) — reverted rowKey to the original 5-column set; Python dedup handles multiple `init_date` series correctly across tables
 
-### v1.4 — Rule Types: Risk + Opportunity (planned)
+### v1.4 — Opportunity Site Type ✅ Shipped
 
-- `RuleSet.rule_type`: `risk` (default, existing) | `opportunity`
-- **Risk** (existing): conditions define limits — exceeding them → ORANGE/RED
-- **Opportunity**: conditions define ideal windows — all met → separate GREEN badge
-- Two independent badges per launch site on the map: safety badge (risk) + opportunity badge
-- Rule editor gains rule-type toggle; condition builder UX is identical
-- Evaluator writes to `rule_decisions` with tag `rule_type` = risk/opportunity
+- `site_type` extended to three values: `launch` | `landing` | `opportunity`
+- **Opportunity**: a special location or condition window (thermal spot, XC window, favourable conditions) — independent of launch/landing semantics
+- Rule editor: 3-button site-type toggle; opportunity shows a hint text explaining the concept
+- Map: opportunity rulesets render as a **diamond marker** (`✦`) instead of a circle/flag — visually distinct at a glance; subtle glow when GREEN
+- Ruleset cards: lime-green badge for opportunity sites
+- InfluxDB `rule_decisions` now tagged with `site_type` (launch/landing/opportunity)
+- AI rule suggestions (`POST /api/ai/suggest-conditions`) also shipped in this cycle (Ollama-powered)
 
-### v1.5 — Pre-seeded Launch Site Defaults (superseded by v1.2)
+### v1.5 — Multi-tenant Org System (VKPI) ✅ Shipped
 
-Core preset functionality shipped in v1.2 (`is_preset` flag, preset picker in editor, admin panel tab).
-Future extension: auto-clone a preset when a pilot creates a new site near a known launch location.
+**Goal**: Replace WhatsApp-based go/no-go coordination for commercial tandem operators (VKPI Interlaken) with a dedicated subdomain dashboard. Generic org layer to scale to future customers.
 
-### v1.6 — AI Rule Building + AI Weather Analysis + Trusted Users (planned)
+**Architecture**:
+- `organizations` SQLite table (`id`, `slug`, `name`, `description`)
+- `org_id` nullable FK on `User` and `RuleSet` (idempotent `ALTER TABLE` migrations)
+- Two new roles: `org_admin`, `org_pilot` (scoped via `user.org_id`)
+- System `admin` bypasses all org guards (can access any org)
 
-**Goal:** Two complementary AI features plus trusted-user field confirmations.
+**Backend**:
+- `routers/org.py`: `GET /api/org/{slug}/status` (public), `GET /api/org/{slug}/dashboard` (org member), `GET /api/org/{slug}/rulesets` (org admin)
+- `dependencies.py`: `require_org_member`, `require_org_admin`; system admin always passes
+- `routers/admin.py`: `GET/POST /api/admin/orgs`; user update extended with `org_id`
+- `main.py`: subdomain-aware root handler — unknown subdomain → `org-dashboard.html`; explicit `/org/{slug}` route for dev path access
+- `RuleSetCreate`: optional `org_slug` field; backend resolves to `org_id` on create
 
-**(A) AI Rule Building** (existing scope from v1.4):
-- Free-text input in rule editor: "wind from south under 30, gusts under 40, not raining"
-- `POST /api/rulesets/ai-suggest` sends prompt + available station list to Claude API, returns a pre-filled condition tree JSON
-- Pilot reviews and saves the suggested tree
+**Frontend**:
+- `org-dashboard.html`: public traffic-light circle; authenticated members see condition breakdown table + 24h history strip (colour-bucketed cells); admin sees "Manage rules" link
+- `rulesets.html` + `ruleset-editor.html`: `?org={slug}` mode — org nav (slug as brand, "Personal workspace →" link that strips org subdomain), org-only ruleset list, org-scoped editor (no Opportunity, no Public/Private toggle, landing picker filtered to org-owned landing rulesets)
+- `admin.html`: Organisations tab (create form + table), users table gains Organisation dropdown + `org_admin`/`org_pilot` role options
+- All 4 i18n files: `org.*`, `admin.orgs.*`, `rulesets.org_title/org_subtitle/back_to_org`, `nav.personal_workspace`
 
-**(B) AI Weather Analysis + Trusted Users** (new):
-- New boolean flag `is_trusted` on `User` model (admin-toggled, no new role)
-- Trusted users are experienced pilots who submit brief condition reports
-- **Two report triggers**: persistent "Report conditions" button (always available) + push prompt when AI detects a station/forecast anomaly
-
-**New SQLite table `weather_reports`:**
-- `id`, `reporter_id` FK → users, `lat`, `lon`, `reported_at`
-- `wind_speed_approx` (km/h range: calm / 0–15 / 15–30 / 30–50 / 50+)
-- `wind_direction_approx` (N/NE/E/SE/S/SW/W/NW)
-- `conditions` (enum: clear / cloudy / rain / snow / föhn / thermal)
-- `notes` (free text, max 500 chars)
-- `nearest_station_id` (auto-computed from lat/lon at submit time)
-
-**New API endpoints** (`api/routers/reports.py`):
-- `POST /api/reports` — submit a condition report (trusted users only)
-- `GET /api/reports?lat=&lon=&radius_km=&hours=` — recent reports near a location
-
-**AI Analysis job** (new scheduler task, runs every 6h):
-- Fetches last 24h of station data + all reports in the same window
-- For each report, finds nearest station(s) within 20 km and compares report values against station measurements (flag discrepancies > 2σ)
-- Sends data summary + discrepancies to Claude API with a structured prompt
-- Stores generated insight in a new `ai_insights` SQLite table: `id`, `generated_at`, `area` (bounding box), `insight_text`, `anomalies_json`
-
-**UI:**
-- Map: trusted users see "Report conditions" FAB button → quick modal form
-- Map: optional "AI insights" layer showing area summaries (admin-visible initially)
-- New `static/ai-insights.html` page (admin only initially)
-- Admin panel: toggle `is_trusted` on user management table
-
-**Requires** `claude_api_key` in `config.yml`.
-
-**Critical files:**
-- `src/lenticularis/database/models.py` — add `WeatherReport`, `AiInsight`, `is_trusted` on User
-- `src/lenticularis/api/routers/reports.py` — new router
-- `src/lenticularis/services/ai_analysis.py` — Claude API integration
-- `src/lenticularis/scheduler.py` — new 6h AI analysis job
-- `static/map.js` — "Report conditions" FAB for trusted users
-- `static/admin.html` — `is_trusted` toggle in user table
-- `config.yml.example` — add `claude_api_key` config key
-
-### v1.7 — OGN Live Map Overlay + Launch Statistics (planned)
-
-- **Live overlay**: toggleable Leaflet layer showing glider positions from OGN APRS feed
-  - Backend WebSocket proxy (`/api/ogn/stream`) relays APRS messages filtered to Swiss bounding box
-  - Frontend: `static/ogn.js` subscribes, places/moves glider markers
-- **Launch statistics**: background job detects takeoffs from OGN tracks near known launch site coordinates
-  - Takeoff heuristic: altitude gain >50 m within 500 m of site lat/lon
-  - Stores daily takeoff count per site in InfluxDB `ogn_takeoffs` measurement
-  - Stats dashboard: OGN launch activity vs ruleset decision chart
-
-### v1.8 — xcontest Statistics (planned)
-
-- Correlate xcontest.org flight dates near each site with ruleset decision history
-- Rule accuracy card on `ruleset-analysis.html`: % of flight days that matched GREEN decision
-- If many flights on RED days, rule may be too pessimistic
-
-### v1.9 — Paragliding Club Area Overlay (planned)
-
-- Map layer showing club coverage polygons from a manually-maintained GeoJSON
-- Popup: club name, website, contact
-- Admin UI: upload/edit club GeoJSON
-
-### v1.10 — Duplicate Station Handling (planned)
-
-- Admin can mark two stations as same physical location with a priority order
-- Map and API surface the station with the most recent data
-- Admin UI: Station aliases table
-
-### v1.11 — VKPI / BOB White-label (planned)
-
-- White-label map view scoped to specific sites + customer role access
-- Details TBD
-
-### v2.0 — Flutter Mobile App (Android + iOS) (planned)
-
-**Approach:** Flutter native app in a separate repo (`lenticularis-app`), consuming the existing REST API. Play Store + App Store distribution.
-
-**Backend additions** (in this repo, done as part of v2.0 prep):
-- New SQLite table `fcm_tokens`: `id`, `user_id`, `token`, `platform` (android/ios), `created_at`
-- New API endpoint `POST /api/notifications/fcm-register` — stores FCM token for a user
-- New backend service `services/push_fcm.py` — dispatches FCM messages on ruleset status transitions
-- `config.yml.example` — add `firebase_service_account_json` key
-
-**Push notification triggers** (backend):
-- Ruleset status transition (RED → GREEN, GREEN → RED, etc.)
-- AI anomaly detected near user's sites (trusted users only)
-
-**Flutter app screens:**
-1. **Map** — flutter_map (Leaflet port) with ruleset traffic light markers; tap → popup with status + webcam link
-2. **My Sites** — ruleset list with live GREEN/ORANGE/RED badges; tap → condition breakdown
-3. **Stations** — station list + detail charts (fl_chart)
-4. **Föhn** — föhn dashboard (pressure gradient + region cards)
-5. **Report conditions** — trusted-user condition report form (lat/lon auto-filled via device GPS)
-6. **Admin** (admin role only) — user management, collector status
-
-**Critical files — backend prep:**
-- `src/lenticularis/database/models.py` — add `FcmToken`
-- `src/lenticularis/api/routers/notifications.py` — new router
-- `src/lenticularis/services/push_fcm.py` — FCM dispatcher
-- `src/lenticularis/rules/evaluator.py` — trigger push on status transition
-- `config.yml.example` — FCM config
-
-**Critical files — Flutter (separate repo):**
-- `pubspec.yaml` — flutter_map, fl_chart, flutter_secure_storage, firebase_messaging, http
-- `lib/main.dart`, `lib/screens/`, `lib/services/api.dart` (REST client), `lib/services/auth.dart`
+**Infra**:
+- `docker-compose.dev.yml`: Traefik `lenticularis-dev-vkpi` router for `vkpi.lenti-dev.lg4.ch`; explicit `.service=` on both routers to avoid Traefik ambiguity
 
 ---
 
-## Decisions
+## Backlog (unordered — pick any item next)
 
-| Topic | Decision |
-|---|---|
-| Webcam authorship | Pilots manage their own sites; admins manage any site |
-| Android/iOS approach | Flutter native app in a separate repo → Play Store + App Store |
-| Trusted user model | `is_trusted` boolean flag on existing pilot role (admin-toggled, no new role) |
-| Report triggers | Both: persistent button (pull) + push prompt on AI anomaly (push) |
+- **Org statistics page**: per-organisation flyability statistics (same metrics as personal stats but aggregated across all org rulesets); accessible at `/org/{slug}/stats` for org members
 
----
+- **Customer role — scoped access**: `customer` users can only see rulesets explicitly shared with them; admin assigns which rulesets a customer can view; no rule editing, no gallery; read-only analysis + map view
 
-## Backlog (post-v2.0, unprioritised)
+- **Trusted users + field condition reports**: `is_trusted` boolean on `User` (admin-toggled); trusted pilots submit brief on-site reports (wind approx, direction, conditions, notes); new `weather_reports` SQLite table; `POST /api/reports` + `GET /api/reports?lat=&lon=&radius_km=&hours=`; reports shown as pins on map
 
-- **Community Rule Gallery** — `GET /api/gallery`, `POST /api/gallery/{id}/clone`; pilots can publish rule sets for others to clone
-- **Notifications** — email + Pushover alerts on ruleset status transitions
-- **Additional Collectors** — Holfuy, Windline (API-key networks)
-- **Wind rose chart** — replace direction scatter on station-detail with a proper wind rose
-- **Performance pass** — InfluxDB query profiling, downsampling task for data older than 90 days
+- **AI weather analysis** (Ollama/Claude): scheduled job every 6 h; compares trusted-user reports against nearest station measurements; flags discrepancies; stores insights in `ai_insights` table; optional map overlay + `ai-insights.html` page (admin-visible initially)
+
+- **Push notifications — FCM**: `fcm_tokens` SQLite table; `POST /api/notifications/fcm-register`; `services/push_fcm.py` dispatches on ruleset status transitions (RED↔GREEN); `config.yml.example` gets `firebase_service_account_json`
+
+- **Email / Pushover alerts**: status-transition alerts via email or Pushover; user-configurable per ruleset; `notification_configs` table
+
+- **Flutter mobile app** (separate repo `lenticularis-app`): Flutter native app consuming the existing REST API; screens: Map, My Sites, Stations, Föhn, Report conditions (GPS auto-fill), Admin; Play Store + App Store
+
+- **OGN live glider overlay**: toggleable Leaflet layer with live glider positions from OGN APRS feed; backend WebSocket proxy `/api/ogn/stream` filtered to Swiss bounding box
+
+- **OGN launch statistics**: detect takeoffs from OGN tracks near known launch coordinates (altitude gain >50 m within 500 m); store daily takeoff counts in InfluxDB `ogn_takeoffs`; stats dashboard: activity vs ruleset decision chart
+
+- **xcontest correlation**: correlate xcontest.org flight dates near a site with ruleset decision history; "rule accuracy" card on `ruleset-analysis.html` (% of flight days that matched GREEN)
+
+- **Club area overlay**: toggleable map layer with club coverage polygons from a manually-maintained GeoJSON; popup: club name, website, contact; admin UI to upload/edit GeoJSON
+
+- **Duplicate station handling**: admin marks two stations as same physical location with a priority order; map and API surface the station with the most recent data; admin UI: Station aliases table
+
+- **Wind rose chart**: replace direction scatter on station-detail with a proper wind rose (Chart.js polar area or custom SVG)
+
+- **Additional collectors**: Holfuy (API key), Windline (API key)
+
+- **Performance pass**: InfluxDB query profiling; downsampling task for data older than 90 days
+
+- **Auto-clone preset on nearby site creation**: when a pilot creates a new ruleset near a known preset launch coordinate, offer to auto-apply that preset
 
 ---
 

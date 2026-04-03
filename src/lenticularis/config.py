@@ -47,6 +47,13 @@ class APIConfig(BaseModel):
     port: int = 1337
     reload: bool = False
 
+class OllamaConfig(BaseModel):
+    url: str = "http://localhost:11434"
+    model: str = "qwen2.5:3b"
+    enabled: bool = True
+    timeout_seconds: int = 60
+
+
 class MainConfig(BaseModel):
     influxdb: InfluxDBConfig
     collectors: list[CollectorConfig]
@@ -55,6 +62,7 @@ class MainConfig(BaseModel):
     auth: AuthConfig = AuthConfig()
     logging: LoggingConfig
     api: APIConfig
+    ollama: OllamaConfig = OllamaConfig()
 
 
 #Module vars

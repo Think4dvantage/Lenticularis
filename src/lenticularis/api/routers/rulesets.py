@@ -28,7 +28,7 @@ from sqlalchemy.orm import Session
 
 from lenticularis.api.dependencies import get_current_user, require_admin, require_pilot
 from lenticularis.database.db import get_db
-from lenticularis.database.models import LaunchLandingLink, RuleCondition, RuleSet, RuleSetWebcam, User
+from lenticularis.database.models import LaunchLandingLink, Organization, RuleCondition, RuleSet, RuleSetWebcam, User
 from lenticularis.models.rules import (
     ConditionsReplaceRequest,
     EvaluationResult,
@@ -48,7 +48,13 @@ def _get_own_ruleset(ruleset_id: str, current_user: User, db: Session) -> RuleSe
     rs = db.get(RuleSet, ruleset_id)
     if rs is None:
         raise HTTPException(status_code=404, detail="Rule set not found")
-    if rs.owner_id != current_user.id:
+    is_owner = rs.owner_id == current_user.id
+    is_org_admin = (
+        current_user.role == "org_admin"
+        and current_user.org_id is not None
+        and rs.org_id == current_user.org_id
+    )
+    if not (is_owner or is_org_admin):
         raise HTTPException(status_code=403, detail="Not your rule set")
     return rs
 
@@ -65,6 +71,7 @@ def list_rulesets(
     rows = db.execute(
         select(RuleSet)
         .where(RuleSet.owner_id == current_user.id)
+        .where(RuleSet.org_id.is_(None))
         .order_by(RuleSet.created_at.desc())
     ).scalars().all()
     return rows
@@ -114,15 +121,30 @@ def create_ruleset(
     current_user: User = Depends(require_pilot),
     db: Session = Depends(get_db),
 ):
+    # Resolve org_id: explicit org_slug beats the role-based default
+    org_id: str | None = None
+    if body.org_slug:
+        org = db.execute(
+            select(Organization).where(Organization.slug == body.org_slug)
+        ).scalar_one_or_none()
+        if org and (
+            current_user.role == "admin"
+            or (current_user.role == "org_admin" and current_user.org_id == org.id)
+        ):
+            org_id = org.id
+    elif current_user.role == "org_admin":
+        org_id = current_user.org_id
+
     rs = RuleSet(
         id=str(uuid.uuid4()),
         owner_id=current_user.id,
-        **body.model_dump(),
+        org_id=org_id,
+        **body.model_dump(exclude={"org_slug"}),
     )
     db.add(rs)
     db.commit()
     db.refresh(rs)
-    logger.info("RuleSet created: %s by %s", rs.id, current_user.id)
+    logger.info("RuleSet created: %s by %s (org_id=%s)", rs.id, current_user.id, org_id)
     return rs
 
 

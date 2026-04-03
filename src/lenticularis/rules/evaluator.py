@@ -451,7 +451,7 @@ def write_decision(ruleset: RuleSet, result: dict, influx: InfluxClient) -> None
     """
     Persist an evaluation result to the ``rule_decisions`` InfluxDB measurement.
 
-    Tags:   ``ruleset_id``, ``owner_id``
+    Tags:   ``ruleset_id``, ``owner_id``, ``site_type``
     Fields: ``decision`` (str), ``condition_results`` (JSON string)
     """
     from influxdb_client import Point  # local import to keep top-level imports tidy
@@ -460,6 +460,7 @@ def write_decision(ruleset: RuleSet, result: dict, influx: InfluxClient) -> None
             Point("rule_decisions")
             .tag("ruleset_id", ruleset.id)
             .tag("owner_id", ruleset.owner_id)
+            .tag("site_type", ruleset.site_type)
             .field("decision", result["decision"])
             .field("condition_results", json.dumps(result["condition_results"]))
         )

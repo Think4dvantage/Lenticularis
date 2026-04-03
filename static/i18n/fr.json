@@ -8,7 +8,10 @@
     "admin": "Admin",
     "sign_in": "Connexion",
     "sign_out": "Déconnexion",
-    "connecting": "Connexion…"
+    "connecting": "Connexion…",
+    "personal_workspace": "Espace personnel →",
+    "personal_rulesets": "Règles personnelles",
+    "help": "Aide"
   },
   "common": {
     "save": "Enregistrer",
@@ -124,7 +127,10 @@
     "delete_confirm": "Supprimer cet ensemble de règles et toutes ses conditions ?",
     "badge_launch_green": "🟢 DÉCOLLAGE",
     "badge_launch_orange": "🟠 DÉCOLLAGE",
-    "badge_launch_red": "🔴 DÉCOLLAGE"
+    "badge_launch_red": "🔴 DÉCOLLAGE",
+    "org_title": "Règles d'organisation",
+    "org_subtitle": "Règles pour {name}",
+    "back_to_org": "← Retour au tableau de bord"
   },
   "editor": {
     "new_title": "Nouvelle règle",
@@ -477,6 +483,26 @@
     "webcams_title": "Webcams",
     "webcam_open": "↗ Ouvrir"
   },
+  "org": {
+    "status_green": "Vol autorisé",
+    "status_orange": "Attention — surveiller les conditions",
+    "status_red": "Vol interdit",
+    "last_updated": "Dernière mise à jour",
+    "minutes_ago": "il y a {n} min",
+    "just_now": "à l'instant",
+    "login_for_details": "Se connecter pour les détails",
+    "manage_rules": "Gérer les règles",
+    "conditions_title": "Conditions actives",
+    "timeline_title": "Aperçu 48 heures",
+    "no_rulesets": "Aucune règle configurée.",
+    "no_conditions": "Aucune condition définie.",
+    "loading": "Chargement du statut…",
+    "col_station": "Station",
+    "col_field": "Champ",
+    "col_condition": "Condition",
+    "col_actual": "Actuel",
+    "col_triggered": "Déclenchée"
+  },
   "admin": {
     "title": "Panneau admin",
     "subtitle": "Gérer les utilisateurs et la configuration des collecteurs.",
@@ -485,7 +511,25 @@
       "users": "Utilisateurs",
       "collectors": "Collecteurs",
       "foehn_config": "Config föhn",
-      "presets": "Sites prédef."
+      "presets": "Sites prédef.",
+      "orgs": "Organisations"
+    },
+    "orgs": {
+      "title": "Organisations",
+      "hint": "Chaque organisation obtient un sous-domaine (ex. vkpi.lenti.cloud) avec son propre tableau de bord.",
+      "total": "{n} organisations",
+      "col_slug": "Slug",
+      "col_name": "Nom",
+      "col_description": "Description",
+      "col_created": "Créé",
+      "no_orgs": "Aucune organisation.",
+      "create_title": "Créer une organisation",
+      "slug_placeholder": "ex. vkpi",
+      "name_placeholder": "ex. VKPI Interlaken",
+      "description_placeholder": "Description optionnelle",
+      "create_btn": "Créer",
+      "creating": "Création…",
+      "slug_hint": "Le slug devient le sous-domaine — minuscules, sans espaces."
     },
     "foehn_config": {
       "save": "Enregistrer",
@@ -523,6 +567,10 @@
       "role_pilot": "Pilote",
       "role_customer": "Client",
       "role_admin": "Admin",
+      "role_org_admin": "Admin org",
+      "role_org_pilot": "Pilote org",
+      "col_org": "Organisation",
+      "no_org": "—",
       "auth_local": "Local",
       "auth_oauth": "OAuth",
       "you": "(vous)",

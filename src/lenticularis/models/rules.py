@@ -8,7 +8,7 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
-SiteType = Literal["launch", "landing"]
+SiteType = Literal["launch", "landing", "opportunity"]
 
 FieldName = Literal[
     "wind_speed", "wind_gust", "wind_direction",
@@ -88,6 +88,7 @@ class RuleSetCreate(BaseModel):
     site_type: SiteType = "launch"
     combination_logic: CombinationLogic = "worst_wins"
     is_public: bool = False
+    org_slug: Optional[str] = None  # if set, ruleset is scoped to this org
 
 
 class RuleSetUpdate(BaseModel):

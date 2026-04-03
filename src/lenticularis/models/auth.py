@@ -42,6 +42,7 @@ class UserOut(BaseModel):
     is_active: bool
     created_at: datetime
     has_password: bool  # False for social-login-only accounts
+    org_id: str | None = None
 
     model_config = {"from_attributes": True}
 

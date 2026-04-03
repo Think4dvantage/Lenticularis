@@ -157,6 +157,7 @@
     <a href="/rulesets" class="nav-link" data-i18n="nav.rulesets">Rule Sets</a>
     <a href="/stats" class="nav-link active" data-i18n="nav.stats">Statistics</a>
     <a href="/foehn" class="nav-link" data-i18n="nav.foehn">Föhn</a>
+    <a href="/help" class="nav-link" data-i18n="nav.help">Help</a>
   </div>
   <div id="navLangPicker"></div>
   <div class="nav-user" id="navUser"></div>
@@ -170,7 +171,7 @@
 
   <div id="mainContent" style="display:none">
     <div class="page-header">
-      <h1 data-i18n="stats.title">Statistics</h1>
+      <h1><span data-i18n="stats.title">Statistics</span><a href="/help#statistics" target="_blank" class="help-tip" title="Help: statistics">?</a></h1>
       <p data-i18n="stats.subtitle">Aggregate insights across all your rule sets, live weather extremes, and service health.</p>
     </div>
 
@@ -227,7 +228,7 @@
           <div class="chart-wrap"><canvas id="chartFlyable"></canvas></div>
         </div>
         <div class="chart-card">
-          <div class="chart-title" data-i18n="stats.ruleset.hourly_pattern">Hourly pattern</div>
+          <div class="chart-title" style="display:flex;align-items:center;gap:6px"><span data-i18n="stats.ruleset.hourly_pattern">Hourly pattern</span><a href="/help#statistics" target="_blank" class="help-tip" title="Help: hourly pattern">?</a></div>
           <div class="chart-subtitle" data-i18n="stats.ruleset.hourly_pattern_sub">% status by hour of day (UTC), all rule sets</div>
           <div class="chart-wrap"><canvas id="chartHourly"></canvas></div>
         </div>

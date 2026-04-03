@@ -14,12 +14,15 @@ All static files are served directly from `static/` by FastAPI's `StaticFiles` m
 ```
 src/lenticularis/
 ├── api/
-│   ├── main.py              # FastAPI app factory + lifespan (startup/shutdown)
-│   ├── dependencies.py      # get_current_user, require_pilot, require_admin
-│   └── routers/             # One file per domain (auth, stations, rulesets, …)
+│   ├── main.py              # FastAPI app factory + lifespan; subdomain-aware root handler
+│   ├── dependencies.py      # get_current_user, require_pilot, require_admin,
+│   │                        #   require_org_admin, require_org_member
+│   └── routers/             # One file per domain (auth, stations, rulesets, org, …)
+│       └── org.py           # /api/org/{slug}/status|dashboard|rulesets
 ├── collectors/              # One file per data network (meteoswiss, slf, metar, …)
 ├── database/
 │   ├── models.py            # SQLAlchemy ORM (source of truth for SQLite schema)
+│   │                        #   incl. Organization model; org_id FK on User + RuleSet
 │   ├── db.py                # init_db(), get_db() dependency, column migrations
 │   └── influx.py            # InfluxDB 2.x client (write + all query methods)
 ├── models/                  # Pydantic request/response schemas
@@ -33,6 +36,7 @@ static/
 ├── i18n.js                  # initI18n(), t(), applyDataI18n(), renderLangPicker()
 ├── auth.js                  # JWT storage, fetchAuth(), renderNavAuth()
 ├── shared.css               # Mobile-responsive overrides (linked on every page)
+├── org-dashboard.html       # Public traffic-light + authenticated detail for org subdomains
 └── *.html + *.js            # One HTML + inline <script type="module"> per page
 ```
 
@@ -45,7 +49,9 @@ static/
 - **New router**: create `src/lenticularis/api/routers/<domain>.py`, register it in `main.py` with `app.include_router(…)`. Add a page route there too if a new HTML page is needed.
 - **New SQLite table**: add ORM model in `models.py`, then add a migration block in `db.py → _run_column_migrations()` for any new columns on existing tables. New tables are created automatically by `Base.metadata.create_all()`.
 - **New InfluxDB query**: add a method to `InfluxClient` in `influx.py`. Keep Flux query strings inside the method. Return plain Python dicts/lists (no ORM objects).
-- **Auth dependencies**: `get_current_user` (any logged-in user), `require_pilot` (pilot or admin), `require_admin` (admin only). Import from `lenticularis.api.dependencies`.
+- **Auth dependencies**: `get_current_user` (any logged-in user), `require_pilot` (pilot or admin; blocks customer + org_pilot), `require_admin` (admin only), `require_org_member` (org_pilot / org_admin / admin), `require_org_admin` (org_admin / admin). Import from `lenticularis.api.dependencies`.
+- **User roles**: `pilot` | `customer` | `admin` | `org_admin` | `org_pilot`. `org_admin` and `org_pilot` must also have `org_id` set. System `admin` bypasses all org guards.
+- **Org multi-tenancy**: `Organization` model (slug, name). `org_id` nullable FK on `User` and `RuleSet`. Org admins create/edit rulesets scoped to their org. Pass `org_slug` in `RuleSetCreate` to scope a new ruleset to an org (admin or org_admin only). Subdomain routing in `main.py` reads `Host` header — any unknown subdomain serves `org-dashboard.html`.
 - **Config**: add new keys to `config.py` Pydantic models and to `config.yml.example`. Never read `os.environ` directly — always go through `get_config()`.
 - **Scheduler jobs**: add to `CollectorScheduler` in `scheduler.py`. Use `AsyncIOScheduler` + `IntervalTrigger`. Track health in `_collector_health` dict.
 - **No Alembic**: schema migrations are done with raw `ALTER TABLE` in `_run_column_migrations()`. Always make them idempotent (check `PRAGMA table_info` first).
@@ -120,6 +126,17 @@ Use the same nested key structure as existing keys (e.g. `"admin.users.col_trust
 
 ---
 
+## Planning Mode
+
+**When the user enters plan mode (`/plan` or similar), produce a plan and stop. Never start implementing immediately after a plan is approved.**
+
+- Exit plan mode → write the plan file → wait for an explicit "go ahead" / "implement" instruction in a new message.
+- If `ExitPlanMode` is called and the user approves, that approval means "the plan looks good" — not "start coding now".
+- Do not write, edit, or create any files (except the plan file) during or immediately after planning.
+- Implementation begins only when the user sends a separate follow-up message explicitly asking to proceed.
+
+---
+
 ## What NOT to Do
 
 - **Never touch prod directly.** All production changes go through the `lg4` IaC repo.
@@ -131,6 +148,16 @@ Use the same nested key structure as existing keys (e.g. `"admin.users.col_trust
 
 ---
 
-## Current Version: v1.3 (shipped)
+## Current Version: v1.5 (shipped)
 
-Next planned: **v1.4 — Rule Types: Risk + Opportunity**. See `plan-lenticularisStructure.prompt.md` for full roadmap.
+Shipped so far: v0.1 → v1.5 incl. multi-tenant org system (VKPI), Opportunity site type, AI rule suggestions (Ollama), multilanguage UI, admin panel, forecast accuracy, föhn monitor, webcams, preset sites.
+
+### Org system (v1.5) — key patterns
+
+- **Org context in URLs**: org-scoped pages use `?org={slug}` query param (`/rulesets?org=vkpi`, `/ruleset-editor?org=vkpi`).
+- **Org nav**: when `orgSlug` is set, `applyOrgNav(slug, personalPath)` hides regular nav links, shows slug as brand, and adds a "Personal workspace →" link that strips the org subdomain from `window.location.hostname`.
+- **Landing picker in org mode**: `loadLandingRulesets()` fetches from `/api/org/{slug}/rulesets` instead of `/api/rulesets` so only org-owned landing zones appear.
+- **Editor in org mode**: Opportunity button and Public/Private toggle are hidden.
+- **Subdomain routing**: `vkpi.lenti.cloud` / `vkpi.lenti-dev.lg4.ch` serve `org-dashboard.html` via `Host` header detection in `main.py`. Direct path `/org/{slug}` also works for dev.
+
+Next work items are tracked as an unordered backlog in `plan-lenticularisStructure.prompt.md`.

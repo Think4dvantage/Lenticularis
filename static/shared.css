@@ -172,3 +172,30 @@
 @media (max-width: 400px) {
   .auth-card { padding: 28px 20px !important; }
 }
+
+/* ── Help tooltip "?" buttons (used inline next to labels) ────────────────── */
+.help-tip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: transparent;
+  border: 1px solid #4a5568;
+  color: #718096;
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-decoration: none;
+  margin-left: 6px;
+  vertical-align: middle;
+  line-height: 1;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  cursor: pointer;
+}
+.help-tip:hover {
+  background: #2d3748;
+  color: #90cdf4;
+  border-color: #4a7bab;
+}

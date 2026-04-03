@@ -254,19 +254,51 @@
       display: flex; align-items: center; justify-content: center; transition: background 0.15s, color 0.15s;
     }
     .btn-remove-webcam:hover { background: #2d1515; border-color: #7b2020; color: #fc8181; }
+
+    /* ── AI modal ── */
+    .ai-modal-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.65); z-index: 1000;
+      display: flex; align-items: center; justify-content: center; padding: 20px;
+    }
+    .ai-modal-overlay.hidden { display: none; }
+    .ai-modal {
+      background: #1a1f2e; border: 1px solid #2d3748; border-radius: 12px;
+      padding: 28px; width: 100%; max-width: 560px;
+      display: flex; flex-direction: column; gap: 16px;
+    }
+    .ai-modal-title { font-size: 1rem; font-weight: 600; color: #e2e8f0; }
+    .ai-modal-hint { font-size: 0.8rem; color: #718096; line-height: 1.45; }
+    .ai-modal textarea {
+      width: 100%; background: #0f1117; border: 1px solid #2d3748; border-radius: 8px;
+      padding: 12px 14px; color: #e2e8f0; font-size: 0.88rem; resize: vertical;
+      min-height: 100px; outline: none; transition: border-color 0.15s;
+    }
+    .ai-modal textarea:focus { border-color: #4299e1; }
+    .ai-modal textarea::placeholder { color: #4a5568; }
+    .ai-modal-error { color: #fc8181; font-size: 0.8rem; min-height: 18px; }
+    .ai-modal-explanation {
+      background: #0f1117; border: 1px solid #276749; border-radius: 7px;
+      padding: 10px 14px; font-size: 0.8rem; color: #68d391; display: none;
+    }
+    .ai-modal-explanation.visible { display: block; }
+    .ai-modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
+    .btn-ai { background: #44337a; border: 1px solid #6b46c1; color: #e9d8fd; font-size: 0.82rem; padding: 7px 16px; }
+    .btn-ai:hover { background: #553c9a; }
+    .btn-ai:disabled { background: #2d3748; border-color: #4a5568; color: #718096; cursor: not-allowed; }
   </style>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 </head>
 <body>
 
 <nav class="top-nav">
-  <span class="nav-brand">🪁 Lenticularis</span>
-  <div class="nav-links">
+  <span class="nav-brand" id="navBrand">🪁 Lenticularis</span>
+  <div class="nav-links" id="navLinks">
     <a href="/" class="nav-link" data-i18n="nav.map">Map</a>
     <a href="/stations" class="nav-link" data-i18n="nav.stations">Stations</a>
     <a href="/rulesets" class="nav-link active" data-i18n="nav.rulesets">Rule Sets</a>
     <a href="/stats" class="nav-link" data-i18n="nav.stats">Statistics</a>
     <a href="/foehn" class="nav-link" data-i18n="nav.foehn">Föhn</a>
+    <a href="/help" class="nav-link" data-i18n="nav.help">Help</a>
   </div>
   <div id="navLangPicker"></div>
   <div class="nav-user" id="navUser"></div>
@@ -274,8 +306,23 @@
 
 <div class="page">
   <div class="page-header">
-    <a href="/rulesets" data-i18n="editor.back">← My Rule Sets</a>
+    <a id="backLink" href="/rulesets" data-i18n="editor.back">← My Rule Sets</a>
     <h1 id="pageTitle" data-i18n="editor.new_title">New Rule Set</h1>
+  </div>
+
+  <!-- ── AI modal ── -->
+  <div class="ai-modal-overlay hidden" id="aiModalOverlay">
+    <div class="ai-modal" role="dialog" aria-modal="true">
+      <div class="ai-modal-title" data-i18n="editor.ai_modal_title">Create Conditions with AI</div>
+      <p class="ai-modal-hint" data-i18n="editor.ai_modal_hint">Describe your flying site and conditions in plain language.</p>
+      <textarea id="aiInput" rows="4" data-i18n-placeholder="editor.ai_modal_placeholder"></textarea>
+      <div class="ai-modal-error" id="aiError"></div>
+      <div class="ai-modal-explanation" id="aiExplanation"></div>
+      <div class="ai-modal-actions">
+        <button class="btn btn-ghost" id="aiCancelBtn" data-i18n="editor.ai_modal_cancel">Cancel</button>
+        <button class="btn btn-ai" id="aiSubmitBtn" data-i18n="editor.ai_modal_submit">Generate conditions</button>
+      </div>
+    </div>
   </div>
 
   <div class="error-msg" id="errorMsg"></div>
@@ -314,12 +361,12 @@
 
   <!-- ── Rule Engine ── -->
   <div class="section">
-    <div class="section-title" data-i18n="editor.section_engine">Rule Engine</div>
+    <div class="section-title" style="display:flex;align-items:center;gap:6px"><span data-i18n="editor.section_engine">Rule Engine</span><a href="/help#conditions" target="_blank" class="help-tip" title="Help: conditions &amp; operators">?</a></div>
 
     <div id="conditionList"></div>
 
     <div class="conditions-header">
-      <span></span>
+      <button class="btn btn-ai" id="aiBtn" data-i18n="editor.ai_btn">✨ Text Creation with AI</button>
       <button class="btn btn-add" id="addGroupBtn" data-i18n="editor.add_group">＋ Add Condition Group</button>
     </div>
 
@@ -346,16 +393,18 @@
     <div class="section-title" data-i18n="editor.section_evaluation">Evaluation</div>
 
     <div class="form-group" style="margin-bottom:16px">
-      <label data-i18n="editor.site_type">Site type</label>
+      <label style="display:flex;align-items:center"><span data-i18n="editor.site_type">Site type</span><a href="/help#site-types" target="_blank" class="help-tip" title="Help: site types">?</a></label>
       <div class="site-type-toggle">
-        <button type="button" class="site-type-btn active" id="btnTypeLaunch" data-i18n="editor.launch_site">▲ Launch site</button>
-        <button type="button" class="site-type-btn"        id="btnTypeLanding" data-i18n="editor.landing_zone_btn">⚑ Landing zone</button>
+        <button type="button" class="site-type-btn active" id="btnTypeLaunch"      data-i18n="editor.launch_site">▲ Launch site</button>
+        <button type="button" class="site-type-btn"        id="btnTypeLanding"     data-i18n="editor.landing_zone_btn">⚑ Landing zone</button>
+        <button type="button" class="site-type-btn"        id="btnTypeOpportunity" data-i18n="editor.opportunity_btn">✦ Opportunity</button>
       </div>
+      <p id="opportunityHint" style="display:none;font-size:0.73rem;color:#718096;margin-top:6px" data-i18n="editor.opportunity_hint">A special location or condition window worth monitoring.</p>
       <input type="hidden" id="rsSiteType" value="launch" />
     </div>
 
-    <p style="font-size:0.82rem;color:#718096;margin-bottom:16px" data-i18n="editor.combination_hint">Combination logic: <strong style="color:#e2e8f0">worst wins</strong> — if any condition triggers RED the site is RED; any ORANGE and it’s ORANGE.</p>
-    <div class="toggle-row">
+    <p style="font-size:0.82rem;color:#718096;margin-bottom:8px;display:flex;align-items:baseline;gap:6px"><span data-i18n="editor.combination_hint">Combination logic: <strong style="color:#e2e8f0">worst wins</strong> — if any condition triggers RED the site is RED; any ORANGE and it’s ORANGE.</span><a href="/help#combination-logic" target="_blank" class="help-tip" title="Help: combination logic" style="flex-shrink:0">?</a></p>
+    <div class="toggle-row" id="publicToggleRow">
       <label class="toggle">
         <input type="checkbox" id="rsPublic" />
         <span class="slider"></span>
@@ -384,7 +433,7 @@
 
   <!-- ── Save bar ── -->
   <div class="save-bar">
-    <a href="/rulesets" class="btn btn-ghost" data-i18n="editor.cancel">Cancel</a>
+    <a id="cancelLink" href="/rulesets" class="btn btn-ghost" data-i18n="editor.cancel">Cancel</a>
     <button class="btn btn-primary" id="saveBtn" data-i18n="editor.save">Save rule set</button>
   </div>
 </div>
@@ -589,6 +638,48 @@
   // ── State ──────────────────────────────────────────────────────────────
   const params = new URLSearchParams(location.search);
   let editId = params.get('id');  // mutable: updated after first create
+
+  // Detect org context from ?org= param OR from subdomain (e.g. vkpi.lenti-dev.lg4.ch)
+  function _detectOrgSlug() {
+    const fromParam = params.get('org');
+    if (fromParam) return fromParam;
+    const host = window.location.hostname;
+    const parts = host.split('.');
+    const mainHosts = new Set(['localhost', 'lenti', 'lenti-dev', 'www', '127']);
+    if (parts.length >= 2 && !mainHosts.has(parts[0])) return parts[0];
+    return null;
+  }
+  const orgSlug = _detectOrgSlug();
+
+  if (orgSlug) {
+    const backUrl = `/rulesets?org=${orgSlug}`;
+    document.getElementById('backLink').href = backUrl;
+    document.getElementById('cancelLink').href = backUrl;
+    document.getElementById('btnTypeOpportunity').style.display = 'none';
+    document.getElementById('publicToggleRow').style.display = 'none';
+    applyOrgNav(orgSlug, '/rulesets');
+  }
+
+  function applyOrgNav(slug, personalPath) {
+    // Derive main domain by stripping the org subdomain prefix
+    // e.g. vkpi.lenti-dev.lg4.ch → lenti-dev.lg4.ch
+    //      vkpi.lenti.cloud       → lenti.cloud
+    const host = window.location.hostname;
+    const mainHost = host.startsWith(slug + '.') ? host.slice(slug.length + 1) : host;
+    const port = window.location.port ? `:${window.location.port}` : '';
+    const personalUrl = `${window.location.protocol}//${mainHost}${port}${personalPath}`;
+    const orgDashUrl = host.startsWith(slug + '.') ? `${window.location.protocol}//${host}${port}/` : `/org/${slug}`;
+    const orgRulesUrl = `/rulesets?org=${slug}`;
+
+    const brand = document.getElementById('navBrand');
+    brand.innerHTML = `<a href="${orgDashUrl}" style="color:#90cdf4;text-decoration:none">${slug.toUpperCase()}</a>`;
+
+    const navLinks = document.getElementById('navLinks');
+    navLinks.innerHTML = `
+      <a href="${orgDashUrl}" class="nav-link">${slug.toUpperCase()}</a>
+      <a href="${orgRulesUrl}" class="nav-link">${slug.toUpperCase()} ${window.t('nav.rulesets')}</a>
+      <a href="${personalUrl}" class="nav-link">${window.t('nav.personal_rulesets')}</a>`;
+  }
   let allStations = [];   // [{station_id, name, network, canton}]
   let condSeq = 0;
 
@@ -865,16 +956,19 @@
   // ── Site type toggle ──────────────────────────────────────────────────
   function setSiteType(type) {
     document.getElementById('rsSiteType').value = type;
-    document.getElementById('btnTypeLaunch').classList.toggle('active',  type === 'launch');
-    document.getElementById('btnTypeLanding').classList.toggle('active', type === 'landing');
+    document.getElementById('btnTypeLaunch').classList.toggle('active',      type === 'launch');
+    document.getElementById('btnTypeLanding').classList.toggle('active',     type === 'landing');
+    document.getElementById('btnTypeOpportunity').classList.toggle('active', type === 'opportunity');
     document.getElementById('landingPickerSection').style.display = type === 'launch' ? '' : 'none';
+    document.getElementById('opportunityHint').style.display = type === 'opportunity' ? '' : 'none';
   }
 
   // ── Landing picker ────────────────────────────────────────────────────
   let myLandingRulesets = [];   // {id, name, lat, lon} — user's landing-type rulesets
 
   async function loadLandingRulesets() {
-    const res = await fetchAuth('/api/rulesets');
+    const url = orgSlug ? `/api/org/${orgSlug}/rulesets` : '/api/rulesets';
+    const res = await fetchAuth(url);
     if (!res.ok) return;
     const all = await res.json();
     myLandingRulesets = all.filter(rs => rs.site_type === 'landing' && rs.id !== editId);
@@ -980,16 +1074,18 @@
         });
         if (!r.ok) throw new Error(await extractError(r));
       } else {
+        const createBody = orgSlug ? { ...meta, org_slug: orgSlug } : meta;
         const r = await fetchAuth('/api/rulesets', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(meta),
+          body: JSON.stringify(createBody),
         });
         if (!r.ok) throw new Error(await extractError(r));
         const created = await r.json();
         rsId = created.id;
         editId = rsId;
-        history.replaceState(null, '', `/ruleset-editor?id=${rsId}`);
+        const newUrl = orgSlug ? `/ruleset-editor?id=${rsId}&org=${orgSlug}` : `/ruleset-editor?id=${rsId}`;
+        history.replaceState(null, '', newUrl);
       }
 
       // Replace conditions
@@ -1028,8 +1124,9 @@
 
   // ── Init ──────────────────────────────────────────────────────────────
   document.getElementById('rsPublic').addEventListener('change', updatePublicLabel);
-  document.getElementById('btnTypeLaunch').addEventListener('click', () => setSiteType('launch'));
-  document.getElementById('btnTypeLanding').addEventListener('click', () => setSiteType('landing'));
+  document.getElementById('btnTypeLaunch').addEventListener('click',      () => setSiteType('launch'));
+  document.getElementById('btnTypeLanding').addEventListener('click',     () => setSiteType('landing'));
+  document.getElementById('btnTypeOpportunity').addEventListener('click', () => setSiteType('opportunity'));
   document.getElementById('addGroupBtn').addEventListener('click', () => makeCondGroup());
 
   // ── Webcam editor ─────────────────────────────────────────────────────
@@ -1158,6 +1255,84 @@
       await fetchAuth(`/api/rulesets/${editId}/set_preset?is_preset=${e.target.checked}`, { method: 'PUT' });
     } catch { /* ignore */ }
   });
+
+  // ── AI condition assistant ─────────────────────────────────────────────
+  (function setupAiModal() {
+    const overlay   = document.getElementById('aiModalOverlay');
+    const input     = document.getElementById('aiInput');
+    const submitBtn = document.getElementById('aiSubmitBtn');
+    const cancelBtn = document.getElementById('aiCancelBtn');
+    const errorEl   = document.getElementById('aiError');
+    const explEl    = document.getElementById('aiExplanation');
+
+    document.getElementById('aiBtn').addEventListener('click', () => {
+      errorEl.textContent = '';
+      explEl.classList.remove('visible');
+      overlay.classList.remove('hidden');
+      input.focus();
+    });
+
+    function closeModal() { overlay.classList.add('hidden'); }
+    cancelBtn.addEventListener('click', closeModal);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) closeModal(); });
+
+    submitBtn.addEventListener('click', async () => {
+      errorEl.textContent = '';
+      explEl.classList.remove('visible');
+      const description = input.value.trim();
+      if (!description) {
+        errorEl.textContent = window.t('editor.ai_modal_error_empty');
+        return;
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = window.t('editor.ai_modal_loading');
+
+      try {
+        const res = await fetchAuth('/api/ai/suggest-conditions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            description,
+            stations: allStations.map(s => ({ station_id: s.station_id, name: s.name, network: s.network })),
+          }),
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          errorEl.textContent = err.detail || `Error ${res.status}`;
+          return;
+        }
+
+        const data = await res.json();
+        const conditions = data.conditions || [];
+
+        // Each condition gets its own standalone group
+        for (const cond of conditions) {
+          makeCondGroup([cond]);
+        }
+        redrawMapOverlays();
+
+        if (data.explanation) {
+          explEl.textContent = window.t('editor.ai_modal_explanation_label') + ' ' + data.explanation;
+          explEl.classList.add('visible');
+        }
+
+        // Show brief success then close after a moment
+        setTimeout(() => {
+          closeModal();
+          input.value = '';
+          explEl.classList.remove('visible');
+        }, 2000);
+
+      } catch (err) {
+        errorEl.textContent = err.message || 'Unknown error';
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = window.t('editor.ai_modal_submit');
+      }
+    });
+  })();
 
   await loadStations();
   await loadLandingRulesets();

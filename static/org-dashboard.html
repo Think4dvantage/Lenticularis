@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lenticularis — Organisation Dashboard</title>
+  <link rel="stylesheet" href="/static/shared.css" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: #0f1117; color: #e2e8f0; min-height: 100vh;
+      display: flex; flex-direction: column;
+    }
+
+    /* ── Nav ── */
+    .top-nav { background: #1a1f2e; border-bottom: 1px solid #2d3748; padding: 0 24px; display: flex; align-items: center; flex-shrink: 0; height: 48px; }
+    .nav-brand { font-size: 1.1rem; font-weight: 600; color: #90cdf4; margin-right: auto; white-space: nowrap; }
+    .nav-user { display: flex; align-items: center; gap: 10px; }
+    .nav-btn { background: transparent; border: 1px solid #4a5568; color: #a0aec0; font-size: 0.8rem; padding: 4px 10px; border-radius: 5px; cursor: pointer; transition: background 0.15s; }
+    .nav-btn:hover { background: #2d3748; color: #e2e8f0; }
+    #navLangPicker { display: flex; gap: 2px; margin-left: 8px; }
+    .lang-btn { background: transparent; border: 1px solid #4a5568; color: #718096; font-size: 0.72rem; padding: 3px 7px; border-radius: 4px; cursor: pointer; }
+    .lang-btn:hover { background: #2d3748; color: #e2e8f0; }
+    .lang-btn.active { background: #2d4a6e; color: #90cdf4; border-color: #4a7bab; }
+
+    /* ── Layout ── */
+    .page {
+      flex: 1; display: flex; flex-direction: column; align-items: center;
+      justify-content: flex-start; padding: 40px 20px 60px;
+      max-width: 700px; margin: 0 auto; width: 100%;
+    }
+
+    /* ── Org name ── */
+    .org-name {
+      font-size: 1rem; color: #718096; text-transform: uppercase;
+      letter-spacing: 0.12em; font-weight: 600; margin-bottom: 32px; text-align: center;
+    }
+
+    /* ── Traffic light ── */
+    .status-circle {
+      width: 180px; height: 180px; border-radius: 50%;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      font-size: 1.4rem; font-weight: 700; color: #fff;
+      box-shadow: 0 0 60px 8px var(--glow), 0 0 0 8px var(--ring);
+      transition: background 0.4s, box-shadow 0.4s;
+      margin-bottom: 20px; cursor: default; user-select: none;
+    }
+    .status-circle.green  { background: #276749; --glow: rgba(56,161,105,0.5); --ring: rgba(56,161,105,0.25); }
+    .status-circle.orange { background: #7b4c00; --glow: rgba(221,107,32,0.5); --ring: rgba(221,107,32,0.25); }
+    .status-circle.red    { background: #742a2a; --glow: rgba(229,62,62,0.5);  --ring: rgba(229,62,62,0.25);  }
+    .status-circle.loading { background: #2d3748; --glow: transparent; --ring: transparent; }
+
+    .status-icon { font-size: 2.8rem; line-height: 1; margin-bottom: 6px; }
+    .status-label { font-size: 0.85rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
+
+    /* ── Last updated ── */
+    .status-meta { color: #718096; font-size: 0.82rem; margin-bottom: 40px; text-align: center; }
+
+    /* ── Login prompt (public) ── */
+    .login-prompt { color: #718096; font-size: 0.82rem; margin-top: 12px; }
+    .login-prompt a { color: #90cdf4; text-decoration: none; }
+    .login-prompt a:hover { text-decoration: underline; }
+
+    /* ── Member detail section ── */
+    .detail-section { width: 100%; display: none; }
+    .detail-section.visible { display: block; }
+
+    .section-title {
+      font-size: 0.78rem; font-weight: 600; color: #718096; text-transform: uppercase;
+      letter-spacing: 0.1em; margin-bottom: 12px;
+    }
+
+    /* ── Conditions table ── */
+    .card { background: #1a1f2e; border: 1px solid #2d3748; border-radius: 10px; padding: 20px; margin-bottom: 24px; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
+    th { text-align: left; padding: 8px 10px; color: #718096; font-weight: 500; border-bottom: 1px solid #2d3748; }
+    td { padding: 9px 10px; border-bottom: 1px solid #1e2533; vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
+
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.76rem; font-weight: 600; }
+    .badge-green  { background: #276749; color: #9ae6b4; }
+    .badge-orange { background: #7b4c00; color: #fbd38d; }
+    .badge-red    { background: #742a2a; color: #feb2b2; }
+
+    /* ── Timeline strip (history + forecast) ── */
+    .timeline-wrap { display: flex; align-items: stretch; gap: 0; border-radius: 6px; overflow: hidden; height: 36px; }
+    .timeline-half { display: flex; gap: 1px; flex: 1; overflow: hidden; }
+    .timeline-cell { flex: 1; min-width: 3px; cursor: default; transition: opacity 0.1s; }
+    .timeline-cell:hover { opacity: 0.75; }
+    .timeline-cell.green  { background: #276749; }
+    .timeline-cell.orange { background: #c05621; }
+    .timeline-cell.red    { background: #c53030; }
+    .timeline-cell.empty  { background: #2d3748; }
+    .timeline-cell.forecast.green  { background: #276749; opacity: 0.55; }
+    .timeline-cell.forecast.orange { background: #c05621; opacity: 0.55; }
+    .timeline-cell.forecast.red    { background: #c53030; opacity: 0.55; }
+    .timeline-cell.forecast.empty  { background: #2d3748; opacity: 0.4; }
+    .timeline-now { width: 3px; background: #e2e8f0; flex-shrink: 0; }
+
+    .timeline-labels { display: flex; justify-content: space-between; font-size: 0.72rem; color: #718096; margin-top: 5px; }
+    .timeline-labels span { flex: 1; }
+    .timeline-labels span:nth-child(2) { text-align: center; color: #90cdf4; font-weight: 600; }
+    .timeline-labels span:nth-child(3) { text-align: right; }
+
+    /* ── Manage link ── */
+    .manage-link { display: inline-block; margin-top: 8px; color: #90cdf4; font-size: 0.84rem; text-decoration: none; }
+    .manage-link:hover { text-decoration: underline; }
+
+    /* ── Error ── */
+    .error-msg { background: #742a2a; color: #fed7d7; padding: 10px 14px; border-radius: 6px; font-size: 0.84rem; margin-bottom: 20px; }
+
+    @media (max-width: 500px) {
+      .status-circle { width: 150px; height: 150px; }
+      .status-icon { font-size: 2.2rem; }
+    }
+  </style>
+</head>
+<body>
+
+<nav class="top-nav">
+  <span class="nav-brand">Lenticularis</span>
+  <div id="navUser" class="nav-user"></div>
+  <div id="navLangPicker"></div>
+</nav>
+
+<div class="page">
+  <div id="errorMsg" class="error-msg" style="display:none"></div>
+
+  <div id="orgName" class="org-name"></div>
+
+  <!-- Traffic light — always visible -->
+  <div id="statusCircle" class="status-circle loading">
+    <div class="status-icon" id="statusIcon">⋯</div>
+    <div class="status-label" id="statusLabel" data-i18n="org.loading"></div>
+  </div>
+
+  <div class="status-meta" id="statusMeta"></div>
+
+  <!-- Public: invite to log in -->
+  <div id="loginPrompt" class="login-prompt" style="display:none">
+    <span data-i18n="org.login_for_details"></span>
+    &nbsp;<a href="/login" data-i18n="nav.sign_in"></a>
+  </div>
+
+  <!-- Member detail section -->
+  <div id="detailSection" class="detail-section">
+
+    <!-- 48h timeline strip (history + forecast) — shown first, right below traffic light -->
+    <div class="card" style="margin-bottom:24px">
+      <div class="section-title" data-i18n="org.timeline_title"></div>
+      <div class="timeline-wrap">
+        <div id="timelineHistory" class="timeline-half"></div>
+        <div class="timeline-now"></div>
+        <div id="timelineForecast" class="timeline-half"></div>
+      </div>
+      <div class="timeline-labels">
+        <span>−24h</span>
+        <span data-i18n="common.live"></span>
+        <span>+24h</span>
+      </div>
+    </div>
+
+    <!-- Conditions per ruleset -->
+    <div id="conditionsWrap">
+      <!-- populated by JS -->
+    </div>
+
+    <!-- Manage rules link (org_admin only) -->
+    <div id="manageWrap" style="display:none">
+      <a class="manage-link" id="manageLink" href="/rulesets" data-i18n="org.manage_rules"></a>
+    </div>
+
+  </div>
+</div>
+
+<script type="module">
+import { initI18n, renderLangPicker, applyDataI18n } from '/static/i18n.js';
+import { getUser, fetchAuth, renderNavAuth } from '/static/auth.js';
+
+await initI18n();
+renderLangPicker();
+
+// Determine org slug — from subdomain (prod) or path /org/{slug} (dev/fallback)
+function getSlug() {
+  const host = window.location.hostname;
+  const parts = host.split('.');
+  // If hostname is e.g. vkpi.lenti.cloud → slug = "vkpi"
+  // Main app hosts: localhost, lenti, lenti-dev, www → no slug
+  const mainHosts = new Set(['localhost', 'lenti', 'lenti-dev', 'www', '127']);
+  if (parts.length >= 2 && !mainHosts.has(parts[0])) {
+    return parts[0];
+  }
+  // Fall back to path: /org/{slug}
+  const m = window.location.pathname.match(/^\/org\/([^/]+)/);
+  return m ? m[1] : null;
+}
+
+const slug = getSlug();
+const user = getUser();
+
+// Render nav (no active page — org dashboard is not in the main nav)
+if (user) {
+  const nameEl = document.createElement('span');
+  nameEl.style.cssText = 'color:#e2e8f0; font-size:0.85rem;';
+  nameEl.textContent = user.display_name;
+  const logoutBtn = document.createElement('button');
+  logoutBtn.className = 'nav-btn';
+  logoutBtn.setAttribute('data-i18n', 'nav.sign_out');
+  logoutBtn.textContent = window.t('nav.sign_out');
+  logoutBtn.onclick = () => { localStorage.removeItem('lenti_auth'); location.reload(); };
+  document.getElementById('navUser').append(nameEl, logoutBtn);
+} else {
+  const loginLink = document.createElement('a');
+  loginLink.href = '/login';
+  loginLink.className = 'nav-btn';
+  loginLink.setAttribute('data-i18n', 'nav.sign_in');
+  loginLink.textContent = window.t('nav.sign_in');
+  document.getElementById('navUser').appendChild(loginLink);
+}
+
+if (!slug) {
+  showError('No organisation slug found. Access this page via the organisation subdomain (e.g. vkpi.lenti.cloud) or /org/vkpi.');
+} else {
+  await loadStatus();
+}
+
+// ── Public status load ──
+async function loadStatus() {
+  try {
+    const res = await fetch(`/api/org/${slug}/status`);
+    if (!res.ok) {
+      if (res.status === 404) {
+        showError(`Organisation "${slug}" not found.`);
+      } else {
+        showError(`Error ${res.status}`);
+      }
+      return;
+    }
+    const data = await res.json();
+    renderStatus(data.color, data.updated_at, data.org_name);
+
+    // If logged in as org member of this org, load full dashboard
+    const isOrgMember = user && (user.role === 'admin' || user.role === 'org_admin' || user.role === 'org_pilot');
+    if (isOrgMember) {
+      loadDashboard();
+    } else {
+      document.getElementById('loginPrompt').style.display = 'block';
+    }
+  } catch (e) {
+    showError(e.message);
+  }
+}
+
+// ── Render traffic light ──
+function renderStatus(color, updatedAt, orgName) {
+  const circle = document.getElementById('statusCircle');
+  const icon = document.getElementById('statusIcon');
+  const label = document.getElementById('statusLabel');
+  const meta = document.getElementById('statusMeta');
+
+  circle.className = `status-circle ${color}`;
+
+  const icons = { green: '✈', orange: '⚠', red: '✋' };
+  const labelKeys = { green: 'org.status_green', orange: 'org.status_orange', red: 'org.status_red' };
+
+  icon.textContent = icons[color] || '?';
+  label.textContent = window.t(labelKeys[color] || 'org.loading');
+  label.removeAttribute('data-i18n');
+
+  if (updatedAt) {
+    const diff = Math.floor((Date.now() - new Date(updatedAt)) / 1000);
+    let age;
+    if (diff < 60)  age = window.t('org.just_now');
+    else            age = window.t('org.minutes_ago', { n: Math.floor(diff / 60) });
+    meta.textContent = `${window.t('org.last_updated')}: ${age}`;
+  }
+
+  // Show org name from path/host
+  const nameEl = document.getElementById('orgName');
+  nameEl.textContent = orgName || slug.toUpperCase();
+  document.title = `${orgName || slug.toUpperCase()} — Lenticularis`;
+}
+
+// ── Member dashboard load ──
+async function loadDashboard() {
+  try {
+    const res = await fetchAuth(`/api/org/${slug}/dashboard`);
+    if (!res.ok) {
+      console.error(`[org-dashboard] /dashboard returned ${res.status}`, await res.json().catch(() => ({})));
+      return;
+    }
+    const data = await res.json();
+
+    // Re-render status with fresh data + org name
+    renderStatus(data.color, data.updated_at, data.org_name);
+
+    document.getElementById('detailSection').classList.add('visible');
+
+    renderTimeline(data.history || [], data.forecast || []);
+    renderConditions(data.evaluations || []);
+
+    if (user && (user.role === 'org_admin' || user.role === 'admin')) {
+      document.getElementById('manageWrap').style.display = 'block';
+      document.getElementById('manageLink').href = `/rulesets?org=${slug}`;
+    }
+
+    applyDataI18n(document.getElementById('detailSection'));
+  } catch (e) {
+    console.error('[org-dashboard] loadDashboard exception:', e);
+  }
+}
+
+// ── Condition breakdown ──
+function renderConditions(evaluations) {
+  const wrap = document.getElementById('conditionsWrap');
+  if (!evaluations.length) {
+    wrap.innerHTML = `<div class="card"><p class="section-title" style="margin:0" data-i18n="org.no_rulesets"></p></div>`;
+    applyDataI18n(wrap);
+    return;
+  }
+
+  wrap.innerHTML = evaluations.map(ev => {
+    const conds = ev.condition_results || [];
+    const noData = ev.no_data_stations || [];
+    const badgeCls = `badge-${ev.decision}`;
+
+    const condRows = conds.length
+      ? conds.map(c => {
+          const triggeredBadge = c.matched
+            ? `<span class="badge badge-${escHtml(c.result_colour || 'red')}">${escHtml(c.result_colour || '')}</span>`
+            : `<span class="badge" style="background:#2d3748;color:#718096">—</span>`;
+          return `<tr>
+            <td style="color:#a0aec0">${escHtml(c.station_name || c.station_id || '')}</td>
+            <td>${escHtml(c.field || '')}</td>
+            <td>${escHtml(c.operator || '')} ${escHtml(String(c.value_a ?? ''))}${c.value_b != null ? '–' + escHtml(String(c.value_b)) : ''}</td>
+            <td>${c.actual_value != null ? escHtml(String(c.actual_value)) : '—'}</td>
+            <td>${triggeredBadge}</td>
+          </tr>`;
+        }).join('')
+      : `<tr><td colspan="5" style="color:#718096; padding:12px 10px" data-i18n="org.no_conditions"></td></tr>`;
+
+    const noDataNote = noData.length
+      ? `<div style="font-size:0.78rem; color:#718096; margin-top:8px;">⚠ No data: ${escHtml(noData.join(', '))}</div>`
+      : '';
+
+    return `<div class="card">
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px;">
+        <span style="font-weight:600">${escHtml(ev.name)}</span>
+        <span class="badge ${escHtml(badgeCls)}">${escHtml(ev.decision)}</span>
+      </div>
+      <div class="section-title" data-i18n="org.conditions_title"></div>
+      <table>
+        <thead><tr>
+          <th data-i18n="org.col_station"></th>
+          <th data-i18n="org.col_field"></th>
+          <th data-i18n="org.col_condition"></th>
+          <th data-i18n="org.col_actual"></th>
+          <th data-i18n="org.col_triggered"></th>
+        </tr></thead>
+        <tbody>${condRows}</tbody>
+      </table>
+      ${noDataNote}
+    </div>`;
+  }).join('');
+
+  applyDataI18n(wrap);
+}
+
+// ── 48h timeline strip (60 history buckets + 60 forecast buckets) ──
+function renderTimeline(history, forecast) {
+  const BUCKETS = 60;
+  const now = Date.now();
+  const windowMs = 24 * 3600 * 1000;
+  const rank = { green: 0, orange: 1, red: 2 };
+
+  // --- history half ---
+  const hBuckets = new Array(BUCKETS).fill(null);
+  for (const h of history) {
+    if (!h.timestamp) continue;
+    const ts = new Date(h.timestamp).getTime();
+    const age = now - ts;
+    if (age < 0 || age > windowMs) continue;
+    // age=windowMs → idx=0 (leftmost), age=0 → idx=59 (rightmost)
+    const idx = Math.min(Math.floor(((windowMs - age) / windowMs) * BUCKETS), BUCKETS - 1);
+    if (hBuckets[idx] === null || (rank[h.decision] ?? 0) > (rank[hBuckets[idx]] ?? 0)) {
+      hBuckets[idx] = h.decision;
+    }
+  }
+  document.getElementById('timelineHistory').innerHTML = hBuckets.map(b =>
+    `<div class="timeline-cell ${b || 'empty'}" title="${b || 'no data'}"></div>`
+  ).join('');
+
+  // --- forecast half ---
+  const fBuckets = new Array(BUCKETS).fill(null);
+  for (const f of forecast) {
+    if (!f.valid_time) continue;
+    const ts = new Date(f.valid_time).getTime();
+    const ahead = ts - now;
+    if (ahead < 0 || ahead > windowMs) continue;
+    // ahead=0 → idx=0 (leftmost/now), ahead=windowMs → idx=59 (rightmost)
+    const idx = Math.min(Math.floor((ahead / windowMs) * BUCKETS), BUCKETS - 1);
+    if (fBuckets[idx] === null || (rank[f.decision] ?? 0) > (rank[fBuckets[idx]] ?? 0)) {
+      fBuckets[idx] = f.decision;
+    }
+  }
+  document.getElementById('timelineForecast').innerHTML = fBuckets.map(b =>
+    `<div class="timeline-cell forecast ${b || 'empty'}" title="${b || 'no data'}"></div>`
+  ).join('');
+}
+
+function escHtml(str) {
+  return String(str ?? '').replace(/[&<>"']/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function showError(msg) {
+  const el = document.getElementById('errorMsg');
+  el.textContent = msg;
+  el.style.display = 'block';
+  const circle = document.getElementById('statusCircle');
+  circle.className = 'status-circle loading';
+  document.getElementById('statusIcon').textContent = '✕';
+  document.getElementById('statusLabel').textContent = window.t('common.error');
+  document.getElementById('statusLabel').removeAttribute('data-i18n');
+}
+</script>
+</body>
+</html>
