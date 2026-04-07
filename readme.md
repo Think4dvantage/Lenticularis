@@ -122,7 +122,7 @@ static/
 | v1.5 — Multi-tenant org system (VKPI) | ✅ Shipped |
 | v1.6 — Help/FAQ page + AI input improvements + org ruleset isolation fix | ✅ Shipped |
 
-Remaining work items are tracked as an unordered backlog in [plan-lenticularisStructure.prompt.md](plan-lenticularisStructure.prompt.md).
+Remaining work items are tracked as an unordered backlog in [.ai/context/features.md](.ai/context/features.md).
 
 ## Configuration
 

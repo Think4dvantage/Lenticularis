@@ -20,7 +20,15 @@
       "WebFetch(domain:www.meteoschweiz.admin.ch)",
       "Bash(.venv/Scripts/python -c \"from lenticularis.config import FoehnConfig, MainConfig; print\\(''config OK''\\); fc = FoehnConfig\\(north_stations=[''ALT''], south_stations=[''LUG'']\\); print\\(fc.model_dump\\(\\)\\)\")",
       "Bash(PYTHONPATH=src .venv/Scripts/python -c \":*)",
-      "Bash(node -e \":*)"
+      "Bash(node -e \":*)",
+      "WebFetch(domain:data.geo.admin.ch)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:open-meteo.com)",
+      "WebFetch(domain:meteoswiss.github.io)",
+      "WebFetch(domain:api.existenz.ch)",
+      "WebFetch(domain:developer.srgssr.ch)",
+      "Bash(npm show:*)",
+      "WebFetch(domain:vkpi.ch)"
     ]
   }
 }

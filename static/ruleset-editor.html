@@ -720,6 +720,7 @@
       canton: s.canton || '',
       lat: s.latitude  ?? null,
       lon: s.longitude ?? null,
+      elevation: s.elevation ?? null,
     })).sort((a, b) => a.name.localeCompare(b.name));
   }
 
@@ -1294,7 +1295,7 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             description,
-            stations: allStations.map(s => ({ station_id: s.station_id, name: s.name, network: s.network })),
+            stations: allStations.map(s => ({ station_id: s.station_id, name: s.name, network: s.network, latitude: s.lat, longitude: s.lon, elevation: s.elevation })),
           }),
         });
 

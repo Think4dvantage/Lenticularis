@@ -251,12 +251,14 @@ function renderCharts(data, xMin, xMax) {
   function buildFields(rows) {
     const f = {
       wind_speed: [], wind_gust: [], wind_direction: [],
-      temperature: [], humidity: [], pressure_qnh: [],
+      temperature: [], humidity: [], pressure: [],
       precipitation: [], snow_depth: [],
     };
     for (const row of (rows || [])) {
       const ts = row.timestamp;
-      for (const field of Object.keys(f)) {
+      // pressure_qnh is the API field name; normalise to 'pressure' for internal lookups
+      if (row.pressure_qnh != null) f.pressure.push({ x: ts, y: row.pressure_qnh });
+      for (const field of ['wind_speed', 'wind_gust', 'wind_direction', 'temperature', 'humidity', 'precipitation', 'snow_depth']) {
         if (row[field] != null) f[field].push({ x: ts, y: row[field] });
       }
     }
@@ -302,7 +304,7 @@ function renderCharts(data, xMin, xMax) {
   // Simple fields
   renderSimpleChart('temperature', obs.temperature, fcSeries, range, {}, t);
   renderSimpleChart('humidity',    obs.humidity,    fcSeries, range, { yMin: 0, yMax: 100 }, t);
-  renderSimpleChart('pressure',    obs.pressure_qnh, fcSeries, range, {}, t);
+  renderSimpleChart('pressure',    obs.pressure,     fcSeries, range, {}, t);
   renderPrecipitationChart(obs.precipitation, fcSeries, range, t);
   renderSimpleChart('snow_depth',  obs.snow_depth,  fcSeries, range, { yMin: 0 }, t);
 }
@@ -498,17 +500,15 @@ function renderPrecipitationChart(points, fcSeries, opts, t) {
   fcSeries.forEach(({ label, color, fields }, idx) => {
     if (fields.precipitation.length) {
       datasets.push({
-        type: 'line',
+        type: 'bar',
         label,
         data: fields.precipitation,
         borderColor: color,
-        backgroundColor: 'transparent',
-        borderWidth: 1.5,
-        borderDash: [6, 4],
-        pointRadius: 0,
-        tension: 0.3,
+        backgroundColor: hexToRgba(color, 0.45),
+        borderWidth: 1,
+        barThickness: 'flex',
         yAxisID: 'y',
-        order: 1 + idx,
+        order: 2 + idx,
       });
     }
   });
