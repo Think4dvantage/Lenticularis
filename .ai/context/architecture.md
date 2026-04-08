@@ -47,6 +47,7 @@
 - `GET /api/stations/{station_id}` — station metadata
 - `GET /api/stations/{station_id}/latest` — most recent measurement
 - `GET /api/stations/{station_id}/history` — `?from=&to=&fields=`
+- `GET /api/stations/replay` — `?start=&end=&forecast_hours=&include_forecast=` — all stations over a time window for map replay; **server-side in-memory cache (5 min TTL)** keyed by query params; Flux query uses `aggregateWindow(30m, last)` before `pivot` to reduce row count ~3×
 - `GET /api/stations/{id}/forecast-accuracy` — `?from=&to=` — actuals + per-init_date forecast series
 
 ### Launch Sites
@@ -176,6 +177,12 @@ When a container is on multiple Docker networks, add `traefik.docker.network=pro
 healthcheck:
   test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/')\""]
 ```
+
+### Replay Cache Architecture
+
+`api/routers/stations.py` has a module-level `_replay_cache: dict[str, tuple[Any, float]]` (key → payload, monotonic stored_at). TTL is 5 minutes. The cache is warmed at startup via `warm_replay_cache(influx, registry)` — a background `asyncio.Task` that iterates offsets `[1, 0, 2, -1, 3, -2, 4, -3, 5]` sequentially, covering all 9 day-button windows. Core computation is in `_build_replay_payload()` (sync, called via `run_in_executor`). The HTTP endpoint checks the cache first; on miss it calls `_build_replay_payload` and stores the result.
+
+The frontend mirrors this with a client-side `ReplayEngine._cache` (Map, 10 min TTL) so repeated clicks within a session are instant without any HTTP round-trip. Prefetch fires after `window._stationsReady` resolves, iterating the same offset priority order sequentially via `await _mapReplay.prefetch()`.
 
 ### Dev Overlay
 

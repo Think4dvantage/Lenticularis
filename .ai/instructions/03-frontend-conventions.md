@@ -98,3 +98,18 @@ Use `.help-tip` CSS class (defined in `shared.css`) for inline `?` tooltip butto
 ## Page Layout Pattern
 
 Each page: one `.html` file + inline `<script type="module">` or companion `.js` file (for large pages). One HTML + script per domain — no shared mega-script.
+
+---
+
+## Map Replay / Prefetch Pattern
+
+`static/replay.js` exports `ReplayEngine`. Key design points:
+
+- **Client-side cache**: `_cache` Map keyed by URL, TTL 10 min. `prefetch(params, signal)` fills it silently. `load(params)` checks cache first — on hit, applies instantly with no loading indicator.
+- **AbortController**: `_prefetchAbort` in `index.html` aborts in-flight prefetch on `pagehide` (F5/navigation). Always pass the signal to `prefetch()`.
+- **`window._stationsReady`**: `map.js` sets this to the `loadStations()` Promise. In `index.html`, chain `window._stationsReady.then(async () => { ... })` to start prefetch only after markers are placed.
+- **Sequential prefetch**: Use `for...of` + `await` (not `forEach`) so only one InfluxDB query runs at a time. Priority order: `[1, 0, 2, -1, 3, -2, 4, -3, 5]`.
+- **Lazy popup binding**: Always use `bindPopup(() => buildPopup(s))` (function form) — never `bindPopup(buildPopup(s))`. The function form defers execution until popup open, when `window.t` is guaranteed ready.
+- **`_buildUrl(params)`** is the shared URL builder used by both `prefetch()` and `load()` — cache key matching depends on this being identical for both.
+
+Console logging uses `[Lenti:replay]`, `[Lenti:map]`, `[Lenti:index]` prefixes with timing via `performance.now()`.

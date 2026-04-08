@@ -85,7 +85,8 @@ Frontend
 | MeteoSwiss | None (open data) | wind speed/gust, temp, humidity, pressure | 10 min |
 | METAR (AviationWeather) | None (open data) | wind speed/direction/gust, temperature, altimeter (QNH) | 15 min |
 | SLF | None (open data) | wind speed/direction/gust, snow depth, temp | 30 min |
-| Wunderground/Ecovitt | API key | all personal weather station sensors | 15 min |
+| Wunderground/Ecowitt | API key | all personal weather station sensors | 5–15 min |
+| Holfuy | API key (`pw=` param) | wind speed/gust/direction, temp, humidity | 5 min |
 | Open-Meteo | None | 5-day forecast (short + extended) | layered schedule |
 
 ---

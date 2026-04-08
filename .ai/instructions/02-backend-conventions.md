@@ -117,6 +117,7 @@ Key lessons already learned:
 - **MeteoSwiss timestamps** — use `reference_ts` (ISO 8601); fall back to `date` only if absent.
 - **Altitude strings** can arrive as floats (`'1888.00'`) or with unit suffix (`'1538.86 m'`). Always parse via `int(float(str(raw).split()[0]))`.
 - **METAR wind direction** can legitimately be missing/variable (VRB/calm). Allow nullable `wind_direction`.
+- **Holfuy API** endpoint is `https://api.holfuy.com/live/` (NOT `/measurements/`). Params: `pw=<key>&m=JSON&s=all&su=km/h&tu=C&loc&utc`. Response shape: `{"measurements": [...]}` wrapper (not a flat list). Each entry: `stationId`, `stationName`, `location: {latitude, longitude, altitude}`, `dateTime` (UTC when `utc` param present), `wind: {speed, gust, direction}`, `temperature`, `humidity`. Without `loc` flag, coordinates are absent. Without `utc` flag, timestamps are CE(S)T.
 
 ---
 
