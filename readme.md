@@ -122,6 +122,7 @@ static/
 | v1.5 — Multi-tenant org system (VKPI) | ✅ Shipped |
 | v1.6 — Help/FAQ page + AI input improvements + org ruleset isolation fix | ✅ Shipped |
 | v1.7 — Holfuy collector + forecast replay prefetch cache + map arrow fix | ✅ Shipped |
+| v1.8 — Replay performance: server cache, startup warm-up, 30m downsampling, all-button prefetch | ✅ Shipped |
 
 Remaining work items are tracked as an unordered backlog in [.ai/context/features.md](.ai/context/features.md).
 

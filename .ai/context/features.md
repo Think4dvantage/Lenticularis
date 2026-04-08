@@ -1,6 +1,6 @@
 # Feature History & Backlog
 
-## Current Version: v1.7 (shipped)
+## Current Version: v1.8 (shipped)
 
 ### Shipped Milestones
 
@@ -24,6 +24,7 @@
 | v1.5 | Multi-tenant org system: `Organization` model, `org_admin`/`org_pilot` roles, subdomain routing (`vkpi.lenti.cloud`), org-dashboard, org-scoped editor |
 | v1.6 | Help/FAQ page (`/help`, 12 accordion sections); AI input normaliser (regex wind-term → degrees); fuzzy station name matching; geographic station lookup by location name; `GET /api/rulesets` org isolation fix |
 | v1.7 | Holfuy collector (`collectors/holfuy.py`, API-key auth, `{"measurements":[...]}` envelope); forecast replay prefetch cache (`ReplayEngine._cache`, TTL 10 min, `prefetch()` with AbortSignal); map wind-arrow lazy-popup fix (`window.t is not a function`); prefetch abort on page unload |
+| v1.8 | Replay performance: server-side in-memory TTL cache (5 min) in `/api/stations/replay`; startup background warm-up of all 9 day-button windows; `aggregateWindow(30m, last)` before pivot reduces observation rows ~3×; removed redundant `sort()` from Flux queries; frontend prefetch expanded to all 9 offsets in outward-from-today order; browser console logging throughout |
 
 ---
 
