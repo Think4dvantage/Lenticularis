@@ -63,13 +63,25 @@ class ReplayEngine {
   async prefetch(params, signal) {
     const url = this._buildUrl(params);
     const cached = this._cache.get(url);
-    if (cached && Date.now() - cached.fetchedAt < REPLAY_CACHE_TTL_MS) return;
+    if (cached && Date.now() - cached.fetchedAt < REPLAY_CACHE_TTL_MS) {
+      console.log(`[Lenti:replay] prefetch SKIP (cache fresh, age=${((Date.now()-cached.fetchedAt)/1000).toFixed(0)}s): ${url}`);
+      return;
+    }
+    console.log(`[Lenti:replay] prefetch START: ${url}`);
+    const t0 = performance.now();
     try {
       const res = await fetch(url, { signal });
-      if (!res.ok) return;
+      if (!res.ok) { console.warn(`[Lenti:replay] prefetch HTTP ${res.status}: ${url}`); return; }
       const json = await res.json();
       this._cache.set(url, { json, fetchedAt: Date.now() });
-    } catch { /* silent — prefetch is best-effort; AbortError on page unload is expected */ }
+      console.log(`[Lenti:replay] prefetch DONE in ${(performance.now()-t0).toFixed(0)}ms: ${url}`);
+    } catch (err) {
+      if (err.name === 'AbortError') {
+        console.log(`[Lenti:replay] prefetch ABORTED (page unload): ${url}`);
+      } else {
+        console.warn(`[Lenti:replay] prefetch ERROR: ${url}`, err);
+      }
+    }
   }
 
   /** Load replay data. Serves from cache when available and fresh. */
@@ -79,14 +91,18 @@ class ReplayEngine {
 
     if (cached && Date.now() - cached.fetchedAt < REPLAY_CACHE_TTL_MS) {
       // Cache hit — apply instantly with no loading indicator
+      console.log(`[Lenti:replay] load CACHE HIT (age=${((Date.now()-cached.fetchedAt)/1000).toFixed(0)}s): ${url}`);
       this.pause();
       this._applyJson(cached.json);
       this._setState('paused');
       if (this._timestamps.length > 0) this._emitFrame();
+      console.log(`[Lenti:replay] load applied ${this._timestamps.length} frames from cache`);
       return this._timestamps.length;
     }
 
     // Cache miss — show loading state and fetch
+    console.log(`[Lenti:replay] load CACHE MISS — fetching: ${url}`);
+    const t0 = performance.now();
     this._setState('loading');
     this.pause();
     const res = await fetch(url);
@@ -96,6 +112,7 @@ class ReplayEngine {
     this._applyJson(json);
     this._setState('paused');
     if (this._timestamps.length > 0) this._emitFrame();
+    console.log(`[Lenti:replay] load fetched ${this._timestamps.length} frames in ${(performance.now()-t0).toFixed(0)}ms`);
     return this._timestamps.length;
   }
 

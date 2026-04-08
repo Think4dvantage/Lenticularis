@@ -474,12 +474,14 @@ from(bucket: "{self._cfg.bucket}")
         """
         start_str = start.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         end_str = end.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        # aggregateWindow(30m) reduces ~144 raw rows/station/day to ~48 before pivot,
+        # cutting pivot memory and CPU by ~3× with no visible loss for day-view replay.
         flux = f"""
 from(bucket: "{self._cfg.bucket}")
   |> range(start: {start_str}, stop: {end_str})
   |> filter(fn: (r) => r._measurement == "{MEASUREMENT_WEATHER}")
+  |> aggregateWindow(every: 30m, fn: last, createEmpty: false)
   |> pivot(rowKey: ["_time", "station_id", "network"], columnKey: ["_field"], valueColumn: "_value")
-  |> sort(columns: ["_time"])
 """
         try:
             tables = self._query_api.query(flux, org=self._cfg.org)
@@ -730,7 +732,6 @@ from(bucket: "{self._cfg.bucket}")
   |> range(start: {start_str}, stop: {end_str})
   |> filter(fn: (r) => r._measurement == "{MEASUREMENT_FORECAST}")
   |> pivot(rowKey: ["_time", "station_id", "network", "source", "model"], columnKey: ["_field"], valueColumn: "_value")
-  |> sort(columns: ["_time"])
 """
         try:
             tables = self._query_api.query(flux, org=self._cfg.org)

@@ -15,6 +15,7 @@ Shutdown:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import logging.config
 from contextlib import asynccontextmanager
@@ -28,6 +29,7 @@ from lenticularis.config import get_config
 from lenticularis.database.influx import InfluxClient
 from lenticularis.scheduler import CollectorScheduler, get_collector_class
 from lenticularis.api.routers import stations as stations_router
+from lenticularis.api.routers.stations import warm_replay_cache
 from lenticularis.api.routers import auth as auth_router
 from lenticularis.api.routers import rulesets as rulesets_router
 from lenticularis.api.routers import health as health_router
@@ -118,6 +120,9 @@ async def lifespan(app: FastAPI):
 
     await scheduler.start()
     logger.info("Startup complete — API is ready")
+
+    # Warm the replay cache in the background so the first user sees instant day-button responses.
+    asyncio.get_event_loop().create_task(warm_replay_cache(influx, app.state.station_registry))
 
     yield  # Server is running
 

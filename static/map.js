@@ -370,11 +370,14 @@ new _PersonalToggle({ position: 'topright' }).addTo(map);
 window._lentiStationsMap = {};
 
 async function loadStations() {
+  const t0 = performance.now();
+  console.log('[Lenti:map] loadStations — fetching /api/stations');
   try {
     // Cache-buster ensures the browser never serves a stale response
     const res = await fetch(`/api/stations?_t=${Date.now()}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const stations = await res.json();
+    console.log(`[Lenti:map] /api/stations → ${stations.length} stations in ${(performance.now()-t0).toFixed(0)}ms`);
 
     // Update global station lookup
     window._lentiStationsMap = {};
@@ -397,10 +400,11 @@ async function loadStations() {
       placed++;
     }
 
+    console.log(`[Lenti:map] ${placed} markers placed, total loadStations time: ${(performance.now()-t0).toFixed(0)}ms`);
     const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     setStatus(true, `${placed} station${placed !== 1 ? 's' : ''} · ${now}`);
   } catch (err) {
-    console.error('Failed to load stations:', err);
+    console.error('[Lenti:map] Failed to load stations:', err);
     setStatus(false, 'Error');
   }
 }

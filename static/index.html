@@ -448,7 +448,8 @@ async function tnSelectDay(offset) {
   const loadParams = fh > 0
     ? { start, end, forecast_hours: fh }
     : { start, end, include_forecast: false };
-  try { await _mapReplay.load(loadParams); } catch(err) { console.error('Time nav load error:', err); }
+  console.log(`[Lenti:index] day button clicked offset=${offset} fh=${fh}`, loadParams);
+  try { await _mapReplay.load(loadParams); } catch(err) { console.error('[Lenti:index] Time nav load error:', err); }
 
   tnSeekToHour(12);
 }
@@ -568,18 +569,23 @@ tnInitLabels();
 // Starts immediately after station markers are drawn, in priority order
 // (tomorrow first — most commonly clicked), all running concurrently.
 const _prefetchAbort = new AbortController();
-window.addEventListener('pagehide', () => _prefetchAbort.abort());
+window.addEventListener('pagehide', () => { console.log('[Lenti:index] pagehide — aborting prefetch requests'); _prefetchAbort.abort(); });
 
-window._stationsReady.then(() => {
-  [1, 2, 3, 0].forEach(offset => {
-    if (_prefetchAbort.signal.aborted) return;
+window._stationsReady.then(async () => {
+  // Prefetch all day buttons sequentially, expanding outward from "now":
+  // tomorrow first (most clicked), then today, +2, yesterday, +3, -2, +4, -3, +5
+  console.log('[Lenti:index] stations ready — starting sequential background prefetch for all day buttons');
+  for (const offset of [1, 0, 2, -1, 3, -2, 4, -3, 5]) {
+    if (_prefetchAbort.signal.aborted) break;
     const [start, end] = tnDayBounds(offset, null);
     const fh = tnForecastHours(offset);
     const params = fh > 0
       ? { start, end, forecast_hours: fh }
       : { start, end, include_forecast: false };
-    _mapReplay.prefetch(params, _prefetchAbort.signal);
-  });
+    console.log(`[Lenti:index] prefetching offset=${offset} fh=${fh}`, params);
+    await _mapReplay.prefetch(params, _prefetchAbort.signal);
+  }
+  console.log('[Lenti:index] background prefetch complete');
 });
 </script>
 <script type="module">

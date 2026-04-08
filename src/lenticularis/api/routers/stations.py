@@ -11,7 +11,9 @@ Endpoints:
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
@@ -19,6 +21,130 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Server-side replay cache
+# Keyed by query params string; TTL aligned with the shortest collection cadence.
+# ---------------------------------------------------------------------------
+_replay_cache: dict[str, tuple[Any, float]] = {}  # key → (payload, stored_at_epoch)
+_REPLAY_CACHE_TTL_S = 300  # 5 minutes
+
+
+def _build_replay_payload(
+    influx: Any,
+    registry: dict,
+    start_dt: datetime,
+    end_dt: datetime,
+    include_forecast: bool,
+    forecast_hours: int,
+) -> dict:
+    """Core replay computation — shared by the HTTP endpoint and the startup warmer."""
+    now = datetime.now(timezone.utc)
+    obs_end = min(end_dt, now)
+    obs_start = min(start_dt, obs_end - timedelta(hours=2))
+    raw = influx.query_history_all_stations(obs_start, obs_end)
+
+    result: dict[str, Any] = {}
+    for sid, measurements in raw.items():
+        station = registry.get(sid)
+        serialised = [
+            {k: v.isoformat() if hasattr(v, "isoformat") else v for k, v in m.items()}
+            for m in measurements
+        ]
+        result[sid] = {
+            "station": {
+                "station_id": sid,
+                "name": station.name if station else sid,
+                "network": station.network if station else "",
+                "latitude": station.latitude if station else None,
+                "longitude": station.longitude if station else None,
+                "elevation": station.elevation if station else None,
+                "canton": station.canton if station else None,
+            },
+            "measurements": serialised,
+        }
+
+    forecast_from: Optional[str] = None
+    if include_forecast:
+        forecast_start = now
+        forecast_end = now + timedelta(hours=forecast_hours)
+        fc_raw = influx.query_forecast_replay(forecast_start, forecast_end)
+        forecast_from = now.isoformat()
+
+        for sid, fc_measurements in fc_raw.items():
+            if not fc_measurements:
+                continue
+            station = registry.get(sid)
+            if sid not in result:
+                result[sid] = {
+                    "station": {
+                        "station_id": sid,
+                        "name": station.name if station else sid,
+                        "network": station.network if station else "",
+                        "latitude": station.latitude if station else None,
+                        "longitude": station.longitude if station else None,
+                        "elevation": station.elevation if station else None,
+                        "canton": station.canton if station else None,
+                    },
+                    "measurements": [],
+                }
+            result[sid]["measurements"].extend(fc_measurements)
+
+    return {
+        "start": start_dt.isoformat(),
+        "end": (now + timedelta(hours=forecast_hours)).isoformat() if include_forecast else end_dt.isoformat(),
+        "forecast_from": forecast_from,
+        "station_count": len(result),
+        "data": result,
+    }
+
+
+async def warm_replay_cache(influx: Any, registry: dict) -> None:
+    """
+    Pre-populate the replay cache for all 9 day buttons (offsets -3 to +5),
+    expanding outward from today — same priority order as the frontend prefetch.
+    Runs as a background task at startup so the first user never sees a cold miss.
+    """
+    now = datetime.now(timezone.utc)
+    today_utc = now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    def _day_window(offset: int) -> tuple[datetime, datetime]:
+        d = today_utc + timedelta(days=offset)
+        return d, d + timedelta(hours=23, minutes=59, seconds=59)
+
+    def _forecast_hours(offset: int) -> int:
+        if offset < 0:
+            return 0
+        if offset == 0:
+            return 36
+        return min(120, (offset + 1) * 24 + 12)
+
+    for offset in [1, 0, 2, -1, 3, -2, 4, -3, 5]:
+        start_dt, end_dt = _day_window(offset)
+        fh = _forecast_hours(offset)
+        include_forecast = fh > 0
+        # Key must match what get_replay builds from the raw query-string params sent by the browser.
+        # Browser sends ISO strings like "2026-04-09T00:00:00.000Z", which the endpoint stores verbatim.
+        start_s = start_dt.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+        end_s   = end_dt.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+        cache_key = f"None|{start_s}|{end_s}|{include_forecast}|{fh}"
+
+        existing = _replay_cache.get(cache_key)
+        if existing and time.monotonic() - existing[1] < _REPLAY_CACHE_TTL_S:
+            logger.info("Replay warm-up SKIP (fresh): offset=%d", offset)
+            continue
+
+        logger.info("Replay warm-up: offset=%d fh=%d …", offset, fh)
+        t0 = time.monotonic()
+        try:
+            payload = await asyncio.get_event_loop().run_in_executor(
+                None, _build_replay_payload, influx, registry, start_dt, end_dt, include_forecast, fh
+            )
+            _replay_cache[cache_key] = (payload, time.monotonic())
+            logger.info("Replay warm-up DONE: offset=%d in %.1fs", offset, time.monotonic() - t0)
+        except Exception as exc:
+            logger.warning("Replay warm-up FAILED: offset=%d: %s", offset, exc)
+
 
 router = APIRouter(prefix="/api/stations", tags=["stations"])
 
@@ -136,6 +262,16 @@ async def get_replay(
     window ends, so the replay can play continuously into the future.
     The response includes a ``forecast_from`` ISO timestamp marking the boundary.
     """
+    cache_key = f"{hours}|{start}|{end}|{include_forecast}|{forecast_hours}"
+    cached_entry = _replay_cache.get(cache_key)
+    if cached_entry is not None:
+        payload, stored_at = cached_entry
+        age_s = time.monotonic() - stored_at
+        if age_s < _REPLAY_CACHE_TTL_S:
+            logger.debug("Replay cache HIT (age=%.0fs): %s", age_s, cache_key)
+            return payload
+        del _replay_cache[cache_key]
+
     influx = _get_influx(request)
     registry = _get_station_registry(request)
     now = datetime.now(timezone.utc)
@@ -157,70 +293,12 @@ async def get_replay(
         end_dt = now
         start_dt = now - timedelta(hours=24)
 
-    # Observation data (past).
-    # Always reach back at least 2 h from obs_end so that stations with no
-    # forecast data (e.g. computed foehn virtual stations) are still included
-    # in the result and their latest reading is carried forward into forecast
-    # frames by the client-side _buildSnapshot() logic.
-    obs_end = min(end_dt, now)
-    obs_start = min(start_dt, obs_end - timedelta(hours=2))
-    raw = influx.query_history_all_stations(obs_start, obs_end)
-
-    result: dict[str, Any] = {}
-    for sid, measurements in raw.items():
-        station = registry.get(sid)
-        serialised = [
-            {k: v.isoformat() if hasattr(v, "isoformat") else v for k, v in m.items()}
-            for m in measurements
-        ]
-        result[sid] = {
-            "station": {
-                "station_id": sid,
-                "name": station.name if station else sid,
-                "network": station.network if station else "",
-                "latitude": station.latitude if station else None,
-                "longitude": station.longitude if station else None,
-                "elevation": station.elevation if station else None,
-                "canton": station.canton if station else None,
-            },
-            "measurements": serialised,
-        }
-
-    # Forecast data (future) — merged into the same per-station structure
-    forecast_from: Optional[str] = None
-    if include_forecast:
-        forecast_start = now
-        forecast_end = now + timedelta(hours=forecast_hours)
-        fc_raw = influx.query_forecast_replay(forecast_start, forecast_end)
-        forecast_from = now.isoformat()
-
-        for sid, fc_measurements in fc_raw.items():
-            if not fc_measurements:
-                continue
-            station = registry.get(sid)
-            if sid not in result:
-                result[sid] = {
-                    "station": {
-                        "station_id": sid,
-                        "name": station.name if station else sid,
-                        "network": station.network if station else "",
-                        "latitude": station.latitude if station else None,
-                        "longitude": station.longitude if station else None,
-                        "elevation": station.elevation if station else None,
-                        "canton": station.canton if station else None,
-                    },
-                    "measurements": [],
-                }
-            # Forecast measurements are already ISO strings from query_forecast_replay
-            result[sid]["measurements"].extend(fc_measurements)
-
-    return {
-        "start": start_dt.isoformat(),
-        "end": (now + timedelta(hours=forecast_hours)).isoformat() if include_forecast else end_dt.isoformat(),
-        "forecast_from": forecast_from,
-        "station_count": len(result),
-        "data": result,
-    }
+    payload = await asyncio.get_event_loop().run_in_executor(
+        None, _build_replay_payload, influx, registry, start_dt, end_dt, include_forecast, forecast_hours
+    )
+    _replay_cache[cache_key] = (payload, time.monotonic())
+    logger.debug("Replay cache STORE: %s (%d stations)", cache_key, payload["station_count"])
+    return payload
 
 
 @router.get("/{station_id}/forecast-accuracy")
