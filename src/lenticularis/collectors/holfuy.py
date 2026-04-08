@@ -7,19 +7,26 @@ All stations associated with the key are fetched in a single request when
 when specific IDs are listed in config.
 
 API endpoint (authenticated via ``pw`` query param):
-  GET https://api.holfuy.com/measurements/
-      ?pw=<key>&m=JSON&s=<id|all>&su=km/h&tu=C
+  GET https://api.holfuy.com/live/
+      ?pw=<key>&m=JSON&s=<id|all>&su=km/h&tu=C&loc&utc
 
-The response is either a single station object (when ``s=<id>``) or an array
-(when ``s=all`` or ``s=<id1>,<id2>,...``).
+Key parameters (from official docs at https://api.holfuy.com/live/):
+  s    — station ID, comma-separated list, or "all"
+  pw   — API password/key
+  m    — response format: JSON | CSV | XML (default CSV)
+  su   — wind speed unit: km/h | m/s | knots | mph (default m/s)
+  tu   — temperature unit: C | F (default C)
+  loc  — flag: include station location (lat/lon/altitude) in JSON response
+  utc  — flag: return timestamps in UTC instead of CE(S)T
 
 Field mapping:
-  wind.speed    → wind_speed  (km/h, requested via su=km/h)
-  wind.gust     → wind_gust   (km/h)
+  wind.speed     → wind_speed  (km/h, requested via su=km/h)
+  wind.gust      → wind_gust   (km/h)
   wind.direction → wind_direction (degrees 0–359)
-  temperature   → temperature (°C, requested via tu=C)
-  humidity      → humidity    (%)
-  dateTime      → timestamp   (treated as UTC; Holfuy timestamps are UTC)
+  temperature    → temperature (°C, via tu=C)
+  humidity       → humidity    (%)
+  dateTime       → timestamp   (UTC, via utc flag)
+  latitude/longitude/altitude → station coordinates (via loc flag)
 """
 
 from __future__ import annotations
@@ -33,7 +40,7 @@ from lenticularis.models.weather import WeatherMeasurement, WeatherStation
 
 logger = logging.getLogger(__name__)
 
-_MEASUREMENTS_URL = "https://api.holfuy.com/measurements/"
+_LIVE_URL = "https://api.holfuy.com/live/"
 
 
 def _to_float(value: object) -> Optional[float]:
@@ -98,26 +105,36 @@ class HolfuyCollector(BaseCollector):
             return []
 
         params = {
-            "pw": self._api_key,
-            "m":  "JSON",
-            "s":  self._station_ids,
-            "su": "km/h",   # speed unit — always request km/h
-            "tu": "C",      # temperature unit — always request Celsius
+            "pw":  self._api_key,
+            "m":   "JSON",
+            "s":   self._station_ids,
+            "su":  "km/h",  # wind speed in km/h (default is m/s)
+            "tu":  "C",     # temperature in Celsius
+            "loc": "",      # include lat/lon/altitude in response
+            "utc": "",      # return timestamps in UTC instead of CE(S)T
         }
 
-        try:
-            data = await self._get(_MEASUREMENTS_URL, params=params)
-        except Exception as exc:
-            logger.error("Holfuy: request failed: %s", exc)
-            return []
+        # Let HTTP/network errors propagate — the scheduler marks the job "error"
+        # rather than silently showing "ok_no_data" for an authentication failure.
+        data = await self._get(_LIVE_URL, params=params)
 
-        # Response shape: single object when s=<single_id>, array otherwise
+        # Response shape: {"measurements": [...]} wrapper, or bare list/dict
         if isinstance(data, dict):
-            entries = [data]
+            if "measurements" in data:
+                entries = data["measurements"]
+            else:
+                entries = [data]
         elif isinstance(data, list):
             entries = data
         else:
-            logger.warning("Holfuy: unexpected response type %s", type(data).__name__)
+            logger.warning(
+                "Holfuy: unexpected response type %s — raw: %.200s",
+                type(data).__name__, repr(data),
+            )
+            return []
+
+        if not entries:
+            logger.warning("Holfuy: API returned an empty station list")
             return []
 
         measurements: list[WeatherMeasurement] = []
@@ -125,8 +142,10 @@ class HolfuyCollector(BaseCollector):
             m = self._parse_entry(entry)
             if m is not None:
                 measurements.append(m)
+            else:
+                logger.debug("Holfuy: skipped unparseable entry: %.200s", repr(entry))
 
-        logger.info("Holfuy: collected %d measurements", len(measurements))
+        logger.info("Holfuy: collected %d measurements from %d entries", len(measurements), len(entries))
         return measurements
 
     # ------------------------------------------------------------------
@@ -136,19 +155,21 @@ class HolfuyCollector(BaseCollector):
     def _parse_entry(self, entry: dict) -> Optional[WeatherMeasurement]:
         raw_id = entry.get("stationId")
         if raw_id is None:
+            logger.debug("Holfuy: entry missing stationId — skipping: %.200s", repr(entry))
             return None
 
         sid = self.station_id(self.NETWORK, str(raw_id))
 
         # Build / update station metadata from the embedded coordinates
-        lat = _to_float(entry.get("latitude"))
-        lon = _to_float(entry.get("longitude"))
+        loc = entry.get("location") or {}
+        lat = _to_float(loc.get("latitude"))
+        lon = _to_float(loc.get("longitude"))
         if lat is not None and lon is not None and sid not in self._station_cache:
-            alt_raw = entry.get("altitude")
+            alt_raw = loc.get("altitude")
             alt = int(float(alt_raw)) if alt_raw is not None else None
             self._station_cache[sid] = WeatherStation(
                 station_id=sid,
-                name=str(entry.get("name") or raw_id),
+                name=str(entry.get("stationName") or raw_id),
                 network=self.NETWORK,
                 latitude=lat,
                 longitude=lon,
