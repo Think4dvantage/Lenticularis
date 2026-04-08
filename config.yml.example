@@ -49,12 +49,17 @@ collectors:
         pressure_qnh:   "https://data.geo.admin.ch/ch.meteoschweiz.messwerte-luftdruck-qnh-10min/ch.meteoschweiz.messwerte-luftdruck-qnh-10min_en.json"
         precipitation:  "https://data.geo.admin.ch/ch.meteoschweiz.messwerte-niederschlag-10min/ch.meteoschweiz.messwerte-niederschlag-10min_en.json"
 
-  # Future collectors — enable when ready
   - name: "holfuy"
     enabled: false
     interval_minutes: 5
     config:
+      # API key from https://holfuy.com — passed as ?pw= query param.
       api_key: "your-holfuy-api-key"
+      # station_ids: fetch only specific stations by their Holfuy integer IDs.
+      # Set to "all" (or omit) to fetch every station associated with the key.
+      # station_ids:
+      #   - 101
+      #   - 245
 
   - name: "slf"
     enabled: false

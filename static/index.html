@@ -563,6 +563,24 @@ function tnStopPlay() {
 
 // Initialise day labels
 tnInitLabels();
+
+// Pre-warm the replay cache for the most-used forecast days.
+// Starts immediately after station markers are drawn, in priority order
+// (tomorrow first — most commonly clicked), all running concurrently.
+const _prefetchAbort = new AbortController();
+window.addEventListener('pagehide', () => _prefetchAbort.abort());
+
+window._stationsReady.then(() => {
+  [1, 2, 3, 0].forEach(offset => {
+    if (_prefetchAbort.signal.aborted) return;
+    const [start, end] = tnDayBounds(offset, null);
+    const fh = tnForecastHours(offset);
+    const params = fh > 0
+      ? { start, end, forecast_hours: fh }
+      : { start, end, include_forecast: false };
+    _mapReplay.prefetch(params, _prefetchAbort.signal);
+  });
+});
 </script>
 <script type="module">
   import { initI18n, renderLangPicker } from '/static/i18n.js';

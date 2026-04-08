@@ -386,14 +386,14 @@ async function loadStations() {
     let placed = 0;
     for (const s of stations) {
       if (s.latitude == null || s.longitude == null) continue;
-      const isFoehn   = s.network === 'foehn';
+      const isFoehn    = s.network === 'foehn';
       const isPersonal = PERSONAL_NETWORKS.has(s.network);
       const icon  = isFoehn ? foehnMarkerIcon(s) : markerIcon(s);
-      const popup = isFoehn ? buildFoehnPopup(s) : buildPopup(s);
       const layer = isPersonal ? _personalLayer : markerLayer;
+      // Lazy popup: built only when opened, so window.t is guaranteed to be ready
       L.marker([s.latitude, s.longitude], { icon })
         .addTo(layer)
-        .bindPopup(popup, { maxWidth: 260 });
+        .bindPopup(() => isFoehn ? buildFoehnPopup(s) : buildPopup(s), { maxWidth: 260 });
       placed++;
     }
 
@@ -424,7 +424,7 @@ function stopLiveRefresh() {
   if (_liveTimer) { clearInterval(_liveTimer); _liveTimer = null; }
 }
 
-loadStations();
+window._stationsReady = loadStations();
 startLiveRefresh();
 
 // ---------------------------------------------------------------------------
@@ -439,11 +439,10 @@ function applyReplaySnapshot(stations) {
     const isFoehn    = s.network === 'foehn';
     const isPersonal = PERSONAL_NETWORKS.has(s.network);
     const icon  = isFoehn ? foehnMarkerIcon(s) : markerIcon(s);
-    const popup = isFoehn ? buildFoehnPopup(s) : buildPopup(s);
     const layer = isPersonal ? _personalLayer : markerLayer;
     L.marker([s.latitude, s.longitude], { icon })
       .addTo(layer)
-      .bindPopup(popup, { maxWidth: 260 });
+      .bindPopup(() => isFoehn ? buildFoehnPopup(s) : buildPopup(s), { maxWidth: 260 });
     placed++;
   }
   return placed;

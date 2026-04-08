@@ -22,6 +22,8 @@
 
 // ms between frames at each speed multiplier
 const REPLAY_FRAME_INTERVAL = { 10: 800, 50: 200, 100: 80, 200: 40, 500: 16 };
+// How long a prefetched entry stays valid (10 min — aligns with MeteoSwiss update cadence)
+const REPLAY_CACHE_TTL_MS = 10 * 60 * 1000;
 
 class ReplayEngine {
   constructor(onFrame, onStateChange) {
@@ -35,13 +37,11 @@ class ReplayEngine {
     this._speed = 10;
     this._timer = null;
     this._state = 'idle';
+    this._cache = new Map();  // url → { json, fetchedAt }
   }
 
-  /** Load replay data. params: { hours } or { start, end } (ISO strings) */
-  async load(params) {
-    this._setState('loading');
-    this.pause();
-
+  /** Build the replay API URL for a set of load params (shared by load + prefetch). */
+  _buildUrl(params) {
     let url = '/api/stations/replay?';
     if (params.hours != null) {
       url += `hours=${params.hours}`;
@@ -52,24 +52,62 @@ class ReplayEngine {
     }
     if (params.forecast_hours != null) url += `&forecast_hours=${params.forecast_hours}`;
     if (params.include_forecast === false) url += '&include_forecast=false';
+    return url;
+  }
 
+  /**
+   * Pre-fetch and cache a replay request in the background.
+   * No-op if an entry for this exact URL already exists and is still fresh.
+   * Errors are swallowed — this is best-effort.
+   */
+  async prefetch(params, signal) {
+    const url = this._buildUrl(params);
+    const cached = this._cache.get(url);
+    if (cached && Date.now() - cached.fetchedAt < REPLAY_CACHE_TTL_MS) return;
+    try {
+      const res = await fetch(url, { signal });
+      if (!res.ok) return;
+      const json = await res.json();
+      this._cache.set(url, { json, fetchedAt: Date.now() });
+    } catch { /* silent — prefetch is best-effort; AbortError on page unload is expected */ }
+  }
+
+  /** Load replay data. Serves from cache when available and fresh. */
+  async load(params) {
+    const url = this._buildUrl(params);
+    const cached = this._cache.get(url);
+
+    if (cached && Date.now() - cached.fetchedAt < REPLAY_CACHE_TTL_MS) {
+      // Cache hit — apply instantly with no loading indicator
+      this.pause();
+      this._applyJson(cached.json);
+      this._setState('paused');
+      if (this._timestamps.length > 0) this._emitFrame();
+      return this._timestamps.length;
+    }
+
+    // Cache miss — show loading state and fetch
+    this._setState('loading');
+    this.pause();
     const res = await fetch(url);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const json = await res.json();
-    this._data = json.data || {};
-    this._forecastFrom = json.forecast_from || null;
+    this._cache.set(url, { json, fetchedAt: Date.now() });
+    this._applyJson(json);
+    this._setState('paused');
+    if (this._timestamps.length > 0) this._emitFrame();
+    return this._timestamps.length;
+  }
 
-    // Collect and sort all unique timestamps across all stations
+  _applyJson(json) {
+    this._data         = json.data         || {};
+    this._forecastFrom = json.forecast_from || null;
     const tsSet = new Set();
     for (const entry of Object.values(this._data)) {
       for (const m of entry.measurements) tsSet.add(m.timestamp);
     }
     this._timestamps = Array.from(tsSet).sort();
     this._currentIndex = 0;
-
-    this._setState('paused');
-    if (this._timestamps.length > 0) this._emitFrame();
-    return this._timestamps.length;
   }
 
   play() {

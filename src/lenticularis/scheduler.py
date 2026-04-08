@@ -28,6 +28,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 from lenticularis.collectors.ecowitt import EcowittCollector
 from lenticularis.collectors.foehn import FoehnCollector
 from lenticularis.collectors.forecast_openmeteo import ForecastOpenMeteoCollector
+from lenticularis.collectors.holfuy import HolfuyCollector
 from lenticularis.collectors.metar import MetarCollector
 from lenticularis.collectors.meteoswiss import MeteoSwissCollector
 from lenticularis.collectors.slf import SlfCollector
@@ -44,6 +45,7 @@ logger = logging.getLogger(__name__)
 # Registry: observation collector name → class
 _COLLECTOR_REGISTRY = {
     "meteoswiss": MeteoSwissCollector,
+    "holfuy": HolfuyCollector,
     "slf": SlfCollector,
     "metar": MetarCollector,
     "windline": WindlineCollector,
