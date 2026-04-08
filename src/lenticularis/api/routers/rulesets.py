@@ -176,7 +176,8 @@ def evaluate_ruleset(
     from lenticularis.rules.evaluator import run_evaluation, write_decision
 
     influx = request.app.state.influx
-    result = run_evaluation(rs, influx)
+    virtual_members = getattr(request.app.state, "virtual_members", {})
+    result = run_evaluation(rs, influx, virtual_members)
     write_decision(rs, result, influx)
     logger.info("Evaluated ruleset %s → %s (no-data: %s)", rs.id, result["decision"], result["no_data_stations"])
 
@@ -188,7 +189,7 @@ def evaluate_ruleset(
             if landing_rs is None:
                 continue
             if landing_rs.conditions:
-                ld_result = run_evaluation(landing_rs, influx)
+                ld_result = run_evaluation(landing_rs, influx, virtual_members)
             else:
                 ld_result = {"decision": "green"}
             landing_decisions.append({

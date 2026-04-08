@@ -512,7 +512,8 @@
       "collectors": "Kollektoren",
       "foehn_config": "Föhn-Konfig",
       "presets": "Startplätze",
-      "orgs": "Organisationen"
+      "orgs": "Organisationen",
+      "station_dedup": "Station-Dedup"
     },
     "orgs": {
       "title": "Organisationen",
@@ -601,6 +602,21 @@
       "temporary_note": "⚠ Änderungen an Aktiv und Intervall sind temporär und werden beim Neustart zurückgesetzt.",
       "cannot_toggle_foehn": "Der Föhn-Kollektor kann zur Laufzeit nicht umgeschaltet werden.",
       "no_collectors": "Keine Kollektoren konfiguriert."
+    },
+    "station_dedup": {
+      "subtitle": "Stationspaare manuell zusammenführen, die sich am gleichen Standort befinden, aber weiter als der automatische Schwellenwert entfernt sind.",
+      "col_station_a": "Station A",
+      "col_station_b": "Station B",
+      "col_note": "Notiz",
+      "col_actions": "Aktionen",
+      "add_pair": "Paar hinzufügen",
+      "select_station": "— Station wählen —",
+      "note_placeholder": "Optionale Notiz (z.B. gleicher Startplatz)",
+      "no_pairs": "Keine manuellen Dedup-Paare konfiguriert.",
+      "confirm_delete": "Dieses Dedup-Paar entfernen?",
+      "saved": "Gespeichert",
+      "err_select_both": "Bitte beide Stationen auswählen.",
+      "err_same": "Station A und B müssen verschieden sein."
     }
   }
 }

@@ -54,6 +54,13 @@ class OllamaConfig(BaseModel):
     timeout_seconds: int = 60
 
 
+class StationDedupConfig(BaseModel):
+    # Two stations closer than this (metres) are merged into one virtual station.
+    # 300 m covers typical paragliding sites where sensors from different networks
+    # are placed at different spots on the same launch field.
+    distance_m: float = 300.0
+
+
 class MainConfig(BaseModel):
     influxdb: InfluxDBConfig
     collectors: list[CollectorConfig]
@@ -63,6 +70,7 @@ class MainConfig(BaseModel):
     logging: LoggingConfig
     api: APIConfig
     ollama: OllamaConfig = OllamaConfig()
+    station_dedup: StationDedupConfig = StationDedupConfig()
 
 
 #Module vars

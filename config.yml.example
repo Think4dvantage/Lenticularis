@@ -153,6 +153,14 @@ logging:
   format: "text"
   file: "/app/logs/lenticularis.log"
 
+# Station deduplication
+# Two stations whose GPS coordinates are closer than distance_m metres are merged
+# automatically into a single virtual station.  The highest-priority network wins
+# (priority: meteoswiss > slf > metar > holfuy > windline > ecowitt > wunderground).
+# Additional pairs can be added manually in the admin panel (Admin > Station Dedup).
+station_dedup:
+  distance_m: 50
+
 # API Server
 api:
   host: "0.0.0.0"

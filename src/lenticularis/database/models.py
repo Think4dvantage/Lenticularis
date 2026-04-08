@@ -209,6 +209,22 @@ class RuleSetWebcam(Base):
     ruleset = relationship("RuleSet", back_populates="webcams")
 
 
+class StationDedupOverride(Base):
+    """Admin-managed pairs of station IDs that are always merged regardless of distance."""
+
+    __tablename__ = "station_dedup_overrides"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    station_id_a = Column(String, nullable=False)
+    station_id_b = Column(String, nullable=False)
+    note = Column(String, nullable=True)
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+
+
 class RuleCondition(Base):
     """One condition row in a rule set's condition builder."""
 

@@ -43,6 +43,35 @@ def _run_column_migrations(engine) -> None:
             logger.info("Migration: added users.org_id column")
 
 
+def _seed_dedup_overrides(engine) -> None:
+    """Pre-seed known station dedup pairs.  Idempotent — checks before inserting."""
+    _SEEDS = [
+        # (station_id_a, station_id_b, note)
+        ("holfuy-1850", "windline-6116", "Lehn: same physical site, different networks"),
+    ]
+    with engine.connect() as conn:
+        for sid_a, sid_b, note in _SEEDS:
+            exists = conn.execute(
+                text(
+                    "SELECT 1 FROM station_dedup_overrides "
+                    "WHERE (station_id_a = :a AND station_id_b = :b) "
+                    "   OR (station_id_a = :b AND station_id_b = :a)"
+                ),
+                {"a": sid_a, "b": sid_b},
+            ).fetchone()
+            if not exists:
+                import uuid as _uuid
+                conn.execute(
+                    text(
+                        "INSERT INTO station_dedup_overrides (id, station_id_a, station_id_b, note, created_at) "
+                        "VALUES (:id, :a, :b, :note, datetime('now'))"
+                    ),
+                    {"id": str(_uuid.uuid4()), "a": sid_a, "b": sid_b, "note": note},
+                )
+                conn.commit()
+                logger.info("Seeded dedup override: %s <-> %s", sid_a, sid_b)
+
+
 def init_db(db_path: str) -> None:
     """Create the SQLite file + all tables (idempotent)."""
     global _engine, _SessionLocal
@@ -51,6 +80,7 @@ def init_db(db_path: str) -> None:
     _engine = create_engine(db_url, connect_args={"check_same_thread": False})
     Base.metadata.create_all(bind=_engine)
     _run_column_migrations(_engine)
+    _seed_dedup_overrides(_engine)
     _SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=_engine)
     logger.info("SQLite database ready: %s", db_path)
 

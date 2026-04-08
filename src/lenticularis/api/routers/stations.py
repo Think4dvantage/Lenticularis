@@ -185,6 +185,14 @@ def _get_station_registry(request: Request) -> dict:
     return getattr(request.app.state, "station_registry", {})
 
 
+def _get_display_registry(request: Request) -> dict:
+    return getattr(request.app.state, "display_registry", {}) or _get_station_registry(request)
+
+
+def _get_virtual_members(request: Request) -> dict[str, list[str]]:
+    return getattr(request.app.state, "virtual_members", {})
+
+
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
@@ -194,20 +202,36 @@ async def list_stations(request: Request):
     """
     Return all known stations with their most recent measurement snapshot.
 
-    Stations come from the in-memory registry populated by collectors at startup
-    and refreshed each collection run. Latest data is fetched from InfluxDB.
+    Returns only the deduplicated display registry — co-located stations that
+    have been merged into a virtual station appear as a single entry (the
+    canonical / highest-priority member).  Latest data uses newest-wins across
+    all virtual-station members.
     """
     influx = _get_influx(request)
-    registry: dict = _get_station_registry(request)
+    registry: dict = _get_display_registry(request)
+    virtual_members: dict = _get_virtual_members(request)
 
-    # Fetch latest values for all stations in one InfluxDB query
+    # Fetch latest values for all stations in one InfluxDB query.
+    # For virtual stations we query all members so newest-wins works correctly.
+    all_member_ids: list[str] = []
+    for sid, station in registry.items():
+        if station.member_ids:
+            all_member_ids.extend(station.member_ids)
+        else:
+            all_member_ids.append(sid)
     latest_all = influx.query_latest_all_stations()
 
     results: list[StationResponse] = []
     for sid, station in registry.items():
-        latest = latest_all.get(sid)
+        members = virtual_members.get(sid)
+        if members:
+            # Pick the measurement with the most recent timestamp across all members
+            candidates = {k: v for k, v in latest_all.items() if k in members}
+            latest = max(candidates.values(), key=lambda r: r.get("timestamp"), default=None) if candidates else None
+        else:
+            latest = latest_all.get(sid)
+
         if latest:
-            # Convert datetime to ISO string for JSON serialisation
             serialisable = {
                 k: v.isoformat() if hasattr(v, "isoformat") else v
                 for k, v in latest.items()
@@ -273,7 +297,7 @@ async def get_replay(
         del _replay_cache[cache_key]
 
     influx = _get_influx(request)
-    registry = _get_station_registry(request)
+    registry = _get_display_registry(request)
     now = datetime.now(timezone.utc)
 
     if hours is not None:
@@ -366,13 +390,15 @@ async def get_station_forecast(
 @router.get("/{station_id}", response_model=StationResponse)
 async def get_station(station_id: str, request: Request):
     """Return metadata for a single station."""
-    registry = _get_station_registry(request)
+    registry = _get_display_registry(request)
     station = registry.get(station_id)
     if not station:
         raise HTTPException(status_code=404, detail=f"Station '{station_id}' not found")
 
     influx = _get_influx(request)
-    latest = influx.query_latest(station_id)
+    virtual_members = _get_virtual_members(request)
+    members = virtual_members.get(station_id)
+    latest = influx.query_latest_virtual(members) if members else influx.query_latest(station_id)
     if latest:
         latest = {k: v.isoformat() if hasattr(v, "isoformat") else v for k, v in latest.items()}
 
@@ -392,7 +418,9 @@ async def get_station(station_id: str, request: Request):
 async def get_latest(station_id: str, request: Request):
     """Return the most recent measurement for a station."""
     influx = _get_influx(request)
-    data = influx.query_latest(station_id)
+    virtual_members = _get_virtual_members(request)
+    members = virtual_members.get(station_id)
+    data = influx.query_latest_virtual(members) if members else influx.query_latest(station_id)
     if data:
         data = {k: v.isoformat() if hasattr(v, "isoformat") else v for k, v in data.items()}
     return MeasurementResponse(station_id=station_id, data=data)
@@ -406,8 +434,9 @@ async def get_history(
 ):
     """Return time-series data for the last N hours (default 24, max 168)."""
     influx = _get_influx(request)
-    rows = influx.query_history(station_id, hours=hours)
-    # Serialise datetime objects
+    virtual_members = _get_virtual_members(request)
+    members = virtual_members.get(station_id)
+    rows = influx.query_history_virtual(members, hours=hours) if members else influx.query_history(station_id, hours=hours)
     serialised = [
         {k: v.isoformat() if hasattr(v, "isoformat") else v for k, v in row.items()}
         for row in rows

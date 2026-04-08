@@ -92,9 +92,10 @@ def org_status(
     # Fall back to live evaluation if no cached decisions exist
     if not colours:
         from lenticularis.rules.evaluator import run_evaluation, write_decision
+        virtual_members = getattr(request.app.state, "virtual_members", {})
         for rs in rulesets:
             if rs.conditions:
-                result = run_evaluation(rs, influx)
+                result = run_evaluation(rs, influx, virtual_members)
                 write_decision(rs, result, influx)
                 colours.append(result["decision"])
         latest_ts = datetime.now(timezone.utc).isoformat()
@@ -135,6 +136,7 @@ def org_dashboard(
 
     influx = request.app.state.influx
     from lenticularis.rules.evaluator import run_evaluation, run_forecast_evaluation, write_decision
+    virtual_members = getattr(request.app.state, "virtual_members", {})
 
     evaluations = []
     colours: list[str] = []
@@ -143,16 +145,16 @@ def org_dashboard(
         if not rs.conditions:
             eval_result = {"decision": "green", "condition_results": [], "no_data_stations": []}
         else:
-            eval_result = run_evaluation(rs, influx)
+            eval_result = run_evaluation(rs, influx, virtual_members)
             write_decision(rs, eval_result, influx)
 
         colours.append(eval_result["decision"])
 
-        station_registry = getattr(request.app.state, "station_registry", {})
+        display_registry = getattr(request.app.state, "display_registry", None) or getattr(request.app.state, "station_registry", {})
         condition_results = eval_result.get("condition_results", [])
         for cr in condition_results:
             sid = cr.get("station_id", "")
-            station = station_registry.get(sid)
+            station = display_registry.get(sid)
             cr["station_name"] = station.name if station else sid
 
         evaluations.append({

@@ -95,10 +95,12 @@ class CollectorScheduler:
         influx: "InfluxClient",
         station_registry: Optional[dict] = None,
         session_factory=None,
+        virtual_members: Optional[dict] = None,
     ) -> None:
         self._cfg = cfg
         self._influx = influx
         self._station_registry: dict = station_registry if station_registry is not None else {}
+        self._virtual_members: dict = virtual_members if virtual_members is not None else {}
         self._session_factory = session_factory
         self._scheduler = AsyncIOScheduler()
         self._collectors: list = []
@@ -373,7 +375,7 @@ class CollectorScheduler:
                 if not rs.conditions:
                     continue
                 try:
-                    result = run_evaluation(rs, self._influx)
+                    result = run_evaluation(rs, self._influx, self._virtual_members)
                     write_decision(rs, result, self._influx)
                     count += 1
                 except Exception as exc:

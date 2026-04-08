@@ -386,6 +386,141 @@ from(bucket: "{self._cfg.bucket}")
         return sorted(rows, key=lambda r: r["timestamp"])
 
     # ------------------------------------------------------------------
+    # Query — latest / history for virtual (multi-member) stations
+    # ------------------------------------------------------------------
+
+    def query_latest_virtual(self, member_ids: list[str]) -> Optional[dict]:
+        """Return the most-recent measurement across all ``member_ids``.
+
+        Queries all members in a single round-trip and returns the entry
+        with the most recent timestamp, implementing "newest-wins" for
+        virtual (proximity-deduplicated) stations.
+        """
+        if not member_ids:
+            return None
+        if len(member_ids) == 1:
+            return self.query_latest(member_ids[0])
+        results = self.query_latest_for_stations(member_ids)
+        if not results:
+            return None
+        return max(results.values(), key=lambda r: r.get("timestamp", datetime.min.replace(tzinfo=timezone.utc)))
+
+    def _members_established_for_window(self, station_ids: list[str], hours: int) -> list[str]:
+        """Return the subset of ``station_ids`` that were already delivering data
+        BEFORE the start of the requested history window.
+
+        Checks a 2-hour slice just before the window opens
+        (range: -(hours+2)h → -hours h).  A station with data in that slice was
+        running before the window started and is considered established — it
+        produces a continuous time-series across the full window.
+
+        A newly-added station that only has data WITHIN the window is excluded,
+        preventing partial-coverage rows from mixing with an established station's
+        full history (which makes the chart look jagged/duplicated).
+
+        Falls back to any station with data anywhere in the window when no
+        station passes the pre-window check, so history never silently disappears.
+        Falls back further to all IDs on query error.
+        """
+        if not station_ids:
+            return []
+        ids_literal = '["' + '", "'.join(station_ids) + '"]'
+        # Lightweight check: last() + pivot gives one row per station that has
+        # data in the pre-window slice — same pattern as query_latest_for_stations.
+        flux = f"""
+from(bucket: "{self._cfg.bucket}")
+  |> range(start: -{hours + 2}h, stop: -{hours}h)
+  |> filter(fn: (r) => r._measurement == "{MEASUREMENT_WEATHER}")
+  |> filter(fn: (r) => contains(value: r.station_id, set: {ids_literal}))
+  |> last()
+  |> pivot(rowKey: ["_time", "station_id", "network"], columnKey: ["_field"], valueColumn: "_value")
+"""
+        try:
+            tables = self._query_api.query(flux, org=self._cfg.org)
+            established = {
+                record.values.get("station_id", "")
+                for table in tables
+                for record in table.records
+                if record.values.get("station_id")
+            }
+            result = [sid for sid in station_ids if sid in established]
+            if result:
+                return result
+
+            # No member predates the window (all are newly added).
+            # Fall back to members that have any data within the window.
+            in_window_flux = f"""
+from(bucket: "{self._cfg.bucket}")
+  |> range(start: -{hours}h)
+  |> filter(fn: (r) => r._measurement == "{MEASUREMENT_WEATHER}")
+  |> filter(fn: (r) => contains(value: r.station_id, set: {ids_literal}))
+  |> last()
+  |> pivot(rowKey: ["_time", "station_id", "network"], columnKey: ["_field"], valueColumn: "_value")
+"""
+            tables2 = self._query_api.query(in_window_flux, org=self._cfg.org)
+            in_window = {
+                record.values.get("station_id", "")
+                for table in tables2
+                for record in table.records
+                if record.values.get("station_id")
+            }
+            return [sid for sid in station_ids if sid in in_window]
+
+        except Exception as exc:
+            logger.warning("InfluxDB _members_established_for_window fallback for %s: %s", station_ids, exc)
+            return station_ids  # safe fallback: include all
+
+    def query_history_virtual(self, member_ids: list[str], hours: int = 24) -> list[dict]:
+        """Return pooled time-series data for all ``member_ids`` over the last ``hours`` hours.
+
+        Only members that were already delivering data before the window started
+        are included.  This prevents newly-added stations (which only have partial
+        coverage) from producing jagged or duplicated chart lines alongside an
+        established station's full history.
+
+        If a member stops delivering data, it is automatically excluded from
+        subsequent history windows once its data predates the window.
+
+        Rows from different qualifying members are pooled, producing a denser
+        time-series than a single station would provide.  ``station_id`` is
+        stripped from output rows (consistent with ``query_history``).
+        """
+        if not member_ids:
+            return []
+
+        active = self._members_established_for_window(member_ids, hours)
+        if not active:
+            return []
+        if len(active) == 1:
+            return self.query_history(active[0], hours)
+
+        ids_literal = '["' + '", "'.join(active) + '"]'
+        flux = f"""
+from(bucket: "{self._cfg.bucket}")
+  |> range(start: -{hours}h)
+  |> filter(fn: (r) => r._measurement == "{MEASUREMENT_WEATHER}")
+  |> filter(fn: (r) => contains(value: r.station_id, set: {ids_literal}))
+  |> pivot(rowKey: ["_time", "station_id"], columnKey: ["_field"], valueColumn: "_value")
+  |> sort(columns: ["_time"])
+"""
+        try:
+            tables = self._query_api.query(flux, org=self._cfg.org)
+        except Exception as exc:
+            logger.error("InfluxDB query_history_virtual error for %s: %s", active, exc)
+            return []
+
+        rows: list[dict] = []
+        for table in tables:
+            for record in table.records:
+                entry: dict = {"timestamp": record.get_time()}
+                entry.update({
+                    k: v for k, v in record.values.items()
+                    if not k.startswith("_") and k not in ("result", "table", "station_id", "network")
+                })
+                rows.append(entry)
+        return rows
+
+    # ------------------------------------------------------------------
     # Query — history (last N hours)
     # ------------------------------------------------------------------
 

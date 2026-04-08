@@ -176,7 +176,11 @@ def _eval_condition(
 # Public API
 # ---------------------------------------------------------------------------
 
-def run_evaluation(ruleset: RuleSet, influx: InfluxClient) -> dict:
+def run_evaluation(
+    ruleset: RuleSet,
+    influx: InfluxClient,
+    virtual_members: Optional[dict[str, list[str]]] = None,
+) -> dict:
     """
     Evaluate all conditions in *ruleset* against current InfluxDB data.
 
@@ -219,7 +223,11 @@ def run_evaluation(ruleset: RuleSet, influx: InfluxClient) -> dict:
     station_data: dict[str, dict] = {}
     no_data: list[str] = []
     for sid in station_ids:
-        d = influx.query_latest(sid)
+        members = (virtual_members or {}).get(sid)
+        if members:
+            d = influx.query_latest_virtual(members)
+        else:
+            d = influx.query_latest(sid)
         if d:
             station_data[sid] = d
         else:

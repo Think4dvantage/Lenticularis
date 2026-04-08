@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 
 from lenticularis.api.dependencies import require_admin
 from lenticularis.database.db import get_db
-from lenticularis.database.models import Organization, User
+from lenticularis.database.models import Organization, StationDedupOverride, User
 from lenticularis.foehn_detection import (
     get_foehn_config_dict,
     set_foehn_config,
@@ -287,3 +287,102 @@ def delete_foehn_config(
 ):
     reset_foehn_config()
     return get_foehn_config_dict()
+
+
+# ---------------------------------------------------------------------------
+# Station dedup overrides
+# ---------------------------------------------------------------------------
+
+class DedupOverrideOut(BaseModel):
+    id: str
+    station_id_a: str
+    station_id_b: str
+    note: Optional[str] = None
+    created_at: str
+
+
+class DedupOverrideCreate(BaseModel):
+    station_id_a: str
+    station_id_b: str
+    note: Optional[str] = None
+
+
+@router.get("/station-dedup")
+def list_dedup_overrides(
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    rows = db.execute(select(StationDedupOverride).order_by(StationDedupOverride.created_at)).scalars().all()
+    return {
+        "overrides": [
+            DedupOverrideOut(
+                id=r.id,
+                station_id_a=r.station_id_a,
+                station_id_b=r.station_id_b,
+                note=r.note,
+                created_at=r.created_at.isoformat() if r.created_at else "",
+            )
+            for r in rows
+        ]
+    }
+
+
+@router.post("/station-dedup", status_code=201)
+def create_dedup_override(
+    body: DedupOverrideCreate,
+    request: Request,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    import uuid as _uuid
+    # Reject if the pair (in either order) already exists
+    existing = db.execute(
+        select(StationDedupOverride).where(
+            ((StationDedupOverride.station_id_a == body.station_id_a) &
+             (StationDedupOverride.station_id_b == body.station_id_b)) |
+            ((StationDedupOverride.station_id_a == body.station_id_b) &
+             (StationDedupOverride.station_id_b == body.station_id_a))
+        )
+    ).scalar_one_or_none()
+    if existing:
+        raise HTTPException(status_code=409, detail="This pair already exists")
+
+    override = StationDedupOverride(
+        id=str(_uuid.uuid4()),
+        station_id_a=body.station_id_a,
+        station_id_b=body.station_id_b,
+        note=body.note,
+    )
+    db.add(override)
+    db.commit()
+    db.refresh(override)
+
+    # Rebuild display registry so the change takes effect immediately
+    from lenticularis.api.main import rebuild_display_registry
+    rebuild_display_registry(request.app.state)
+
+    return DedupOverrideOut(
+        id=override.id,
+        station_id_a=override.station_id_a,
+        station_id_b=override.station_id_b,
+        note=override.note,
+        created_at=override.created_at.isoformat() if override.created_at else "",
+    )
+
+
+@router.delete("/station-dedup/{override_id}", status_code=204)
+def delete_dedup_override(
+    override_id: str,
+    request: Request,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    override = db.get(StationDedupOverride, override_id)
+    if override is None:
+        raise HTTPException(status_code=404, detail="Override not found")
+    db.delete(override)
+    db.commit()
+
+    # Rebuild display registry so the change takes effect immediately
+    from lenticularis.api.main import rebuild_display_registry
+    rebuild_display_registry(request.app.state)

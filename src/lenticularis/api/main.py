@@ -40,6 +40,7 @@ from lenticularis.api.routers import ai as ai_router
 from lenticularis.api.routers import org as org_router
 from lenticularis.database.db import init_db, get_session_factory
 from lenticularis.collectors.foehn import _VIRTUAL_WEATHER_STATIONS
+from lenticularis.services.dedup import build_deduped_registry
 
 
 # ---------------------------------------------------------------------------
@@ -111,18 +112,44 @@ async def lifespan(app: FastAPI):
         app.state.station_registry[ws.station_id] = ws
     logger.info("Station registry primed with %d foehn virtual stations", len(_VIRTUAL_WEATHER_STATIONS))
 
+    # Build the deduplicated display registry (merges co-located stations)
+    app.state.display_registry = {}
+    app.state.virtual_members = {}
+    dedup_distance_m = cfg.station_dedup.distance_m
+    app.state.dedup_distance_m = dedup_distance_m
+
+    from lenticularis.database.models import StationDedupOverride
+    from sqlalchemy import select as _select
+    _db = get_session_factory()()
+    try:
+        _overrides = _db.execute(_select(StationDedupOverride)).scalars().all()
+        manual_pairs = [(_o.station_id_a, _o.station_id_b) for _o in _overrides]
+    finally:
+        _db.close()
+
+    display_reg, virt_members = build_deduped_registry(app.state.station_registry, dedup_distance_m, manual_pairs)
+    app.state.display_registry.update(display_reg)
+    app.state.virtual_members.update(virt_members)
+    logger.info(
+        "Display registry built: %d display stations from %d raw stations (%d virtual groups)",
+        len(display_reg), len(app.state.station_registry), len(virt_members),
+    )
+
     # Scheduler
-    scheduler = CollectorScheduler(cfg, influx, app.state.station_registry, get_session_factory())
+    scheduler = CollectorScheduler(
+        cfg, influx, app.state.station_registry, get_session_factory(),
+        virtual_members=app.state.virtual_members,
+    )
     app.state.scheduler = scheduler
 
     # Patch scheduler to update station registry after each collect run
-    _patch_scheduler_registry(scheduler, app.state.station_registry)
+    _patch_scheduler_registry(scheduler, app.state.station_registry, app.state.display_registry, app.state.virtual_members, dedup_distance_m)
 
     await scheduler.start()
     logger.info("Startup complete — API is ready")
 
     # Warm the replay cache in the background so the first user sees instant day-button responses.
-    asyncio.get_event_loop().create_task(warm_replay_cache(influx, app.state.station_registry))
+    asyncio.get_event_loop().create_task(warm_replay_cache(influx, app.state.display_registry))
 
     yield  # Server is running
 
@@ -133,10 +160,36 @@ async def lifespan(app: FastAPI):
     logger.info("Shutdown complete")
 
 
-def _patch_scheduler_registry(scheduler: CollectorScheduler, registry: dict) -> None:
+def rebuild_display_registry(app_state) -> None:
+    """Reload manual dedup pairs from DB and rebuild the display registry in-place."""
+    from lenticularis.database.models import StationDedupOverride
+    from sqlalchemy import select as _select
+    from lenticularis.database.db import get_session_factory
+    db = get_session_factory()()
+    try:
+        overrides = db.execute(_select(StationDedupOverride)).scalars().all()
+        manual_pairs = [(o.station_id_a, o.station_id_b) for o in overrides]
+    finally:
+        db.close()
+    distance_m = getattr(app_state, "dedup_distance_m", 50.0)
+    new_display, new_virtual = build_deduped_registry(app_state.station_registry, distance_m, manual_pairs)
+    app_state.display_registry.clear()
+    app_state.display_registry.update(new_display)
+    app_state.virtual_members.clear()
+    app_state.virtual_members.update(new_virtual)
+
+
+def _patch_scheduler_registry(
+    scheduler: CollectorScheduler,
+    registry: dict,
+    display_registry: dict,
+    virtual_members: dict,
+    dedup_distance_m: float = 50.0,
+) -> None:
     """
     Monkey-patch the scheduler's _run_collector so it also updates the
-    shared station registry whenever collectors return new station data.
+    shared station registry and rebuilds the deduped display registry
+    whenever collectors return new station data.
     """
     original = scheduler._run_collector
 
@@ -144,8 +197,26 @@ def _patch_scheduler_registry(scheduler: CollectorScheduler, registry: dict) -> 
         await original(collector)
         try:
             stations = await collector.get_stations()
+            changed = False
             for s in stations:
+                if s.station_id not in registry:
+                    changed = True
                 registry[s.station_id] = s
+            if changed:
+                from lenticularis.database.models import StationDedupOverride
+                from sqlalchemy import select as _select
+                from lenticularis.database.db import get_session_factory
+                db = get_session_factory()()
+                try:
+                    overrides = db.execute(_select(StationDedupOverride)).scalars().all()
+                    manual_pairs = [(o.station_id_a, o.station_id_b) for o in overrides]
+                finally:
+                    db.close()
+                new_display, new_virtual = build_deduped_registry(registry, dedup_distance_m, manual_pairs)
+                display_registry.clear()
+                display_registry.update(new_display)
+                virtual_members.clear()
+                virtual_members.update(new_virtual)
         except Exception:
             pass  # Registry update is best-effort
 

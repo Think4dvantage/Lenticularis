@@ -512,7 +512,8 @@
       "collectors": "Collectors",
       "foehn_config": "Föhn Config",
       "presets": "Preset Sites",
-      "orgs": "Organisations"
+      "orgs": "Organisations",
+      "station_dedup": "Station Dedup"
     },
     "orgs": {
       "title": "Organisations",
@@ -601,6 +602,21 @@
       "temporary_note": "⚠ Enabled and interval changes are temporary and reset on server restart.",
       "cannot_toggle_foehn": "The foehn collector cannot be toggled at runtime.",
       "no_collectors": "No collectors configured."
+    },
+    "station_dedup": {
+      "subtitle": "Manually merge station pairs that are at the same physical location but further apart than the automatic distance threshold.",
+      "col_station_a": "Station A",
+      "col_station_b": "Station B",
+      "col_note": "Note",
+      "col_actions": "Actions",
+      "add_pair": "Add Pair",
+      "select_station": "— select station —",
+      "note_placeholder": "Optional note (e.g. same launch site)",
+      "no_pairs": "No manual dedup pairs configured.",
+      "confirm_delete": "Remove this dedup pair?",
+      "saved": "Saved",
+      "err_select_both": "Please select both stations.",
+      "err_same": "Station A and B must be different."
     }
   }
 }

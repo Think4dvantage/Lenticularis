@@ -26,6 +26,7 @@ class WeatherStation(BaseModel):
     longitude: float = Field(..., description="Longitude in decimal degrees (WGS84)")
     elevation: Optional[int] = Field(None, description="Elevation in meters above sea level")
     canton: Optional[str] = Field(None, description="Swiss canton code (e.g., 'BE', 'ZH')")
+    member_ids: list[str] = Field(default_factory=list, description="Real station IDs that make up this virtual station (canonical first). Empty for non-virtual stations.")
 
     model_config = {
         "json_schema_extra": {

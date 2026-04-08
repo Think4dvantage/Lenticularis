@@ -13,6 +13,7 @@
 | `condition_groups` | `id`, `ruleset_id`, `parent_group_id` (nullable), `logic` (AND/OR), `sort_order` |
 | `ruleset_webcams` | `id`, `ruleset_id`, `url`, `label`, `sort_order` |
 | `notification_configs` | `id`, `user_id`, `launch_site_id`, `channel`, `config_json`, `on_transitions_json` |
+| `station_dedup_overrides` | `id`, `station_id_a`, `station_id_b`, `note`, `created_at` — manually-defined co-location pairs that are merged regardless of GPS distance; pre-seeded with Lehn pair (holfuy-1850 ↔ windline-6116) |
 
 ---
 
@@ -91,8 +92,12 @@ All time-range endpoints accept `?from=&to=`. Best-windows also accepts `?top_n=
 ### Admin (require_admin)
 - `GET/PUT /api/admin/users`
 - `GET/PUT /api/admin/collectors`
+- `POST /api/admin/collectors/{key}/trigger`
 - `GET/PUT/DELETE /api/admin/foehn-config`
 - `GET/POST /api/admin/orgs`
+- `GET /api/admin/station-dedup` — list manual dedup pairs
+- `POST /api/admin/station-dedup` — add pair `{station_id_a, station_id_b, note?}`; calls `rebuild_display_registry` immediately
+- `DELETE /api/admin/station-dedup/{id}` — remove pair; calls `rebuild_display_registry` immediately
 
 ### AI
 - `POST /api/ai/suggest-conditions` — Ollama-powered natural-language → condition JSON
@@ -183,6 +188,40 @@ healthcheck:
 `api/routers/stations.py` has a module-level `_replay_cache: dict[str, tuple[Any, float]]` (key → payload, monotonic stored_at). TTL is 5 minutes. The cache is warmed at startup via `warm_replay_cache(influx, registry)` — a background `asyncio.Task` that iterates offsets `[1, 0, 2, -1, 3, -2, 4, -3, 5]` sequentially, covering all 9 day-button windows. Core computation is in `_build_replay_payload()` (sync, called via `run_in_executor`). The HTTP endpoint checks the cache first; on miss it calls `_build_replay_payload` and stores the result.
 
 The frontend mirrors this with a client-side `ReplayEngine._cache` (Map, 10 min TTL) so repeated clicks within a session are instant without any HTTP round-trip. Prefetch fires after `window._stationsReady` resolves, iterating the same offset priority order sequentially via `await _mapReplay.prefetch()`.
+
+---
+
+## Virtual Station Deduplication
+
+`services/dedup.py` — `build_deduped_registry(raw, distance_m=50.0, manual_pairs=None)` → `(display_registry, virtual_members)`.
+
+**Algorithm**:
+1. Exclude `foehn` network stations (synthetic pressure-delta stations).
+2. Union-find over all eligible stations; union any pair within `distance_m` metres (Haversine).
+3. Union any manually-specified pair from `station_dedup_overrides` regardless of distance.
+4. For each cluster, pick the canonical station by network priority: meteoswiss > slf > metar > holfuy > windline > ecowitt > wunderground.
+5. Canonical station gets `member_ids` populated (canonical first); non-canonical stations are omitted from `display_registry`.
+
+**Runtime state** (on `app.state`):
+- `station_registry` — raw dict of all real stations (all collectors write here)
+- `display_registry` — deduplicated dict for API responses / map
+- `virtual_members` — `{canonical_id: [canonical_id, member_id, ...]}` for multi-member stations
+- `dedup_distance_m` — threshold from config (default 50 m)
+
+**WeatherStation model**: `member_ids: list[str]` (empty for single stations).
+
+**Latest data** (`query_latest_virtual`): queries all members, returns highest-timestamp result.
+
+**History data** (`query_history_virtual`): calls `_members_established_for_window` first. A member must have data in the 2 h slice **before** the window opens to be included. This prevents newly-added stations (partial coverage) from producing jagged/overlapping chart lines alongside an established station's full history. Three fallback levels: (1) pre-window established, (2) any in-window, (3) all IDs on error.
+
+**Registry updates**:
+- Startup: manual pairs loaded from DB, `build_deduped_registry` called before server opens.
+- Scheduler patch (`_patch_scheduler_registry`): after each collect run, if a new station appears, rebuilds dedup registries.
+- Admin API: `rebuild_display_registry(app_state)` called immediately on pair add/delete.
+
+**config.yml** key: `station_dedup.distance_m` (default 50).
+
+---
 
 ### Dev Overlay
 

@@ -1,6 +1,6 @@
 # Feature History & Backlog
 
-## Current Version: v1.8 (shipped)
+## Current Version: v1.9 (shipped)
 
 ### Shipped Milestones
 
@@ -25,6 +25,7 @@
 | v1.6 | Help/FAQ page (`/help`, 12 accordion sections); AI input normaliser (regex wind-term → degrees); fuzzy station name matching; geographic station lookup by location name; `GET /api/rulesets` org isolation fix |
 | v1.7 | Holfuy collector (`collectors/holfuy.py`, API-key auth, `{"measurements":[...]}` envelope); forecast replay prefetch cache (`ReplayEngine._cache`, TTL 10 min, `prefetch()` with AbortSignal); map wind-arrow lazy-popup fix (`window.t is not a function`); prefetch abort on page unload |
 | v1.8 | Replay performance: server-side in-memory TTL cache (5 min) in `/api/stations/replay`; startup background warm-up of all 9 day-button windows; `aggregateWindow(30m, last)` before pivot reduces observation rows ~3×; removed redundant `sort()` from Flux queries; frontend prefetch expanded to all 9 offsets in outward-from-today order; browser console logging throughout |
+| v1.9 | Virtual weather stations: co-located station deduplication via union-find clustering (`services/dedup.py`); 50 m GPS proximity threshold + manual admin overrides (`station_dedup_overrides` SQLite table); `display_registry` + `virtual_members` in app state; highest-priority network wins canonical metadata; newest-wins for latest data across all members; history filtered to established members only (pre-window 2 h data check prevents partial-coverage overlap); Lehn pair pre-seeded (holfuy-1850 ↔ windline-6116); admin Station Dedup tab with add/delete UI |
 
 ---
 
@@ -57,7 +58,7 @@ Replaces WhatsApp-based go/no-go coordination for VKPI commercial tandem operato
 - **OGN launch statistics** — detect takeoffs from OGN tracks near known launch coordinates; store daily takeoff counts in `ogn_takeoffs` InfluxDB.
 - **xcontest correlation** — correlate xcontest.org flight dates near a site with ruleset decision history; "rule accuracy" card on `ruleset-analysis.html`.
 - **Club area overlay** — toggleable GeoJSON polygon layer; admin UI to upload/edit.
-- **Duplicate station handling** — admin marks two stations as same physical location with priority; map surfaces station with most recent data.
+- ~~**Duplicate station handling**~~ — shipped in v1.9 as virtual station dedup.
 - **Wind rose chart** — replace direction scatter on station-detail with proper wind rose.
 - **Additional collectors** — Windline (API key).
 - **Performance pass** — InfluxDB query profiling; downsampling for data older than 90 days.

@@ -528,7 +528,8 @@
       "collectors": "Collettori",
       "foehn_config": "Config föhn",
       "presets": "Siti preset",
-      "orgs": "Organizzazioni"
+      "orgs": "Organizzazioni",
+      "station_dedup": "Dedup. stazioni"
     },
     "orgs": {
       "title": "Organizzazioni",
@@ -617,6 +618,21 @@
       "temporary_note": "⚠ Le modifiche ad attivo/intervallo sono temporanee e vengono ripristinate al riavvio.",
       "cannot_toggle_foehn": "Il collettore föhn non può essere disattivato in fase di esecuzione.",
       "no_collectors": "Nessun collettore configurato."
+    },
+    "station_dedup": {
+      "subtitle": "Unisci manualmente coppie di stazioni che si trovano nello stesso luogo ma sono più distanti della soglia automatica.",
+      "col_station_a": "Stazione A",
+      "col_station_b": "Stazione B",
+      "col_note": "Nota",
+      "col_actions": "Azioni",
+      "add_pair": "Aggiungi coppia",
+      "select_station": "— seleziona stazione —",
+      "note_placeholder": "Nota facoltativa (es. stesso sito di decollo)",
+      "no_pairs": "Nessuna coppia di deduplicazione configurata.",
+      "confirm_delete": "Rimuovere questa coppia di deduplicazione?",
+      "saved": "Salvato",
+      "err_select_both": "Seleziona entrambe le stazioni.",
+      "err_same": "Le stazioni A e B devono essere diverse."
     }
   }
 }

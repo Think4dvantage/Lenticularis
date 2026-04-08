@@ -31,6 +31,7 @@ Field mapping:
 
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime, timezone
 from typing import Optional
@@ -114,9 +115,13 @@ class HolfuyCollector(BaseCollector):
             "utc": "",      # return timestamps in UTC instead of CE(S)T
         }
 
-        # Let HTTP/network errors propagate — the scheduler marks the job "error"
-        # rather than silently showing "ok_no_data" for an authentication failure.
-        data = await self._get(_LIVE_URL, params=params)
+        try:
+            data = await self._get(_LIVE_URL, params=params)
+        except json.JSONDecodeError as exc:
+            logger.error(
+                "Holfuy: API returned non-JSON (invalid API key or service error): %s", exc
+            )
+            return []
 
         # Response shape: {"measurements": [...]} wrapper, or bare list/dict
         if isinstance(data, dict):
