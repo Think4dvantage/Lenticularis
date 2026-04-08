@@ -1,6 +1,6 @@
 # Feature History & Backlog
 
-## Current Version: v1.6 (shipped)
+## Current Version: v1.7 (shipped)
 
 ### Shipped Milestones
 
@@ -23,6 +23,7 @@
 | v1.4 | Opportunity site type (diamond marker ✦); AI rule suggestions via Ollama (`POST /api/ai/suggest-conditions`) |
 | v1.5 | Multi-tenant org system: `Organization` model, `org_admin`/`org_pilot` roles, subdomain routing (`vkpi.lenti.cloud`), org-dashboard, org-scoped editor |
 | v1.6 | Help/FAQ page (`/help`, 12 accordion sections); AI input normaliser (regex wind-term → degrees); fuzzy station name matching; geographic station lookup by location name; `GET /api/rulesets` org isolation fix |
+| v1.7 | Holfuy collector (`collectors/holfuy.py`, API-key auth, `{"measurements":[...]}` envelope); forecast replay prefetch cache (`ReplayEngine._cache`, TTL 10 min, `prefetch()` with AbortSignal); map wind-arrow lazy-popup fix (`window.t is not a function`); prefetch abort on page unload |
 
 ---
 
@@ -57,6 +58,6 @@ Replaces WhatsApp-based go/no-go coordination for VKPI commercial tandem operato
 - **Club area overlay** — toggleable GeoJSON polygon layer; admin UI to upload/edit.
 - **Duplicate station handling** — admin marks two stations as same physical location with priority; map surfaces station with most recent data.
 - **Wind rose chart** — replace direction scatter on station-detail with proper wind rose.
-- **Additional collectors** — Holfuy (API key), Windline (API key).
+- **Additional collectors** — Windline (API key).
 - **Performance pass** — InfluxDB query profiling; downsampling for data older than 90 days.
 - **Auto-clone preset on nearby site creation** — when pilot creates a new ruleset near a known preset coordinate, offer to auto-apply that preset.

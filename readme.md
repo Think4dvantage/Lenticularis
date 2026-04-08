@@ -4,7 +4,7 @@ Paragliding weather decision-support system for Switzerland. Collects data from 
 
 ## Features
 
-- **Multi-source weather collection** — MeteoSwiss (10 min), SLF (30 min), METAR/AviationWeather (15 min), Wunderground/Ecovitt personal stations, Open-Meteo 5-day forecast
+- **Multi-source weather collection** — MeteoSwiss (10 min), SLF (30 min), METAR/AviationWeather (15 min), Wunderground/Ecowitt personal stations, Holfuy (5 min), Open-Meteo 5-day forecast
 - **Interactive map** — Leaflet.js with station markers, launch-site traffic lights, time-navigation replay (past + 5-day forecast), personal-station toggle
 - **Rule editor** — graphical condition builder: per-row station picker, field / operator / value, AND/OR nesting, direction compass, pressure-delta two-station mode, live preview
 - **Traffic light evaluation** — live + 120 h forecast evaluation; per-condition decision history with `ruleset-analysis.html`
@@ -121,6 +121,7 @@ static/
 | v1.4 — Opportunity site type + AI rule suggestions (Ollama) | ✅ Shipped |
 | v1.5 — Multi-tenant org system (VKPI) | ✅ Shipped |
 | v1.6 — Help/FAQ page + AI input improvements + org ruleset isolation fix | ✅ Shipped |
+| v1.7 — Holfuy collector + forecast replay prefetch cache + map arrow fix | ✅ Shipped |
 
 Remaining work items are tracked as an unordered backlog in [.ai/context/features.md](.ai/context/features.md).
 
