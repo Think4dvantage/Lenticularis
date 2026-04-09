@@ -29,7 +29,7 @@ from lenticularis.config import get_config
 from lenticularis.database.influx import InfluxClient
 from lenticularis.scheduler import CollectorScheduler, get_collector_class
 from lenticularis.api.routers import stations as stations_router
-from lenticularis.api.routers.stations import warm_replay_cache
+from lenticularis.api.routers.stations import warm_replay_cache, invalidate_forecast_replay_cache
 from lenticularis.api.routers import auth as auth_router
 from lenticularis.api.routers import rulesets as rulesets_router
 from lenticularis.api.routers import health as health_router
@@ -145,6 +145,9 @@ async def lifespan(app: FastAPI):
     # Patch scheduler to update station registry after each collect run
     _patch_scheduler_registry(scheduler, app.state.station_registry, app.state.display_registry, app.state.virtual_members, dedup_distance_m)
 
+    # Patch scheduler to re-warm replay cache after each forecast run
+    _patch_scheduler_forecast(scheduler, influx, app.state.display_registry)
+
     await scheduler.start()
     logger.info("Startup complete — API is ready")
 
@@ -221,6 +224,40 @@ def _patch_scheduler_registry(
             pass  # Registry update is best-effort
 
     scheduler._run_collector = patched
+
+
+def _patch_scheduler_forecast(
+    scheduler: CollectorScheduler,
+    influx,
+    display_registry: dict,
+) -> None:
+    """
+    Monkey-patch the scheduler's _run_forecast_collector so that after each
+    successful forecast run (i.e. actual points written), the stale forecast
+    replay cache entries are invalidated and the warm-up task is re-fired.
+
+    Without this, cached replay windows that include forecast data would
+    continue serving the previous model run until the 5-minute TTL naturally
+    expires — even though fresh data is already in InfluxDB.
+    """
+    logger = logging.getLogger(__name__)
+    original = scheduler._run_forecast_collector
+
+    async def patched(collector, horizon_hours):
+        await original(collector, horizon_hours)
+        health_key = f"forecast_{collector.SOURCE}"
+        health = scheduler._collector_health.get(health_key, {})
+        if health.get("status") == "ok" and (health.get("last_measurement_count") or 0) > 0:
+            n = invalidate_forecast_replay_cache()
+            logger.info(
+                "Forecast collector '%s' wrote %d points — invalidated %d replay cache entries, re-warming",
+                collector.SOURCE,
+                health.get("last_measurement_count"),
+                n,
+            )
+            asyncio.get_event_loop().create_task(warm_replay_cache(influx, display_registry))
+
+    scheduler._run_forecast_collector = patched
 
 
 # ---------------------------------------------------------------------------

@@ -93,13 +93,17 @@ class BaseForecastCollector(ABC):
         stations: list[WeatherStation],
         horizon_hours: int = 120,
         spread_seconds: float = 0.0,
+        concurrency: int = 1,
     ):
         """
-        Async-generator version of ``collect_all``.
+        Fetch forecasts serially (concurrency=1 by default).
 
-        Yields ``(station, points)`` for each eligible station so the caller
-        can write to InfluxDB immediately after each fetch — avoiding a full
-        hour of buffering when ``spread_seconds`` is large.
+        Open-Meteo free tier rate-limits burst connections with HTTP 429.
+        Serial fetching (one request at a time) with the ~7 s API response
+        latency gives ~0.14 req/s — well within free-tier limits.  475 stations
+        complete in ~55 min, safely inside the 60-min collection interval.
+
+        ``spread_seconds`` is accepted for API compatibility but ignored.
 
         On per-station errors, yields ``(station, [])`` and logs the exception.
         """
@@ -107,15 +111,10 @@ class BaseForecastCollector(ABC):
             s for s in stations
             if s.latitude is not None and s.longitude is not None
         ]
-        delay = spread_seconds / len(eligible) if spread_seconds > 0 and eligible else 0.0
+        if not eligible:
+            return
 
-        for i, station in enumerate(eligible):
-            if i > 0 and delay > 0:
-                self.logger.debug(
-                    "Forecast spread: sleeping %.1fs before station %s (%d/%d)",
-                    delay, station.station_id, i + 1, len(eligible),
-                )
-                await asyncio.sleep(delay)
+        async def _fetch(station: WeatherStation):
             try:
                 pts = await self.collect_for_station(
                     station.station_id,
@@ -124,12 +123,19 @@ class BaseForecastCollector(ABC):
                     station.longitude,
                     horizon_hours,
                 )
-                yield station, pts
+                return station, pts
             except Exception as exc:
                 self.logger.error(
                     "Forecast collection failed for %s: %s", station.station_id, exc
                 )
-                yield station, []
+                return station, []
+
+        # Serial processing — one station at a time.  The API response latency
+        # (~7 s) already limits throughput to ~8 req/min without extra sleep,
+        # keeping us well within Open-Meteo's free-tier rate limits.
+        for station in eligible:
+            result = await _fetch(station)
+            yield result
 
     # ------------------------------------------------------------------
     # Shared HTTP helpers (mirrors BaseCollector)
@@ -145,19 +151,31 @@ class BaseForecastCollector(ABC):
     async def _get(self, url: str, params: Optional[dict] = None) -> dict:
         await self._ensure_client()
         assert self._http_client is not None
-        try:
-            response = await self._http_client.get(url, params=params)
-            response.raise_for_status()
-            return response.json()
-        except httpx.TimeoutException as exc:
-            self.logger.error("Timeout fetching %s: %s", url, exc)
-            raise
-        except httpx.HTTPStatusError as exc:
-            self.logger.error("HTTP %s fetching %s: %s", exc.response.status_code, url, exc)
-            raise
-        except httpx.HTTPError as exc:
-            self.logger.error("HTTP error fetching %s: %s", url, exc)
-            raise
+        _429_delays = [10, 30, 60]  # seconds to wait before each retry on 429
+        attempt = 0
+        while True:
+            try:
+                response = await self._http_client.get(url, params=params)
+                if response.status_code == 429 and attempt < len(_429_delays):
+                    delay = _429_delays[attempt]
+                    self.logger.warning(
+                        "HTTP 429 fetching %s — retry %d/%d in %ds",
+                        url, attempt + 1, len(_429_delays), delay,
+                    )
+                    await asyncio.sleep(delay)
+                    attempt += 1
+                    continue
+                response.raise_for_status()
+                return response.json()
+            except httpx.TimeoutException as exc:
+                self.logger.error("Timeout fetching %s: %s", url, exc)
+                raise
+            except httpx.HTTPStatusError as exc:
+                self.logger.error("HTTP %s fetching %s: %s", exc.response.status_code, url, exc)
+                raise
+            except httpx.HTTPError as exc:
+                self.logger.error("HTTP error fetching %s: %s", url, exc)
+                raise
 
     async def close(self) -> None:
         if self._http_client is not None:

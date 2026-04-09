@@ -44,6 +44,15 @@ def _build_replay_payload(
     obs_start = min(start_dt, obs_end - timedelta(hours=2))
     raw = influx.query_history_all_stations(obs_start, obs_end)
 
+    obs_frame_count = sum(len(v) for v in raw.values())
+    logger.info(
+        "Replay build: obs query [%s, %s] → %d stations, %d rows",
+        obs_start.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        obs_end.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        len(raw),
+        obs_frame_count,
+    )
+
     result: dict[str, Any] = {}
     for sid, measurements in raw.items():
         station = registry.get(sid)
@@ -65,10 +74,19 @@ def _build_replay_payload(
         }
 
     forecast_from: Optional[str] = None
+    fc_frame_count = 0
     if include_forecast:
         forecast_start = now
         forecast_end = now + timedelta(hours=forecast_hours)
         fc_raw = influx.query_forecast_replay(forecast_start, forecast_end)
+        fc_frame_count = sum(len(v) for v in fc_raw.values())
+        logger.info(
+            "Replay build: forecast query [%s, %s] → %d stations, %d rows",
+            forecast_start.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            forecast_end.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            len(fc_raw),
+            fc_frame_count,
+        )
         forecast_from = now.isoformat()
 
         for sid, fc_measurements in fc_raw.items():
@@ -90,13 +108,34 @@ def _build_replay_payload(
                 }
             result[sid]["measurements"].extend(fc_measurements)
 
-    return {
+    payload = {
         "start": start_dt.isoformat(),
         "end": (now + timedelta(hours=forecast_hours)).isoformat() if include_forecast else end_dt.isoformat(),
         "forecast_from": forecast_from,
         "station_count": len(result),
+        "obs_frame_count": obs_frame_count,
+        "fc_frame_count": fc_frame_count,
         "data": result,
     }
+    logger.info(
+        "Replay build: done — %d stations, %d obs rows, %d forecast rows",
+        len(result), obs_frame_count, fc_frame_count,
+    )
+    return payload
+
+
+def invalidate_forecast_replay_cache() -> int:
+    """
+    Remove all replay cache entries that include forecast data (``include_forecast=True``).
+
+    Called after each forecast collector run so that stale forecast windows are
+    recomputed on the next warm-up cycle rather than served from a stale cache.
+    Returns the number of entries removed.
+    """
+    keys = [k for k in list(_replay_cache) if "|True|" in k]
+    for k in keys:
+        del _replay_cache[k]
+    return len(keys)
 
 
 async def warm_replay_cache(influx: Any, registry: dict) -> None:
@@ -140,6 +179,15 @@ async def warm_replay_cache(influx: Any, registry: dict) -> None:
             payload = await asyncio.get_event_loop().run_in_executor(
                 None, _build_replay_payload, influx, registry, start_dt, end_dt, include_forecast, fh
             )
+            # Skip caching if forecast data was expected but none was returned — this
+            # happens when the warm-up runs before forecast collectors have written
+            # fresh data.  Leaving the key uncached lets the next request retry.
+            if include_forecast and payload.get("fc_frame_count", 0) == 0:
+                logger.warning(
+                    "Replay warm-up SKIP CACHE (no forecast data): offset=%d in %.1fs",
+                    offset, time.monotonic() - t0,
+                )
+                continue
             _replay_cache[cache_key] = (payload, time.monotonic())
             logger.info("Replay warm-up DONE: offset=%d in %.1fs", offset, time.monotonic() - t0)
         except Exception as exc:
@@ -320,8 +368,12 @@ async def get_replay(
     payload = await asyncio.get_event_loop().run_in_executor(
         None, _build_replay_payload, influx, registry, start_dt, end_dt, include_forecast, forecast_hours
     )
-    _replay_cache[cache_key] = (payload, time.monotonic())
-    logger.debug("Replay cache STORE: %s (%d stations)", cache_key, payload["station_count"])
+    # Don't cache if forecast data was expected but missing — next request will retry.
+    if include_forecast and payload.get("fc_frame_count", 0) == 0:
+        logger.warning("Replay cache SKIP (no forecast data): %s", cache_key)
+    else:
+        _replay_cache[cache_key] = (payload, time.monotonic())
+        logger.debug("Replay cache STORE: %s (%d stations)", cache_key, payload["station_count"])
     return payload
 
 

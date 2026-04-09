@@ -513,7 +513,8 @@ function tnSeekToHour(hour) {
   let dayMs;
   if (_tnCustomDate) {
     dayMs = new Date(_tnCustomDate + 'T00:00:00Z').getTime();
-  } else if (_tnOffset) {
+  } else if (_tnOffset != null) {
+    // Note: _tnOffset can be 0 (today) which is falsy — must use != null
     const now = new Date();
     dayMs = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) + _tnOffset * 86400000;
   } else {
@@ -526,6 +527,11 @@ function tnSeekToHour(hour) {
     if (diff < bestDiff) { bestDiff = diff; bestIdx = i; }
     if (new Date(ts[i]).getTime() > target + 3600000) break;
   }
+  console.log(
+    `[Lenti:index] seekToHour(${hour}): target=${new Date(target).toISOString()}` +
+    ` → frame ${bestIdx}/${ts.length - 1} ts=${ts[bestIdx]}` +
+    ` diff=${(bestDiff / 3600000).toFixed(1)}h`
+  );
   _mapReplay.seekTo(bestIdx);
 }
 

@@ -125,6 +125,25 @@ class ReplayEngine {
     }
     this._timestamps = Array.from(tsSet).sort();
     this._currentIndex = 0;
+    const obsFc = this._forecastFrom
+      ? this._timestamps.filter(t => t < this._forecastFrom).length
+      : this._timestamps.length;
+    const fcCount = this._timestamps.length - obsFc;
+    console.log(
+      `[Lenti:replay] applyJson: ${this._timestamps.length} unique timestamps` +
+      ` (${obsFc} obs + ${fcCount} forecast)` +
+      (this._timestamps.length > 0
+        ? `, range ${this._timestamps[0]} → ${this._timestamps[this._timestamps.length - 1]}`
+        : '') +
+      (json.obs_frame_count != null
+        ? `, server obs_rows=${json.obs_frame_count} fc_rows=${json.fc_frame_count}`
+        : '')
+    );
+    if (this._timestamps.length === 0) {
+      console.warn('[Lenti:replay] applyJson: NO timestamps — replay will be empty');
+    } else if (this._forecastFrom && fcCount === 0) {
+      console.warn('[Lenti:replay] applyJson: forecast expected but 0 forecast timestamps — data may be incomplete');
+    }
   }
 
   play() {
@@ -193,7 +212,16 @@ class ReplayEngine {
 
   _emitFrame() {
     const ts = this._timestamps[this._currentIndex];
-    this._onFrame(this._buildSnapshot(ts), ts, this._currentIndex, this._timestamps.length, this.isForecastFrame);
+    const isFc = this.isForecastFrame;
+    // Log every frame at slow speeds; throttle at fast speeds to avoid console spam
+    if (this._speed <= 50) {
+      console.log(
+        `[Lenti:replay] frame ${this._currentIndex + 1}/${this._timestamps.length}` +
+        ` ts=${ts}` +
+        (isFc ? ' [forecast]' : ' [obs]')
+      );
+    }
+    this._onFrame(this._buildSnapshot(ts), ts, this._currentIndex, this._timestamps.length, isFc);
   }
 
   /**

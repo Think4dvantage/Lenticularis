@@ -28,7 +28,8 @@
       "WebFetch(domain:api.existenz.ch)",
       "WebFetch(domain:developer.srgssr.ch)",
       "Bash(npm show:*)",
-      "WebFetch(domain:vkpi.ch)"
+      "WebFetch(domain:vkpi.ch)",
+      "Bash(curl:*)"
     ]
   }
 }
