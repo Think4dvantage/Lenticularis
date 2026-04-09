@@ -140,6 +140,24 @@ collectors:
 database:
   path: "/app/data/lenticularis.db"
 
+# Social OAuth (Google and Facebook login)
+# Obtain credentials from Google Cloud Console and Meta for Developers.
+# Redirect URIs to register:
+#   https://your-domain.com/api/auth/google/callback
+#   https://your-domain.com/api/auth/facebook/callback
+oauth:
+  # Public base URL of this instance — required when running behind a reverse proxy.
+  # Must exactly match the domain you registered as the redirect URI in Google/Meta.
+  base_url: "https://your-domain.com"
+  google:
+    enabled: false
+    client_id: "your-google-client-id.apps.googleusercontent.com"
+    client_secret: "your-google-client-secret"
+  facebook:
+    enabled: false
+    client_id: "your-facebook-app-id"
+    client_secret: "your-facebook-app-secret"
+
 # Authentication
 auth:
   jwt_secret: "change-me-in-production-use-openssl-rand-hex-32"

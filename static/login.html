@@ -186,12 +186,17 @@
       <button class="btn-primary" type="submit" id="submitBtn" data-i18n="auth.sign_in_btn">Sign in</button>
     </form>
 
-    <div class="divider" data-i18n="auth.or">or</div>
+    <div class="divider" id="socialDivider" style="display:none" data-i18n="auth.or">or</div>
 
-    <button class="btn-social" id="googleBtn" title="Coming soon">
+    <a class="btn-social" href="/api/auth/google" id="googleBtn" style="display:none">
       <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.7 1.22 9.2 3.22l6.84-6.84C35.98 2.38 30.38 0 24 0 14.62 0 6.52 5.48 2.5 13.44l7.98 6.2C12.44 13.16 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.5c0-1.7-.14-3.36-.42-4.98H24v9.44h12.86C35.82 32.42 31.8 35.6 27 36.8l7.8 6.06C39.94 39.12 46.98 32.52 46.98 24.5z"/><path fill="#FBBC05" d="M10.48 28.36A14.54 14.54 0 0 1 9.5 24c0-1.52.26-3 .72-4.36l-7.98-6.2A23.96 23.96 0 0 0 0 24c0 3.86.92 7.52 2.5 10.76l7.98-6.4z"/><path fill="#34A853" d="M24 48c6.48 0 11.9-2.14 15.88-5.82l-7.8-6.06C29.98 37.64 27.12 38.5 24 38.5c-6.26 0-11.56-3.66-13.52-8.96l-7.98 6.4C6.52 42.52 14.62 48 24 48z"/></svg>
-      <span data-i18n="auth.google_btn">Continue with Google</span> <span style="color:#4a5568;font-size:0.75rem" data-i18n="auth.google_coming_soon">(coming soon)</span>
-    </button>
+      <span data-i18n="auth.google_btn">Continue with Google</span>
+    </a>
+
+    <a class="btn-social" href="/api/auth/facebook" id="facebookBtn" style="display:none">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="#1877F2"><path d="M24 12.073C24 5.405 18.627 0 12 0S0 5.405 0 12.073C0 18.1 4.388 23.094 10.125 24v-8.437H7.078v-3.49h3.047V9.413c0-3.025 1.792-4.697 4.533-4.697 1.312 0 2.686.236 2.686.236v2.97h-1.513c-1.491 0-1.956.93-1.956 1.874v2.25h3.328l-.532 3.49h-2.796V24C19.612 23.094 24 18.1 24 12.073z"/></svg>
+      <span data-i18n="auth.facebook_btn">Continue with Facebook</span>
+    </a>
 
     <div class="auth-footer">
       <span data-i18n="auth.no_account">Don't have an account?</span> <a href="/register" data-i18n="auth.create_account">Create one</a>
@@ -210,9 +215,22 @@
   renderNavAuth('login');
   renderLangPicker();
 
-  document.getElementById('googleBtn').addEventListener('click', () => {
-    alert(window.t('auth.google_alert'));
-  });
+  // Show social login buttons for enabled providers
+  fetch('/api/auth/providers').then(r => r.json()).then(providers => {
+    console.log('[Lenti:login] oauth providers:', providers);
+    const anyEnabled = providers.google || providers.facebook;
+    if (anyEnabled) document.getElementById('socialDivider').style.display = '';
+    if (providers.google)   document.getElementById('googleBtn').style.display = '';
+    if (providers.facebook) document.getElementById('facebookBtn').style.display = '';
+  }).catch(e => console.warn('[Lenti:login] could not load providers:', e));
+
+  // Show OAuth error from callback redirect if present
+  const urlError = new URLSearchParams(location.search).get('error');
+  if (urlError) {
+    const errEl = document.getElementById('errorMsg');
+    errEl.textContent = window.t('auth.oauth_error') + ' (' + urlError + ')';
+    errEl.classList.add('visible');
+  }
 
   document.getElementById('loginForm').addEventListener('submit', async (e) => {
     e.preventDefault();

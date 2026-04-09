@@ -1,6 +1,6 @@
 [project]
 name = "lenticularis"
-version = "0.1.0"
+version = "1.11.0"
 description = "Weather Data tracking with focus on Ruleset for certain Locations and the surrounding Weather Data"
 authors = [
     {name = "Raphael Eymann, r+lenti@eymanns.ch"}

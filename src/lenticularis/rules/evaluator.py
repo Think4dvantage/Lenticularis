@@ -20,7 +20,14 @@ Combination logic
 ``majority_vote`` — the colour with the most votes wins.
 
 If no conditions trigger (either because none matched or no data), the decision
-defaults to ``"green"`` (benefit of the doubt).
+defaults to ``"green"`` (benefit of the doubt) for launch/landing sites.
+
+Opportunity sites
+-----------------
+Opportunity sites use **inverted semantics**: the default decision is ``"red"``.
+GREEN is only produced when *every* condition/group triggers (all positive
+requirements are simultaneously met). This creates the "aha" effect of an
+opportunity marker appearing on the map only when conditions are fully right.
 
 Direction ranges
 ----------------
@@ -294,7 +301,25 @@ def run_evaluation(
             triggered_colours.append(group_colour)
 
     # ---- apply combination logic -------------------------------------------
-    if not triggered_colours:
+    # Opportunity sites use inverted semantics: RED by default, GREEN only when
+    # every condition/group triggers (all positive requirements are met).
+    total_units = len(standalone) + len(groups)
+    if ruleset.site_type == "opportunity":
+        if len(triggered_colours) < total_units:
+            # At least one condition/group did not trigger — not an opportunity.
+            decision = "red"
+        elif not triggered_colours:
+            # No conditions defined at all.
+            decision = "red"
+        elif ruleset.combination_logic == "worst_wins":
+            decision = _worst(triggered_colours)
+        else:  # majority_vote
+            counter: dict[str, int] = {"green": 0, "orange": 0, "red": 0}
+            for colour in triggered_colours:
+                counter[colour] = counter.get(colour, 0) + 1
+            decision = max(counter, key=lambda k: (counter[k], COLOUR_RANK[k]))
+    elif not triggered_colours:
+        # Launch/landing: benefit of the doubt — no triggered conditions means green.
         decision = "green"
     elif ruleset.combination_logic == "worst_wins":
         decision = _worst(triggered_colours)
@@ -424,7 +449,18 @@ def run_forecast_evaluation(
             if all_matched:
                 triggered_colours.append(_worst([c.result_colour for c in group_conds]))
 
-        if not triggered_colours:
+        total_units = len(standalone) + len(groups)
+        if ruleset.site_type == "opportunity":
+            if len(triggered_colours) < total_units or not triggered_colours:
+                decision = "red"
+            elif ruleset.combination_logic == "worst_wins":
+                decision = _worst(triggered_colours)
+            else:
+                counter: dict[str, int] = {"green": 0, "orange": 0, "red": 0}
+                for colour in triggered_colours:
+                    counter[colour] = counter.get(colour, 0) + 1
+                decision = max(counter, key=lambda k: (counter[k], COLOUR_RANK[k]))
+        elif not triggered_colours:
             decision = "green"
         elif ruleset.combination_logic == "worst_wins":
             decision = _worst(triggered_colours)

@@ -6,6 +6,10 @@ function _store(token, refreshToken, user) {
   localStorage.setItem(AUTH_KEY, JSON.stringify({ token, refreshToken, user }));
 }
 
+export function storeAuth(accessToken, refreshToken, user) {
+  _store(accessToken, refreshToken, user);
+}
+
 function _load() {
   try { return JSON.parse(localStorage.getItem(AUTH_KEY)) || null; }
   catch { return null; }

@@ -61,6 +61,7 @@
       "triggered": "— déclenché",
       "launch": "Décollage",
       "landing_zone": "Zone d'atterrissage",
+      "opportunity": "Opportunité",
       "landable": "Atterrissable",
       "no_data": "pas de données",
       "analysis": "Analyse →",
@@ -415,10 +416,10 @@
     "signing_in": "Connexion…",
     "or": "ou",
     "google_btn": "Continuer avec Google",
-    "google_coming_soon": "(bientôt disponible)",
+    "facebook_btn": "Continuer avec Facebook",
+    "oauth_error": "Échec de la connexion sociale",
     "no_account": "Pas de compte ?",
     "create_account": "En créer un",
-    "google_alert": "La connexion Google sera bientôt disponible. Veuillez créer un compte local pour l'instant.",
     "register_title": "Créer un compte",
     "register_subtitle": "Un compte local est recommandé — vos données de parapente restent sous votre contrôle.",
     "display_name": "Nom d'affichage",
@@ -432,8 +433,7 @@
     "or_sign_up": "ou s'inscrire avec",
     "have_account": "Vous avez déjà un compte ?",
     "sign_in_link": "Se connecter",
-    "passwords_no_match": "Les mots de passe ne correspondent pas.",
-    "google_signup_alert": "L'inscription Google arrive bientôt. Veuillez créer un compte local pour l'instant."
+    "passwords_no_match": "Les mots de passe ne correspondent pas."
   },
   "analysis": {
     "back": "← Retour aux règles",

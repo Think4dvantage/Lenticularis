@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lenticularis — Signing in…</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0f1117;
+      color: #e2e8f0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.95rem;
+    }
+  </style>
+</head>
+<body>
+  <span>Signing in…</span>
+
+  <script type="module">
+    import { storeAuth, isLoggedIn } from '/static/auth.js';
+
+    console.log('[Lenti:oauth-callback] processing OAuth callback');
+
+    const params = new URLSearchParams(location.search);
+    const accessToken  = params.get('access_token');
+    const refreshToken = params.get('refresh_token');
+    const userB64      = params.get('user');
+    const error        = params.get('error');
+
+    if (error) {
+      console.error('[Lenti:oauth-callback] error from server:', error);
+      window.location.href = '/login?error=' + encodeURIComponent(error);
+    } else if (!accessToken || !refreshToken || !userB64) {
+      console.error('[Lenti:oauth-callback] missing token params');
+      window.location.href = '/login?error=oauth_missing_params';
+    } else {
+      try {
+        const user = JSON.parse(atob(userB64.replace(/-/g, '+').replace(/_/g, '/')));
+        storeAuth(accessToken, refreshToken, user);
+        console.log('[Lenti:oauth-callback] tokens stored, redirecting to /');
+        window.location.href = '/';
+      } catch (e) {
+        console.error('[Lenti:oauth-callback] failed to parse user payload:', e);
+        window.location.href = '/login?error=oauth_parse_error';
+      }
+    }
+  </script>
+</body>
+</html>

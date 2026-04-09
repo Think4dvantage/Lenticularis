@@ -61,6 +61,24 @@ class StationDedupConfig(BaseModel):
     distance_m: float = 300.0
 
 
+class GoogleOAuthConfig(BaseModel):
+    enabled: bool = False
+    client_id: str = ""
+    client_secret: str = ""
+
+
+class FacebookOAuthConfig(BaseModel):
+    enabled: bool = False
+    client_id: str = ""
+    client_secret: str = ""
+
+
+class OAuthConfig(BaseModel):
+    base_url: str = ""   # e.g. "https://lenti.lg4.ch" — required when running behind a reverse proxy
+    google: GoogleOAuthConfig = GoogleOAuthConfig()
+    facebook: FacebookOAuthConfig = FacebookOAuthConfig()
+
+
 class MainConfig(BaseModel):
     influxdb: InfluxDBConfig
     collectors: list[CollectorConfig]
@@ -71,6 +89,7 @@ class MainConfig(BaseModel):
     api: APIConfig
     ollama: OllamaConfig = OllamaConfig()
     station_dedup: StationDedupConfig = StationDedupConfig()
+    oauth: OAuthConfig = OAuthConfig()
 
 
 #Module vars

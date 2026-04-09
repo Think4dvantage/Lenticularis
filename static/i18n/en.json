@@ -61,6 +61,7 @@
       "triggered": "— triggered",
       "launch": "Launch",
       "landing_zone": "Landing zone",
+      "opportunity": "Opportunity",
       "landable": "Landable",
       "no_data": "no data",
       "analysis": "Analysis →",
@@ -415,10 +416,10 @@
     "signing_in": "Signing in…",
     "or": "or",
     "google_btn": "Continue with Google",
-    "google_coming_soon": "(coming soon)",
+    "facebook_btn": "Continue with Facebook",
+    "oauth_error": "Social login failed",
     "no_account": "Don't have an account?",
     "create_account": "Create one",
-    "google_alert": "Google login is coming soon. Please create a local account for now.",
     "register_title": "Create account",
     "register_subtitle": "A local account is recommended — your paragliding data stays under your control.",
     "display_name": "Display name",
@@ -432,8 +433,7 @@
     "or_sign_up": "or sign up with",
     "have_account": "Already have an account?",
     "sign_in_link": "Sign in",
-    "passwords_no_match": "Passwords do not match.",
-    "google_signup_alert": "Google sign-up is coming soon. Please create a local account for now."
+    "passwords_no_match": "Passwords do not match."
   },
   "analysis": {
     "back": "← Back to Rule Sets",

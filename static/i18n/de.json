@@ -61,6 +61,7 @@
       "triggered": "— ausgelöst",
       "launch": "Startplatz",
       "landing_zone": "Landezone",
+      "opportunity": "Gelegenheit",
       "landable": "Landbar",
       "no_data": "keine Daten",
       "analysis": "Analyse →",
@@ -415,10 +416,10 @@
     "signing_in": "Anmeldung läuft…",
     "or": "oder",
     "google_btn": "Mit Google fortfahren",
-    "google_coming_soon": "(demnächst)",
+    "facebook_btn": "Mit Facebook fortfahren",
+    "oauth_error": "Soziale Anmeldung fehlgeschlagen",
     "no_account": "Noch kein Konto?",
     "create_account": "Konto erstellen",
-    "google_alert": "Google-Anmeldung ist demnächst verfügbar. Bitte erstelle vorerst ein lokales Konto.",
     "register_title": "Konto erstellen",
     "register_subtitle": "Ein lokales Konto wird empfohlen — deine Paraglidingdaten bleiben unter deiner Kontrolle.",
     "display_name": "Anzeigename",
@@ -432,8 +433,7 @@
     "or_sign_up": "oder anmelden mit",
     "have_account": "Bereits ein Konto?",
     "sign_in_link": "Anmelden",
-    "passwords_no_match": "Passwörter stimmen nicht überein.",
-    "google_signup_alert": "Google-Registrierung kommt bald. Bitte erstellen Sie vorerst ein lokales Konto."
+    "passwords_no_match": "Passwörter stimmen nicht überein."
   },
   "analysis": {
     "back": "← Zurück zu Regelsets",

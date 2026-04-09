@@ -431,10 +431,10 @@
     "signing_in": "Accesso…",
     "or": "oppure",
     "google_btn": "Continua con Google",
-    "google_coming_soon": "(presto disponibile)",
+    "facebook_btn": "Continua con Facebook",
+    "oauth_error": "Accesso social fallito",
     "no_account": "Non hai un account?",
     "create_account": "Creane uno",
-    "google_alert": "Il login con Google sarà presto disponibile. Per ora crea un account locale.",
     "register_title": "Crea account",
     "register_subtitle": "Un account locale è consigliato — i tuoi dati di parapendio rimangono sotto il tuo controllo.",
     "display_name": "Nome visualizzato",
@@ -448,8 +448,7 @@
     "or_sign_up": "oppure registrati con",
     "have_account": "Hai già un account?",
     "sign_in_link": "Accedi",
-    "passwords_no_match": "Le password non corrispondono.",
-    "google_signup_alert": "La registrazione con Google sarà disponibile presto. Per ora crea un account locale."
+    "passwords_no_match": "Le password non corrispondono."
   },
   "analysis": {
     "back": "← Torna ai set di regole",

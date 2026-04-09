@@ -632,6 +632,16 @@ window._stationsReady.then(async () => {
     return L.divIcon({ html: svg, className: '', iconSize: [24, 32], iconAnchor: [4, 30], popupAnchor: [10, -30] });
   }
 
+  function opportunityIcon() {
+    // Always green — only rendered when decision is green
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40">
+      <circle cx="20" cy="20" r="18" fill="#68d391" fill-opacity="0.15"/>
+      <polygon points="20,4 36,20 20,36 4,20" fill="#68d391" fill-opacity="0.85"/>
+      <text x="20" y="25" font-size="11" text-anchor="middle" fill="#000" opacity="0.6">✦</text>
+    </svg>`;
+    return L.divIcon({ html: svg, className: '', iconSize: [40, 40], iconAnchor: [20, 20], popupAnchor: [0, -22] });
+  }
+
   // ── Popup HTML ──────────────────────────────────────────────────────────
   function escHtml(s) {
     return String(s).replace(/[&<>"']/g, c =>
@@ -753,6 +763,22 @@ window._stationsReady.then(async () => {
       </div>`;
   }
 
+  function opportunityPopup(rs, dec) {
+    const altLabel = rs.altitude_m != null ? ` · ${rs.altitude_m} m` : '';
+    return `
+      <div class="popup-name">✦ ${escHtml(rs.name)}</div>
+      <div class="popup-meta">${window.t('map.popup.opportunity')}${altLabel}</div>
+      <div class="popup-row" style="margin-bottom:6px">
+        <span>${window.t('map.popup.status')}</span>
+        <span style="color:#68d391;font-weight:700">GREEN</span>
+      </div>
+      ${buildConditionRows(dec.condition_results)}
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <a class="popup-link" href="/ruleset-analysis?id=${rs.id}">${window.t('map.popup.analysis')}</a>
+        <a class="popup-link" style="background:#2d3748" href="/ruleset-editor?id=${rs.id}">${window.t('map.popup.edit')}</a>
+      </div>`;
+  }
+
   // ── Marker layer ────────────────────────────────────────────────────────
   // Custom pane at z-index 450 — below the default markerPane (600) so
   // weather-arrow markers always render on top of ruleset dots.
@@ -761,11 +787,14 @@ window._stationsReady.then(async () => {
   const rulesetLayer = L.layerGroup().addTo(window._lentiMap);
 
   async function loadRulesetMarkers() {
+    const t0 = performance.now();
+    console.log('[Lenti:index] loadRulesetMarkers start');
     try {
       const res = await fetchAuth('/api/rulesets');
-      if (!res.ok) return;
+      if (!res.ok) { console.warn('[Lenti:index] loadRulesetMarkers: /api/rulesets returned', res.status); return; }
       const rulesets = await res.json();
       const positioned = rulesets.filter(rs => rs.lat != null && rs.lon != null);
+      console.log(`[Lenti:index] loadRulesetMarkers: ${rulesets.length} rulesets, ${positioned.length} positioned`);
       if (positioned.length === 0) return;
 
       const evaluations = await Promise.allSettled(
@@ -774,6 +803,7 @@ window._stationsReady.then(async () => {
 
       rulesetLayer.clearLayers();
 
+      let counts = { launch: 0, landing: 0, opportunity_shown: 0, opportunity_hidden: 0 };
       positioned.forEach((rs, i) => {
         const dec = evaluations[i].status === 'fulfilled' ? evaluations[i].value : null;
         if (!dec) return;
@@ -782,15 +812,30 @@ window._stationsReady.then(async () => {
           const haloColor = dec.landing_decisions?.length ? dec.best_landing_decision : null;
           L.marker([rs.lat, rs.lon], { icon: launchIcon(dec.decision, haloColor), pane: 'rulesetPane' })
             .addTo(rulesetLayer)
-            .bindPopup(launchPopup(rs, dec), { maxWidth: 320 });
+            .bindPopup(() => launchPopup(rs, dec), { maxWidth: 320 });
+          counts.launch++;
+        } else if (rs.site_type === 'opportunity') {
+          // Opportunity markers only appear when fully GREEN — the "aha" effect
+          if (dec.decision === 'green') {
+            L.marker([rs.lat, rs.lon], { icon: opportunityIcon(), pane: 'rulesetPane' })
+              .addTo(rulesetLayer)
+              .bindPopup(() => opportunityPopup(rs, dec), { maxWidth: 300 });
+            counts.opportunity_shown++;
+          } else {
+            counts.opportunity_hidden++;
+            console.log(`[Lenti:index] opportunity "${rs.name}" hidden (decision=${dec.decision})`);
+          }
         } else {
           L.marker([rs.lat, rs.lon], { icon: landingIcon(dec.decision), pane: 'rulesetPane' })
             .addTo(rulesetLayer)
-            .bindPopup(landingPopup(rs, dec), { maxWidth: 300 });
+            .bindPopup(() => landingPopup(rs, dec), { maxWidth: 300 });
+          counts.landing++;
         }
       });
+
+      console.log(`[Lenti:index] loadRulesetMarkers done in ${(performance.now() - t0).toFixed(0)} ms`, counts);
     } catch (err) {
-      console.error('Failed to load ruleset markers:', err);
+      console.error('[Lenti:index] loadRulesetMarkers error:', err);
     }
   }
 

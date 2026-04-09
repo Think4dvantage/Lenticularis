@@ -186,7 +186,7 @@
 <body>
 
 <nav class="top-nav">
-  <a href="/" class="nav-brand">🪁 Lenticularis</a>
+  <a href="/" class="nav-brand">🌤️ Lenticularis</a>
   <div class="nav-links">
     <a href="/" class="nav-link" data-i18n="nav.map">Map</a>
     <a href="/stations" class="nav-link" data-i18n="nav.stations">Stations</a>
@@ -228,7 +228,7 @@
     <details>
       <summary>What is Lenticularis?</summary>
       <div class="faq-answer">
-        <p>Lenticularis is a paragliding weather decision-support system for Switzerland. It collects data from multiple weather networks every 5–30 minutes, lets you build graphical rule sets for your launch sites, and shows a <span class="tl-green">GREEN</span> / <span class="tl-orange">ORANGE</span> / <span class="tl-red">RED</span> traffic-light decision that updates automatically.</p>
+        <p>Lenticularis is a weather decision-support system for Switzerland. It collects data from multiple weather networks every 5–30 minutes, lets you build graphical rule sets for your sites, and shows a <span class="tl-green">GREEN</span> / <span class="tl-orange">ORANGE</span> / <span class="tl-red">RED</span> traffic-light decision that updates automatically.</p>
         <p>The key differentiator: you define your own rules using real station data — no one-size-fits-all logic imposed on you.</p>
       </div>
     </details>
@@ -236,18 +236,18 @@
     <details>
       <summary>Do I need an account?</summary>
       <div class="faq-answer">
-        <p>You can browse the map and station data without an account. To create and save rule sets for your own launch sites, you need a free <strong>Pilot</strong> account — register at <a href="/register">/register</a>.</p>
+        <p>You can browse the map and station data without an account. To create and save rule sets for your own sites, you need a free <strong>Pilot</strong> account — register at <a href="/register">/register</a>.</p>
       </div>
     </details>
 
     <details>
-      <summary>How do I get started with my first launch site?</summary>
+      <summary>How do I get started with my first site?</summary>
       <div class="faq-answer">
         <ol>
           <li>Sign in and go to <a href="/rulesets">Rule Sets</a>.</li>
           <li>Click <strong>＋ New rule set</strong>.</li>
-          <li>Enter a name (e.g. <em>Beatenberg Südstart</em>) and click the map to pin your site.</li>
-          <li>Optionally pick a <strong>preset site</strong> to pre-fill conditions for a nearby launch — you can edit every threshold afterwards.</li>
+          <li>Enter a name (e.g. <em>Geneva Harbour</em>) and click the map to pin your site.</li>
+          <li>Optionally pick a <strong>preset site</strong> to pre-fill conditions for a nearby location — you can edit every threshold afterwards.</li>
           <li>Add conditions in the Rule Engine section — pick a station, choose a field (wind speed, direction, etc.), set an operator and threshold.</li>
           <li>Save. The map will show a traffic-light badge for your site within the next evaluation cycle (usually &lt; 5 minutes).</li>
         </ol>
@@ -264,11 +264,11 @@
       <div class="faq-answer">
         <p>Each colour reflects the outcome of evaluating <em>all</em> conditions in your rule set against live station data:</p>
         <ul>
-          <li><span class="tl-green">GREEN</span> — all conditions pass. Conditions at this site look flyable according to your rules.</li>
+          <li><span class="tl-green">GREEN</span> — all conditions pass. Conditions at this site look favourable according to your rules.</li>
           <li><span class="tl-orange">ORANGE</span> — at least one condition returned ORANGE. Caution; monitor closely.</li>
           <li><span class="tl-red">RED</span> — at least one condition returned RED. Flying not recommended by your rules.</li>
         </ul>
-        <div class="tip-box"><strong>Remember:</strong> traffic lights reflect your rule set only. Always apply your own pilot judgement and check official forecasts before flying.</div>
+        <div class="tip-box"><strong>Remember:</strong> traffic lights reflect your rule set only. Always apply your own judgement and check official forecasts before making any go/no-go decision.</div>
       </div>
     </details>
 
@@ -327,7 +327,7 @@
     <details>
       <summary>How do I share or clone a rule set?</summary>
       <div class="faq-answer">
-        <p>In the rule set editor, toggle <strong>Public (gallery)</strong>. Your rule set then appears in the community gallery where other pilots can browse and clone it. Cloning creates an independent copy in the other pilot's account — changes made by either side do not affect the other.</p>
+        <p>In the rule set editor, toggle <strong>Public (gallery)</strong>. Your rule set then appears in the community gallery where other users can browse and clone it. Cloning creates an independent copy in the other user's account — changes made by either side do not affect the other.</p>
       </div>
     </details>
   </div>
@@ -390,9 +390,9 @@
       <div class="faq-answer">
         <p>Each condition row has a result colour (<span class="pill pill-green">GREEN</span> / <span class="pill pill-orange">ORANGE</span> / <span class="pill pill-red">RED</span>) that is used <em>when the condition is triggered</em> (i.e. when the threshold is crossed).</p>
         <ul>
-          <li>Assign <span class="pill pill-red">RED</span> to hard limits that make flying dangerous (e.g. wind gust &gt; 50 km/h).</li>
+          <li>Assign <span class="pill pill-red">RED</span> to hard limits that make conditions dangerous (e.g. wind gust &gt; 50 km/h).</li>
           <li>Assign <span class="pill pill-orange">ORANGE</span> to advisory limits that warrant caution (e.g. wind gust &gt; 35 km/h).</li>
-          <li>Assign <span class="pill pill-green">GREEN</span> to positive confirmation conditions (e.g. wind direction in the flyable arc) — the condition is triggered only when the direction IS correct, contributing GREEN to the overall result.</li>
+          <li>Assign <span class="pill pill-green">GREEN</span> to positive confirmation conditions (e.g. wind direction in the usable arc) — the condition is triggered only when the direction IS correct, contributing GREEN to the overall result.</li>
         </ul>
       </div>
     </details>
@@ -411,7 +411,7 @@
           <li>No RED but any <span class="tl-orange">ORANGE</span> → site is <span class="tl-orange">ORANGE</span>.</li>
           <li>All <span class="tl-green">GREEN</span> → site is <span class="tl-green">GREEN</span>.</li>
         </ul>
-        <p>Use this when <em>all</em> conditions must be met simultaneously for a safe flight.</p>
+        <p>Use this when <em>all</em> conditions must be met simultaneously for a go decision.</p>
       </div>
     </details>
 
@@ -431,22 +431,22 @@
     <details>
       <summary>What is a Launch site?</summary>
       <div class="faq-answer">
-        <p>A <strong>Launch site</strong> (<span class="pill pill-blue">▲ Launch</span>) represents the takeoff point. It appears on the map as a circle with a traffic-light colour. You can link one or more landing zones to it — the map then shows a coloured ring around the launch marker based on the best available landing decision.</p>
+        <p>A <strong>Launch site</strong> (<span class="pill pill-blue">▲ Launch</span>) represents your primary point of interest — a takeoff, a harbour, a departure point. It appears on the map as a circle with a traffic-light colour. You can link one or more landing zones to it — the map then shows a coloured ring around the launch marker based on the best available decision for the linked zones.</p>
       </div>
     </details>
 
     <details>
       <summary>What is a Landing zone?</summary>
       <div class="faq-answer">
-        <p>A <strong>Landing zone</strong> (<span class="pill pill-gray">⚑ Landing</span>) is typically the valley landing field. It shows its own traffic-light badge and can be linked from any number of launch sites. Conditions on a landing zone might monitor low-level wind or obstacles.</p>
+        <p>A <strong>Landing zone</strong> (<span class="pill pill-gray">⚑ Landing</span>) is a secondary point — typically an arrival or destination location. It shows its own traffic-light badge and can be linked from any number of launch sites. Conditions on a landing zone might monitor local wind, visibility, or any other relevant threshold.</p>
       </div>
     </details>
 
     <details>
       <summary>What is an Opportunity site?</summary>
       <div class="faq-answer">
-        <p>An <strong>Opportunity</strong> (<span class="pill pill-green">✦ Opportunity</span>) is a special location or condition window — for example a thermal trigger, an XC window, or a favourable airspace corridor — that is not a specific takeoff or landing. It renders as a diamond marker on the map with a subtle glow when GREEN.</p>
-        <p>Unlike launch/landing semantics, an opportunity rule set is purely advisory: "conditions are right for this kind of flying."</p>
+        <p>An <strong>Opportunity</strong> (<span class="pill pill-green">✦ Opportunity</span>) is a special location or condition window — for example a favourable wind window, a tidal window, or any time-sensitive condition — that is not a specific departure or arrival point. It renders as a diamond marker on the map with a subtle glow when GREEN.</p>
+        <p>Unlike launch/landing semantics, an opportunity rule set is purely advisory: "conditions are right for this activity."</p>
       </div>
     </details>
   </div>
@@ -486,7 +486,7 @@
       <div class="faq-answer">
         <p>Föhn is a warm, dry downslope wind that occurs when air masses are forced over the Alps. In Switzerland, south Föhn flows from Italy through mountain valleys (Reuss, Rhine, Rhône) to the north. It is characterised by:</p>
         <ul>
-          <li>Strong, gusty winds in alpine valleys — dangerous for paragliding</li>
+          <li>Strong, gusty winds in alpine valleys — dangerous for outdoor activities</li>
           <li>Rapidly clearing skies and exceptional visibility north of the Alps</li>
           <li>A strong north–south pressure gradient across the Alps</li>
           <li>Characteristic lenticular (lens-shaped) clouds above the ridge — the source of the app's name</li>
@@ -553,16 +553,16 @@
     <h2><span class="section-icon">📊</span> Statistics Dashboard</h2>
 
     <details>
-      <summary>What counts as a "flyable day"?</summary>
+      <summary>What counts as a "favourable day"?</summary>
       <div class="faq-answer">
-        <p>A calendar day is counted as flyable if at least one evaluation of your rule set returned <span class="tl-green">GREEN</span> on that day. Evaluations that fall outside the daylight window (sunrise−1h to sunset+1h) are marked with a moon icon and excluded from the daylight-filtered counts.</p>
+        <p>A calendar day is counted as favourable if at least one evaluation of your rule set returned <span class="tl-green">GREEN</span> on that day. Evaluations that fall outside the daylight window (sunrise−1h to sunset+1h) are marked with a moon icon and excluded from the daylight-filtered counts.</p>
       </div>
     </details>
 
     <details>
       <summary>How is the hourly heatmap read?</summary>
       <div class="faq-answer">
-        <p>The hourly heatmap shows the percentage of evaluations that returned <span class="tl-green">GREEN</span> for each hour of the day (UTC), aggregated across the selected time period. Darker green = more often flyable at that hour historically.</p>
+        <p>The hourly heatmap shows the percentage of evaluations that returned <span class="tl-green">GREEN</span> for each hour of the day (UTC), aggregated across the selected time period. Darker green = conditions more often favourable at that hour historically.</p>
         <p>Note: times are in <strong>UTC</strong>. Swiss local time is UTC+1 in winter and UTC+2 in summer.</p>
       </div>
     </details>
@@ -632,13 +632,13 @@
     <details>
       <summary>What is an Organisation?</summary>
       <div class="faq-answer">
-        <p>An <strong>Organisation</strong> is a shared workspace for commercial operators or clubs — for example a tandem paragliding school. Each org gets:</p>
+        <p>An <strong>Organisation</strong> is a shared workspace for commercial operators or clubs — for example a sailing club, an outdoor activity operator, or a flight school. Each org gets:</p>
         <ul>
           <li>Its own subdomain (e.g. <code>vkpi.lenti.cloud</code>) with a public traffic-light dashboard.</li>
           <li>A set of org-owned rule sets managed by org admins.</li>
           <li>Org members (org pilots) who can log in to see condition details and history.</li>
         </ul>
-        <p>Personal pilot accounts and organisation accounts are independent — an org admin can also have a personal pilot workspace.</p>
+        <p>Personal accounts and organisation accounts are independent — an org admin can also have a personal workspace.</p>
       </div>
     </details>
 

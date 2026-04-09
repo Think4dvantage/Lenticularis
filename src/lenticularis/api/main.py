@@ -327,6 +327,10 @@ def create_app() -> FastAPI:
         async def serve_login():
             return FileResponse(str(static_dir / "login.html"))
 
+        @app.get("/oauth-callback", include_in_schema=False)
+        async def serve_oauth_callback():
+            return FileResponse(str(static_dir / "oauth-callback.html"))
+
         @app.get("/register", include_in_schema=False)
         async def serve_register():
             return FileResponse(str(static_dir / "register.html"))
