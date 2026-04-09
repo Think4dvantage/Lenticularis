@@ -113,3 +113,44 @@ Each page: one `.html` file + inline `<script type="module">` or companion `.js`
 - **`_buildUrl(params)`** is the shared URL builder used by both `prefetch()` and `load()` — cache key matching depends on this being identical for both.
 
 Console logging uses `[Lenti:replay]`, `[Lenti:map]`, `[Lenti:index]` prefixes with timing via `performance.now()`.
+
+---
+
+## Browser Console Logging Policy
+
+**Log verbosely.** Engineers must be able to diagnose any frontend behaviour solely from the browser console — no source-diving required.
+
+### What to log
+
+| Event type | Level | What to include |
+|---|---|---|
+| Data fetches | `console.log` | URL, start (`performance.now()`), result size, elapsed ms |
+| Cache hits / misses | `console.log` | Key, cache age in seconds |
+| State transitions | `console.log` | Old → new state, relevant payload summary |
+| User interactions | `console.log` | Action name, resolved parameters (e.g. target timestamp, frame index) |
+| Warnings / empty results | `console.warn` | What was expected, what was received |
+| Errors | `console.error` | Full error object + context |
+
+### Prefix convention
+
+Every `console.*` call must start with a bracketed page/module prefix so logs can be filtered in DevTools:
+
+```
+[Lenti:replay]   replay engine (replay.js)
+[Lenti:map]      map layer / station loading (map.js)
+[Lenti:index]    main page orchestration (index.html module script)
+[Lenti:stats]    stats page
+[Lenti:editor]   ruleset editor
+[Lenti:foehn]    föhn dashboard
+[Lenti:<page>]   any other page — derive from the HTML filename
+```
+
+### Throttling at high speed
+
+When a timer or animation loop fires many times per second (e.g. replay playback), guard verbose output behind a speed or rate check to avoid flooding the console:
+
+```javascript
+if (this._speed <= 50) {
+  console.log(`[Lenti:replay] frame ${i}/${total} ts=${ts}`);
+}
+```
