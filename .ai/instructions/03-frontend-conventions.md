@@ -120,6 +120,10 @@ Console logging uses `[Lenti:replay]`, `[Lenti:map]`, `[Lenti:index]` prefixes w
 
 **Log verbosely.** Engineers must be able to diagnose any frontend behaviour solely from the browser console — no source-diving required.
 
+### Mandatory rule: add logging whenever you touch code
+
+**Any time you modify a frontend function or block — even for an unrelated fix — check whether it has console logging. If it does not, add it before moving on.** Logging is not optional and is not considered scope creep. Touching code without adding logging to unlogged paths is a mistake.
+
 ### What to log
 
 | Event type | Level | What to include |
