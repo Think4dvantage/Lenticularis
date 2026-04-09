@@ -187,7 +187,21 @@ healthcheck:
 
 `api/routers/stations.py` has a module-level `_replay_cache: dict[str, tuple[Any, float]]` (key → payload, monotonic stored_at). TTL is 5 minutes. The cache is warmed at startup via `warm_replay_cache(influx, registry)` — a background `asyncio.Task` that iterates offsets `[1, 0, 2, -1, 3, -2, 4, -3, 5]` sequentially, covering all 9 day-button windows. Core computation is in `_build_replay_payload()` (sync, called via `run_in_executor`). The HTTP endpoint checks the cache first; on miss it calls `_build_replay_payload` and stores the result.
 
+**Cache poisoning guard**: Both `warm_replay_cache` and the `GET /api/stations/replay` endpoint skip writing to the cache when `fc_frame_count == 0` and `include_forecast` is true. This prevents startup warm-up (which runs before the forecast collector's first write) from caching obs-only entries for future-day windows, which would block forecast data for up to 10 min.
+
+**Post-forecast invalidation**: `invalidate_forecast_replay_cache()` removes all cache entries whose key contains `|True|` (forecast-enabled windows). `_patch_scheduler_forecast()` in `main.py` monkey-patches `scheduler._run_forecast_collector` to call `invalidate_forecast_replay_cache()` + fire a new `warm_replay_cache()` background task immediately after each successful forecast run (status == "ok" and measurement_count > 0). This ensures users see the latest model run without waiting for the 5-min TTL.
+
+**Payload fields**: `obs_frame_count`, `fc_frame_count` are included in the JSON payload for client-side console diagnostics (logged by `ReplayEngine._applyJson`).
+
 The frontend mirrors this with a client-side `ReplayEngine._cache` (Map, 10 min TTL) so repeated clicks within a session are instant without any HTTP round-trip. Prefetch fires after `window._stationsReady` resolves, iterating the same offset priority order sequentially via `await _mapReplay.prefetch()`.
+
+---
+
+### Forecast Collector Rate Limiting
+
+`BaseForecastCollector.collect_all_iter` (in `collectors/forecast_base.py`) iterates stations **serially** (concurrency=1). With Open-Meteo's ~7 s API response latency, this gives ~0.14 req/s (~8 req/min) — well within the free-tier rate limits. 475 stations complete in ~55 min, safely within the 60-min collection interval.
+
+`BaseForecastCollector._get` includes **429 retry with backoff**: on HTTP 429, waits 10s, 30s, 60s between successive retries (3 attempts total) before raising. This handles transient rate-limit spikes without silently dropping stations.
 
 ---
 

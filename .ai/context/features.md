@@ -1,6 +1,6 @@
 # Feature History & Backlog
 
-## Current Version: v1.9 (shipped)
+## Current Version: v1.10 (shipped)
 
 ### Shipped Milestones
 
@@ -26,6 +26,7 @@
 | v1.7 | Holfuy collector (`collectors/holfuy.py`, API-key auth, `{"measurements":[...]}` envelope); forecast replay prefetch cache (`ReplayEngine._cache`, TTL 10 min, `prefetch()` with AbortSignal); map wind-arrow lazy-popup fix (`window.t is not a function`); prefetch abort on page unload |
 | v1.8 | Replay performance: server-side in-memory TTL cache (5 min) in `/api/stations/replay`; startup background warm-up of all 9 day-button windows; `aggregateWindow(30m, last)` before pivot reduces observation rows ~3×; removed redundant `sort()` from Flux queries; frontend prefetch expanded to all 9 offsets in outward-from-today order; browser console logging throughout |
 | v1.9 | Virtual weather stations: co-located station deduplication via union-find clustering (`services/dedup.py`); 50 m GPS proximity threshold + manual admin overrides (`station_dedup_overrides` SQLite table); `display_registry` + `virtual_members` in app state; highest-priority network wins canonical metadata; newest-wins for latest data across all members; history filtered to established members only (pre-window 2 h data check prevents partial-coverage overlap); Lehn pair pre-seeded (holfuy-1850 ↔ windline-6116); admin Station Dedup tab with add/delete UI |
+| v1.10 | Forecast replay cache correctness: `_patch_scheduler_forecast` monkey-patch in `main.py` fires `invalidate_forecast_replay_cache()` + background `warm_replay_cache()` after each successful forecast collector run so replay windows always serve the latest model run; startup cache-poisoning guard skips caching when `fc_frame_count == 0` (prevents obs-only entries locking out forecast data for 5–10 min after startup); `obs_frame_count`/`fc_frame_count` fields added to replay payload for client diagnostics; `_tnOffset === 0` falsy bug fixed in hour-seek logic (`else if (_tnOffset != null)`); `collect_all_iter` rewritten from serial-with-per-station-sleep to serial (concurrency=1) with 429 retry/backoff (10s→30s→60s) in `_get` — eliminates Open-Meteo rate-limit errors that were causing ~45% station failures; comprehensive `[Lenti:replay]` browser console logging throughout |
 
 ---
 
