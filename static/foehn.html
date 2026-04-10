@@ -8,22 +8,14 @@
   <link rel="stylesheet" href="/static/shared.css" />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      background: #0f1117;
-      color: #e2e8f0;
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
+      background: #0f1117; color: #e2e8f0; min-height: 100vh; display: flex; flex-direction: column;
     }
 
-    /* ── Nav ─────────────────────────────────────────────────────────── */
-    .top-nav {
-      background: #1a1f2e; border-bottom: 1px solid #2d3748;
-      padding: 0 24px; display: flex; align-items: center; height: 48px; flex-shrink: 0;
-    }
-    .nav-brand { font-size: 1.1rem; font-weight: 600; color: #90cdf4; margin-right: 24px; }
+    /* ── Nav ── */
+    .top-nav { background: #1a1f2e; border-bottom: 1px solid #2d3748; padding: 0 24px; display: flex; align-items: center; height: 48px; flex-shrink: 0; }
+    .nav-brand { font-size: 1.1rem; font-weight: 600; color: #90cdf4; margin-right: 24px; text-decoration: none; }
     .nav-links { display: flex; gap: 2px; flex: 1; }
     .nav-link { color: #718096; text-decoration: none; font-size: 0.85rem; padding: 6px 14px; border-radius: 6px; transition: background 0.15s, color 0.15s; }
     .nav-link:hover  { background: #2d3748; color: #e2e8f0; }
@@ -36,91 +28,60 @@
     .lang-btn:hover { background: #2d3748; color: #e2e8f0; }
     .lang-btn.active { background: #2d4a6e; color: #90cdf4; border-color: #4a7bab; }
 
-    /* ── Layout ──────────────────────────────────────────────────────── */
+    /* ── Page layout ── */
     .page-content { flex: 1; padding: 20px 28px; max-width: 1400px; margin: 0 auto; width: 100%; }
-
-    .page-header {
-      display: flex; align-items: baseline; gap: 16px; margin-bottom: 16px;
-    }
+    .page-header { display: flex; align-items: baseline; gap: 16px; margin-bottom: 14px; }
     .page-header h1 { font-size: 1.5rem; font-weight: 600; }
     .page-meta { font-size: 0.8rem; color: #4a5568; }
     .page-meta span { color: #718096; }
 
-    /* ── Time navigation ─────────────────────────────────────────────── */
-    .time-nav-wrap {
-      background: #111827;
-      border: 1px solid #1e2535;
-      border-radius: 10px;
-      padding: 10px 14px;
-      margin-bottom: 18px;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
+    /* ── Tab nav ── */
+    .tab-nav { display: flex; gap: 0; border-bottom: 1px solid #2d3748; margin-bottom: 20px; }
+    .tab-btn {
+      background: transparent; border: none; color: #718096;
+      font-size: 0.88rem; font-weight: 500; padding: 10px 20px;
+      cursor: pointer; border-bottom: 2px solid transparent;
+      transition: color 0.15s, border-color 0.15s; margin-bottom: -1px;
     }
+    .tab-btn:hover { color: #e2e8f0; }
+    .tab-btn.active { color: #90cdf4; border-bottom-color: #90cdf4; }
+    .tab-btn .tab-lock { font-size: 0.7rem; color: #4a5568; margin-left: 5px; }
+
+    /* ── Time navigation ── */
+    .time-nav-wrap { background: #111827; border: 1px solid #1e2535; border-radius: 10px; padding: 10px 14px; margin-bottom: 18px; display: flex; flex-direction: column; gap: 8px; }
     .time-nav-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
     .time-nav-label { font-size: 0.72rem; color: #4a5568; width: 40px; flex-shrink: 0; }
-
-    .tn-btn {
-      background: #1a1f2e;
-      border: 1px solid #2d3748;
-      color: #718096;
-      font-size: 0.78rem;
-      padding: 5px 12px;
-      border-radius: 6px;
-      cursor: pointer;
-      transition: background 0.15s, color 0.15s, border-color 0.15s;
-      white-space: nowrap;
-    }
+    .tn-btn { background: #1a1f2e; border: 1px solid #2d3748; color: #718096; font-size: 0.78rem; padding: 5px 12px; border-radius: 6px; cursor: pointer; transition: background 0.15s, color 0.15s, border-color 0.15s; white-space: nowrap; }
     .tn-btn:hover { background: #2d3748; color: #e2e8f0; }
-    .tn-btn.selected {
-      background: #2d4a6e; color: #90cdf4; border-color: #4a7bab; font-weight: 600;
-    }
+    .tn-btn.selected { background: #2d4a6e; color: #90cdf4; border-color: #4a7bab; font-weight: 600; }
     .tn-btn.live-btn.selected { background: #1a3a22; color: #68d391; border-color: #276749; }
 
-    .forecast-badge {
-      display: inline-flex; align-items: center; gap: 5px;
-      font-size: 0.72rem; color: #f6ad55;
-      background: #2d2010; border: 1px solid #744210;
-      border-radius: 5px; padding: 3px 9px;
-    }
-
-    /* ── Status banner ───────────────────────────────────────────────── */
-    .status-banner {
-      border-radius: 10px; padding: 14px 20px; margin-bottom: 18px;
-      display: flex; align-items: center; gap: 14px; border: 1px solid transparent;
-    }
-    /* Color = impact on pilots: green = safe, red = föhn is danger */
-    .status-banner.inactive { background: #0d1f15; border-color: #276749; }
-    .status-banner.active   { background: #2d1515; border-color: #fc8181; }
-    .status-banner.risk     { background: #2d2010; border-color: #f6ad55; }
-    .status-banner.partial  { background: #2d2810; border-color: #f6e05e; }
-
+    /* ── Status banner ── */
+    .status-banner { border-radius: 10px; padding: 14px 20px; margin-bottom: 18px; display: flex; align-items: center; gap: 14px; border: 1px solid transparent; }
+    .status-banner.inactive   { background: #0d1f15; border-color: #276749; }
+    .status-banner.active     { background: #2d1515; border-color: #fc8181; }
+    .status-banner.risk       { background: #2d2010; border-color: #f6ad55; }
+    .status-banner.north_risk { background: #0d1a2e; border-color: #63b3ed; }
+    .status-banner.partial    { background: #2d2810; border-color: #f6e05e; }
     .banner-icon { font-size: 1.9rem; flex-shrink: 0; }
     .banner-title { font-size: 1.05rem; font-weight: 700; }
     .banner-sub   { font-size: 0.82rem; color: #a0aec0; margin-top: 3px; }
-    .banner-title.inactive { color: #68d391; }
-    .banner-title.active   { color: #fc8181; }
-    .banner-title.risk     { color: #f6ad55; }
-    .banner-title.partial  { color: #f6e05e; }
+    .banner-title.inactive   { color: #68d391; }
+    .banner-title.active     { color: #fc8181; }
+    .banner-title.risk       { color: #f6ad55; }
+    .banner-title.north_risk { color: #63b3ed; }
+    .banner-title.partial    { color: #f6e05e; }
 
-    /* ── Two-column top row ──────────────────────────────────────────── */
-    .top-row {
-      display: grid; grid-template-columns: 280px 1fr; gap: 18px;
-      margin-bottom: 20px; align-items: start;
-    }
+    /* ── Two-column top row ── */
+    .top-row { display: grid; grid-template-columns: 300px 1fr; gap: 18px; margin-bottom: 20px; align-items: start; }
     @media (max-width: 800px) { .top-row { grid-template-columns: 1fr; } }
 
-    /* ── Cards ───────────────────────────────────────────────────────── */
+    /* ── Cards ── */
     .card { background: #1a1f2e; border: 1px solid #2d3748; border-radius: 10px; padding: 16px 18px; }
-    .card-title {
-      font-size: 0.73rem; font-weight: 600; text-transform: uppercase;
-      letter-spacing: 0.07em; color: #718096; margin-bottom: 14px;
-    }
+    .card-title { font-size: 0.73rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: #718096; margin-bottom: 14px; }
 
-    /* ── Pressure card ───────────────────────────────────────────────── */
-    .pressure-stations {
-      display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 10px;
-    }
+    /* ── Pressure card ── */
+    .pressure-stations { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 10px; }
     .pres-side { text-align: center; }
     .pres-station-label { font-size: 0.68rem; color: #718096; }
     .pres-value { font-size: 1.3rem; font-weight: 700; font-variant-numeric: tabular-nums; margin: 3px 0; }
@@ -128,114 +89,229 @@
     .pres-unit  { font-size: 0.68rem; color: #718096; }
     .pres-delta-wrap { text-align: center; flex-shrink: 0; }
     .pres-delta { font-size: 1.1rem; font-weight: 700; font-variant-numeric: tabular-nums; }
-
-    /* Color = föhn risk level (green=safe, red=risk) */
     .pres-delta.safe   { color: #68d391; }
     .pres-delta.caution{ color: #f6ad55; }
     .pres-delta.danger { color: #fc8181; }
-
+    .pres-delta.north  { color: #63b3ed; }
     .pres-direction { font-size: 0.7rem; color: #718096; margin-top: 2px; }
-
     .gradient-track { height: 8px; background: #2d3748; border-radius: 4px; overflow: hidden; position: relative; margin-bottom: 8px; }
     .gradient-fill { position: absolute; right: 0; top: 0; height: 100%; border-radius: 4px; transition: width 0.4s ease; }
     .gradient-fill.safe   { background: #48bb78; right: auto; left: 0; }
     .gradient-fill.caution{ background: #f6ad55; }
     .gradient-fill.danger { background: #fc8181; }
-
+    .gradient-fill.north  { background: #63b3ed; right: auto; left: 0; }
     .pres-threshold { font-size: 0.7rem; color: #4a5568; margin-bottom: 10px; }
-
-    .pres-badge {
-      display: block; text-align: center;
-      font-size: 0.72rem; font-weight: 600;
-      padding: 4px 10px; border-radius: 20px;
-    }
+    .pres-badge { display: block; text-align: center; font-size: 0.72rem; font-weight: 600; padding: 4px 10px; border-radius: 20px; }
     .pres-badge.safe   { background: #0d2a1a; color: #68d391; border: 1px solid #276749; }
     .pres-badge.caution{ background: #2d2010; color: #f6ad55; border: 1px solid #744210; }
     .pres-badge.danger { background: #2d1515; color: #fc8181; border: 1px solid #742a2a; }
+    .pres-badge.north  { background: #0d1a2e; color: #63b3ed; border: 1px solid #2b6cb0; }
 
-    /* ── Chart ───────────────────────────────────────────────────────── */
-    .chart-wrap { height: 200px; position: relative; }
+    /* ── Per-region pressure row ── */
+    .region-pressure { display: flex; align-items: center; justify-content: space-between; padding: 6px 16px 8px; border-top: 1px solid #111827; font-size: 0.75rem; gap: 8px; flex-wrap: wrap; }
+    .region-pres-label { color: #4a5568; flex-shrink: 0; }
+    .region-pres-val   { font-weight: 600; font-variant-numeric: tabular-nums; }
+    .region-pres-val.safe   { color: #68d391; }
+    .region-pres-val.danger { color: #fc8181; }
+    .region-pres-val.north  { color: #63b3ed; }
+    .region-pres-val.caution{ color: #f6ad55; }
 
-    /* ── Region grid ─────────────────────────────────────────────────── */
-    .region-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-      gap: 14px; margin-bottom: 28px;
-    }
+    /* ── Chart ── */
+    .chart-wrap { height: 220px; position: relative; }
 
-    .region-card {
-      background: #1a1f2e; border-radius: 10px; overflow: hidden;
-      border: 1px solid #2d3748; transition: border-color 0.2s;
-    }
-    /* Color = danger level: green=clear, red=föhn */
+    /* ── Region grid ── */
+    .region-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 14px; margin-bottom: 28px; }
+    .region-card { background: #1a1f2e; border-radius: 10px; overflow: hidden; border: 1px solid #2d3748; transition: border-color 0.2s; }
     .region-card.inactive { border-color: #276749; }
     .region-card.partial  { border-color: #744210; }
     .region-card.active   { border-color: #742a2a; }
     .region-card.no_data  { border-color: #2d3748; }
-
-    .region-header {
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 12px 16px 10px; border-bottom: 1px solid #1e2535; gap: 10px;
-    }
+    .region-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px 10px; border-bottom: 1px solid #1e2535; gap: 10px; }
     .region-name { font-size: 0.95rem; font-weight: 600; }
     .region-desc { font-size: 0.7rem; color: #718096; margin-top: 2px; }
-
-    .region-badge {
-      font-size: 0.67rem; font-weight: 700; padding: 3px 9px;
-      border-radius: 20px; white-space: nowrap; text-transform: uppercase;
-      letter-spacing: 0.05em; flex-shrink: 0;
-    }
-    /* Colors reflect safety: green=safe, red=danger */
+    .region-badge { font-size: 0.67rem; font-weight: 700; padding: 3px 9px; border-radius: 20px; white-space: nowrap; text-transform: uppercase; letter-spacing: 0.05em; flex-shrink: 0; }
     .region-badge.inactive { background: #0d2a1a; color: #68d391; border: 1px solid #276749; }
     .region-badge.partial  { background: #2d2010; color: #f6ad55; border: 1px solid #744210; }
     .region-badge.active   { background: #2d1515; color: #fc8181; border: 1px solid #742a2a; }
     .region-badge.no_data  { background: #1a202c; color: #4a5568; border: 1px solid #2d3748; }
 
-    /* ── Condition rows ──────────────────────────────────────────────── */
+    /* ── Condition rows (status view) ── */
     .cond-list { padding: 8px 0 4px; }
-    .cond-row {
-      display: grid; grid-template-columns: 14px 1fr auto;
-      align-items: center; gap: 8px;
-      padding: 6px 16px; font-size: 0.79rem;
-      border-bottom: 1px solid #111827;
-    }
+    .cond-row { display: grid; grid-template-columns: 14px 1fr auto; align-items: start; gap: 8px; padding: 6px 16px; font-size: 0.79rem; border-bottom: 1px solid #111827; }
     .cond-row:last-child { border-bottom: none; }
     .cond-row:hover { background: #1e2535; }
-
-    /* Dot: green = no föhn signal (good); red/orange = föhn signal (concern) */
-    .cond-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
-    .cond-dot.clear   { background: #48bb78; }   /* green  — not showing föhn */
-    .cond-dot.caution { background: #f6ad55; }   /* orange — showing signal, not confirmed */
-    .cond-dot.danger  { background: #fc8181; }   /* red    — confirmed föhn */
-    .cond-dot.no-data { background: #4a5568; }   /* grey   — no data */
-
+    .cond-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; margin-top: 4px; }
+    .cond-dot.clear   { background: #48bb78; }
+    .cond-dot.caution { background: #f6ad55; }
+    .cond-dot.danger  { background: #fc8181; }
+    .cond-dot.no-data { background: #4a5568; }
     .cond-body { min-width: 0; }
     .cond-station { color: #e2e8f0; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .cond-rule    { font-size: 0.7rem; color: #718096; margin-top: 1px; }
+    .cond-actual  { text-align: right; white-space: nowrap; padding-top: 2px; }
+    .v-ok   { color: #68d391; }
+    .v-bad  { color: #f6ad55; }
+    .v-none { color: #4a5568; font-style: italic; }
 
-    .cond-actual { text-align: right; white-space: nowrap; }
-    /* Value color: red = value is in föhn range (concern); green = not in föhn range (good) */
-    .v-ok  { color: #68d391; }   /* value is NOT supporting föhn → green */
-    .v-bad { color: #f6ad55; }   /* value IS in föhn range → orange (caution, not confirmed) */
-    .v-none{ color: #4a5568; font-style: italic; }
-
-    /* ── Info footer ─────────────────────────────────────────────────── */
-    .info-box {
-      background: #111827; border: 1px solid #1e2535; border-radius: 8px;
-      padding: 12px 16px; font-size: 0.77rem; color: #718096; line-height: 1.7;
-      margin-bottom: 28px;
-    }
+    /* ── Info footer ── */
+    .info-box { background: #111827; border: 1px solid #1e2535; border-radius: 8px; padding: 12px 16px; font-size: 0.77rem; color: #718096; line-height: 1.7; margin-bottom: 28px; }
     .info-box strong { color: #a0aec0; }
-
     .loading { color: #4a5568; font-style: italic; padding: 40px 0; text-align: center; }
     .error-msg { color: #fc8181; padding: 20px 0; }
+
+    /* ── My Setup tab ── */
+    .setup-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; flex-wrap: wrap; gap: 10px; }
+    .setup-title  { font-size: 1rem; font-weight: 600; color: #e2e8f0; }
+    .setup-hint   { font-size: 0.78rem; color: #718096; margin-top: 4px; }
+    .setup-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+    .login-prompt { background: #1a1f2e; border: 1px solid #2d3748; border-radius: 10px; padding: 32px 24px; text-align: center; }
+    .login-prompt p { color: #718096; font-size: 0.88rem; margin-bottom: 16px; }
+    .login-prompt a { color: #90cdf4; }
+
+    /* ── Region editor card ── */
+    .setup-region { background: #1a1f2e; border: 1px solid #2d3748; border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+    .setup-region-head {
+      display: flex; align-items: center; gap: 12px; padding: 12px 16px;
+      background: #111827; border-bottom: 1px solid #2d3748;
+    }
+    .setup-region-handle { color: #4a5568; cursor: grab; font-size: 1rem; flex-shrink: 0; }
+    .setup-region-name {
+      flex: 1; background: #0f1117; border: 1px solid #2d3748; border-radius: 6px;
+      padding: 7px 10px; color: #e2e8f0; font-size: 0.9rem; font-weight: 600; outline: none;
+    }
+    .setup-region-name:focus { border-color: #4299e1; }
+    .setup-region-desc {
+      flex: 2; background: #0f1117; border: 1px solid #2d3748; border-radius: 6px;
+      padding: 7px 10px; color: #a0aec0; font-size: 0.82rem; outline: none;
+    }
+    .setup-region-desc:focus { border-color: #4299e1; }
+    .btn-remove-region {
+      background: transparent; border: 1px solid #4a5568; color: #718096;
+      width: 30px; height: 30px; border-radius: 6px; cursor: pointer; font-size: 1rem;
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+      transition: background 0.15s, color 0.15s;
+    }
+    .btn-remove-region:hover { background: #2d1515; border-color: #7b2020; color: #fc8181; }
+
+    /* ── Pressure pair sub-section ── */
+    .pp-section { padding: 12px 16px 10px; border-bottom: 1px solid #1e2535; }
+    .pp-title { font-size: 0.68rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: #4a5568; margin-bottom: 10px; }
+    .pp-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .pp-label { font-size: 0.72rem; color: #718096; flex-shrink: 0; }
+    .pp-station { flex: 2; min-width: 150px; position: relative; }
+    .pp-station-input {
+      width: 100%; background: #0f1117; border: 1px solid #2d3748; border-radius: 6px;
+      padding: 7px 10px; color: #e2e8f0; font-size: 0.82rem; outline: none;
+    }
+    .pp-station-input:focus { border-color: #4299e1; }
+    .pp-threshold-wrap { display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
+    .pp-threshold {
+      width: 60px; background: #0f1117; border: 1px solid #2d3748; border-radius: 6px;
+      padding: 7px 8px; color: #e2e8f0; font-size: 0.82rem; outline: none; text-align: center;
+    }
+    .pp-threshold:focus { border-color: #4299e1; }
+    .pp-unit { font-size: 0.72rem; color: #4a5568; }
+    .pp-arrow { color: #4a5568; font-size: 0.9rem; flex-shrink: 0; }
+    .pp-none-hint { font-size: 0.75rem; color: #4a5568; font-style: italic; }
+
+    /* ── Station search dropdown (shared for pp and conditions) ── */
+    .station-dropdown {
+      position: absolute; top: 100%; left: 0; right: 0; z-index: 200;
+      background: #1a1f2e; border: 1px solid #4299e1; border-radius: 6px;
+      max-height: 180px; overflow-y: auto; display: none;
+    }
+    .station-dropdown.open { display: block; }
+    .station-option { padding: 7px 10px; font-size: 0.8rem; cursor: pointer; color: #e2e8f0; }
+    .station-option:hover { background: #2d3748; }
+    .station-option .sid { font-family: monospace; color: #718096; font-size: 0.7rem; }
+
+    /* ── Conditions sub-section ── */
+    .conds-section { padding: 12px 16px 10px; }
+    .conds-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    .conds-title { font-size: 0.68rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: #4a5568; }
+
+    /* ── Condition row (editor) ── */
+    .fcond-row {
+      background: #0f1117; border: 1px solid #2d3748; border-radius: 8px;
+      padding: 10px 12px; margin-bottom: 8px;
+      display: grid;
+      grid-template-columns: 2fr 120px 130px 70px 70px 90px 72px 30px;
+      gap: 6px; align-items: start;
+    }
+    @media (max-width: 900px) { .fcond-row { grid-template-columns: 1fr 1fr; } }
+    .fcond-station { position: relative; }
+    .fcond-input {
+      width: 100%; background: #1a1f2e; border: 1px solid #2d3748; border-radius: 6px;
+      padding: 6px 9px; color: #e2e8f0; font-size: 0.8rem; outline: none;
+    }
+    .fcond-input:focus { border-color: #4299e1; }
+    .fcond-select {
+      width: 100%; background: #1a1f2e; border: 1px solid #2d3748; border-radius: 6px;
+      padding: 6px 8px; color: #e2e8f0; font-size: 0.8rem; outline: none; cursor: pointer;
+    }
+    .fcond-select:focus { border-color: #4299e1; }
+    .fcond-val {
+      width: 100%; background: #1a1f2e; border: 1px solid #2d3748; border-radius: 6px;
+      padding: 6px 8px; color: #e2e8f0; font-size: 0.8rem; outline: none; text-align: right;
+    }
+    .fcond-val:focus { border-color: #4299e1; }
+    .fcond-val[disabled] { opacity: 0.3; cursor: not-allowed; }
+    .btn-remove-cond {
+      background: transparent; border: 1px solid #4a5568; color: #718096;
+      width: 28px; height: 28px; border-radius: 5px; cursor: pointer; font-size: 0.9rem;
+      display: flex; align-items: center; justify-content: center;
+      transition: background 0.15s, color 0.15s;
+    }
+    .btn-remove-cond:hover { background: #2d1515; border-color: #7b2020; color: #fc8181; }
+
+    /* ── Colour select ── */
+    .colour-green { color: #68d391; }
+    .colour-orange { color: #f6ad55; }
+    .colour-red   { color: #fc8181; }
+
+    /* ── Bottom add-region + buttons ── */
+    .btn-add-region {
+      width: 100%; background: #0f1f14; border: 1px dashed #276749; border-radius: 10px;
+      padding: 14px; color: #68d391; font-size: 0.88rem; font-weight: 500;
+      cursor: pointer; text-align: center; transition: background 0.15s;
+      margin-bottom: 24px;
+    }
+    .btn-add-region:hover { background: #1a3a22; }
+
+    /* ── Generic buttons ── */
+    .btn { display: inline-flex; align-items: center; gap: 7px; padding: 9px 18px; border-radius: 7px; font-size: 0.88rem; font-weight: 500; cursor: pointer; border: none; transition: background 0.15s; }
+    .btn-primary { background: #2b6cb0; color: #fff; }
+    .btn-primary:hover { background: #3182ce; }
+    .btn-primary:disabled { background: #2d3748; color: #718096; cursor: not-allowed; }
+    .btn-ghost { background: transparent; border: 1px solid #2d3748; color: #a0aec0; }
+    .btn-ghost:hover { background: #2d3748; color: #e2e8f0; }
+    .btn-danger { background: transparent; border: 1px solid #742a2a; color: #fc8181; }
+    .btn-danger:hover { background: #2d1515; }
+    .btn-add { background: #1a3a2e; border: 1px solid #276749; color: #68d391; font-size: 0.82rem; padding: 6px 12px; }
+    .btn-add:hover { background: #22543d; }
+
+    .save-msg { font-size: 0.78rem; color: #68d391; }
+    .save-err { font-size: 0.78rem; color: #fc8181; }
+
+    /* ── Global pairs editor ── */
+    .global-pairs-section { background: #111827; border: 1px solid #2d3748; border-radius: 10px; padding: 14px 16px; margin-bottom: 16px; }
+    .global-pairs-title { font-size: 0.68rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: #4a5568; margin-bottom: 10px; }
+    .global-pair-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+    .global-pair-row:last-of-type { margin-bottom: 0; }
+
+    /* ── Delta hint ── */
+    .delta-hint { font-size: 0.73rem; color: #4a5568; background: #111827; border: 1px solid #1e2535; border-radius: 7px; padding: 9px 12px; margin-bottom: 16px; line-height: 1.5; }
+    .delta-hint strong { color: #a0aec0; }
+
+    /* ── Forecast badge ── */
+    .forecast-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 0.72rem; color: #f6ad55; background: #2d2010; border: 1px solid #744210; border-radius: 5px; padding: 3px 9px; }
   </style>
 </head>
 <body>
 
-<!-- ── Navigation ──────────────────────────────────────────────────────── -->
 <nav class="top-nav">
-  <span class="nav-brand">🪁 Lenticularis</span>
+  <a href="/" class="nav-brand">🪁 Lenticularis</a>
   <div class="nav-links">
     <a href="/" class="nav-link" data-i18n="nav.map">Map</a>
     <a href="/stations" class="nav-link" data-i18n="nav.stations">Stations</a>
@@ -248,7 +324,6 @@
   <div class="nav-user" id="navUser"></div>
 </nav>
 
-<!-- ── Content ─────────────────────────────────────────────────────────── -->
 <div class="page-content">
 
   <div class="page-header">
@@ -259,78 +334,219 @@
     </div>
   </div>
 
-  <!-- Time navigation -->
-  <div class="time-nav-wrap">
-    <div class="time-nav-row">
-      <span class="time-nav-label" data-i18n="foehn.mode">Mode</span>
-      <button class="tn-btn live-btn selected" id="btnLive" data-i18n="foehn.live">● Live</button>
-      <!-- day buttons filled by JS -->
-    </div>
-    <div class="time-nav-row" id="hourRow" style="display:none">
-      <span class="time-nav-label" data-i18n="foehn.hour_label">Hour</span>
-      <!-- hour buttons filled by JS -->
-    </div>
+  <!-- ── Tabs ── -->
+  <div class="tab-nav">
+    <button class="tab-btn active" id="tabBtnStatus">Status</button>
+    <button class="tab-btn" id="tabBtnSetup">My Setup <span class="tab-lock" id="setupLock">🔒</span></button>
   </div>
 
-  <!-- Status banner -->
-  <div id="statusBanner" class="status-banner inactive">
-    <div class="banner-icon">✓</div>
-    <div>
-      <div class="banner-title inactive" data-i18n="common.loading">Loading…</div>
-      <div class="banner-sub"></div>
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <!-- STATUS TAB                                                            -->
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <div id="tabStatus">
+
+    <!-- Time navigation -->
+    <div class="time-nav-wrap">
+      <div class="time-nav-row">
+        <span class="time-nav-label" data-i18n="foehn.mode">Mode</span>
+        <button class="tn-btn live-btn selected" id="btnLive" data-i18n="foehn.live">● Live</button>
+      </div>
+      <div class="time-nav-row" id="hourRow" style="display:none">
+        <span class="time-nav-label" data-i18n="foehn.hour_label">Hour</span>
+      </div>
     </div>
-  </div>
 
-  <!-- Pressure + chart row -->
-  <div class="top-row">
-    <div class="card">
-      <div class="card-title" data-i18n="foehn.pressure_card_title">Pressure Gradient (Föhn Risk Indicator)</div>
-      <div id="pressurePanel"><p class="loading" style="font-size:0.8rem">…</p></div>
+    <!-- Status banner -->
+    <div id="statusBanner" class="status-banner inactive">
+      <div class="banner-icon">✓</div>
+      <div>
+        <div class="banner-title inactive" data-i18n="common.loading">Loading…</div>
+        <div class="banner-sub"></div>
+      </div>
     </div>
-    <div class="card">
-      <div class="card-title" id="chartTitle" data-i18n="foehn.chart_title_base">48h Pressure Gradient OTL − JUN</div>
-      <div class="chart-wrap"><canvas id="gradientChart"></canvas></div>
+
+    <!-- Pressure card + chart -->
+    <div class="top-row">
+      <div class="card">
+        <div class="card-title" data-i18n="foehn.pressure_card_title">Pressure Gradient (Föhn Risk Indicator)</div>
+        <div id="pressurePanel"><p class="loading" style="font-size:0.8rem">…</p></div>
+      </div>
+      <div class="card">
+        <div class="card-title" id="chartTitle">48h QFF Pressure Gradient</div>
+        <div class="chart-wrap"><canvas id="gradientChart"></canvas></div>
+      </div>
     </div>
-  </div>
 
-  <!-- Region cards -->
-  <div class="region-grid" id="regionGrid">
-    <p class="loading" data-i18n="foehn.loading">Loading…</p>
-  </div>
+    <!-- Region cards -->
+    <div class="region-grid" id="regionGrid">
+      <p class="loading" data-i18n="foehn.loading">Loading…</p>
+    </div>
 
-  <div class="info-box" id="infoBox"></div>
+    <div class="info-box" id="infoBox"></div>
 
-</div>
+  </div><!-- /tabStatus -->
+
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <!-- MY SETUP TAB                                                          -->
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <div id="tabSetup" style="display:none">
+
+    <!-- Not logged in -->
+    <div class="login-prompt" id="setupLoginPrompt" style="display:none">
+      <p>Sign in to create your own Föhn regions, pressure pairs, and arrival indicators.</p>
+      <a href="/login?next=/foehn" class="btn btn-primary" style="display:inline-flex">Sign in</a>
+    </div>
+
+    <!-- Editor (shown when logged in) -->
+    <div id="setupEditor" style="display:none">
+
+      <div class="setup-header">
+        <div>
+          <div class="setup-title">My Föhn Setup</div>
+          <div class="setup-hint">Define your own regions, pressure pairs and indicator conditions. Trends (Δ) detect föhn arriving.</div>
+        </div>
+        <div class="setup-actions">
+          <!-- Admin-only: overwrite system default -->
+          <label id="adminDefaultWrap" style="display:none;align-items:center;gap:7px;font-size:0.82rem;color:#f6ad55;cursor:pointer;border:1px solid #744210;border-radius:6px;padding:5px 10px;background:#2d2010">
+            <input type="checkbox" id="setAsDefaultChk" style="accent-color:#f6ad55;width:14px;height:14px" />
+            ⭐ Set as system default
+          </label>
+          <span class="save-msg" id="setupSaveMsg" style="display:none">✓ Saved</span>
+          <span class="save-err" id="setupSaveErr" style="display:none"></span>
+          <button class="btn btn-ghost btn-danger" id="setupResetBtn">Reset to defaults</button>
+          <button class="btn btn-primary" id="setupSaveBtn">Save My Setup</button>
+        </div>
+      </div>
+
+      <!-- Delta hint -->
+      <div class="delta-hint">
+        <strong>Tip — detecting föhn arrival:</strong>
+        Add a condition on a valley station (e.g. Interlaken) with
+        <em>Field = Humidity, Δ = 2h, Operator &lt;, Value = −10</em> to flag when humidity drops
+        more than 10 % in 2 hours. Pair it with a temperature trend (Δ2h &gt; 2 °C) for confirmation.
+      </div>
+
+      <!-- Global pressure pairs -->
+      <div class="global-pairs-section">
+        <div class="global-pairs-title">Global Pressure Pairs (shown in main chart)</div>
+        <div id="globalPairsEditor"></div>
+        <button class="btn btn-add" id="addGlobalPairBtn" style="margin-top:10px">＋ Add pressure pair</button>
+      </div>
+
+      <!-- Loading indicator -->
+      <div id="setupLoadingMsg" style="display:none;color:#718096;font-size:0.85rem;padding:16px 0">Loading your setup…</div>
+
+      <!-- Region cards -->
+      <div id="regionsEditor"></div>
+
+      <button class="btn-add-region" id="addRegionBtn">＋ Add Föhn Region</button>
+
+      <div class="setup-actions" style="justify-content:flex-end;padding-bottom:20px">
+        <span class="save-msg" id="setupSaveMsg2" style="display:none">✓ Saved</span>
+        <span class="save-err" id="setupSaveErr2" style="display:none"></span>
+        <button class="btn btn-ghost btn-danger" id="setupResetBtn2">Reset to defaults</button>
+        <button class="btn btn-primary" id="setupSaveBtn2">Save My Setup</button>
+      </div>
+
+      <!-- Admin: reset system default back to hardcoded -->
+      <div id="adminResetDefaultWrap" style="display:none;margin-top:4px;padding-bottom:28px">
+        <button class="btn btn-ghost" style="font-size:0.8rem;color:#718096;border-color:#2d3748" id="adminResetDefaultBtn">
+          ↺ Reset system default to hardcoded values
+        </button>
+        <span style="font-size:0.73rem;color:#4a5568;margin-left:8px">Removes data/foehn_config.json</span>
+      </div>
+
+    </div><!-- /setupEditor -->
+
+  </div><!-- /tabSetup -->
+
+</div><!-- /page-content -->
 
 <script type="module">
 // ────────────────────────────────────────────────────────────────────────────
-// Föhn Tracker — frontend
+// Föhn Tracker v2 — frontend
 // ────────────────────────────────────────────────────────────────────────────
 import { initI18n, renderLangPicker } from '/static/i18n.js';
-import { renderNavAuth } from '/static/auth.js';
+import { renderNavAuth, isLoggedIn, fetchAuth } from '/static/auth.js';
 
-const REGION_LABELS = {
-  haslital: 'Haslital', beo: 'BEO Föhn', wallis: 'Wallis',
-  reussthal: 'Reussthal', rheintal: 'Rheintal', guggi: 'Guggiföhn',
-};
+// ── Constants ────────────────────────────────────────────────────────────────
 
 const PAST_OFFSETS   = [-2, -1];
-const FUTURE_OFFSETS = [0, 1, 2, 3, 4];   // Today … +4d
+const FUTURE_OFFSETS = [0, 1, 2, 3, 4];
 const FORECAST_HOURS = [6, 9, 12, 15, 18];
 
+const FIELDS = [
+  { v: 'wind_speed',     l: 'Wind Speed',     unit: 'km/h' },
+  { v: 'wind_gust',      l: 'Wind Gust',      unit: 'km/h' },
+  { v: 'wind_direction', l: 'Wind Direction', unit: '°'    },
+  { v: 'temperature',    l: 'Temperature',    unit: '°C'   },
+  { v: 'humidity',       l: 'Humidity',       unit: '%'    },
+  { v: 'pressure_qff',   l: 'Pressure QFF',   unit: 'hPa'  },
+];
+const FIELD_MAP = Object.fromEntries(FIELDS.map(f => [f.v, f]));
+
+const OPS = [
+  { v: '>',                  l: '> (greater than)'      },
+  { v: '<',                  l: '< (less than)'         },
+  { v: '>=',                 l: '≥ (at least)'          },
+  { v: '<=',                 l: '≤ (at most)'           },
+  { v: '=',                  l: '= (equal)'             },
+  { v: 'between',            l: 'between A and B'       },
+  { v: 'not_between',        l: 'not between A and B'   },
+  { v: 'in_direction_range', l: 'direction A → B'       },
+];
+const TWO_VAL_OPS = new Set(['between', 'not_between', 'in_direction_range']);
+const LOOKBACK_OPTIONS = [
+  { v: '',  l: 'Current value' },
+  { v: '1', l: 'Δ vs 1h ago'  },
+  { v: '2', l: 'Δ vs 2h ago'  },
+  { v: '3', l: 'Δ vs 3h ago'  },
+  { v: '6', l: 'Δ vs 6h ago'  },
+];
+const COLOURS = [
+  { v: 'green',  l: '● Green',  cls: 'colour-green'  },
+  { v: 'orange', l: '● Orange', cls: 'colour-orange' },
+  { v: 'red',    l: '● Red',    cls: 'colour-red'    },
+];
+
 // ── State ────────────────────────────────────────────────────────────────────
-let _mode   = 'live';   // 'live' | 'forecast'
+
+let _mode   = 'live';
 let _dayOff = 0;
 let _hour   = 12;
+let _allStations = [];   // loaded from /api/stations
+let _setupConfig = null; // current config in editor
 
-// ── Build time nav ───────────────────────────────────────────────────────────
+// ── Tabs ─────────────────────────────────────────────────────────────────────
+
+function switchTab(name) {
+  document.getElementById('tabStatus').style.display = name === 'status' ? '' : 'none';
+  document.getElementById('tabSetup').style.display  = name === 'setup'  ? '' : 'none';
+  document.getElementById('tabBtnStatus').classList.toggle('active', name === 'status');
+  document.getElementById('tabBtnSetup').classList.toggle('active',  name === 'setup');
+  console.log('[Lenti:foehn] tab switched to', name);
+}
+
+document.getElementById('tabBtnStatus').addEventListener('click', () => switchTab('status'));
+document.getElementById('tabBtnSetup').addEventListener('click', () => {
+  if (!isLoggedIn()) { window.location.href = '/login?next=/foehn'; return; }
+  switchTab('setup');
+  if (!_setupConfig && !_setupLoading) {
+    console.log('[Lenti:foehn] setup tab clicked, triggering loadSetup');
+    loadSetup();
+  } else {
+    console.log('[Lenti:foehn] setup tab clicked, setup already loaded/loading');
+  }
+});
+
+// ── Time nav ─────────────────────────────────────────────────────────────────
+
 function buildTimeNav() {
   const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   const row  = document.querySelector('.time-nav-row');
 
   function dayLabel(off) {
-    const d = new Date();
-    d.setDate(d.getDate() + off);
+    const d = new Date(); d.setDate(d.getDate() + off);
     if (off === -2) return `${DAYS[d.getDay()]} ${d.getDate()}`;
     if (off === -1) return window.t('foehn.yesterday');
     if (off ===  0) return window.t('foehn.today');
@@ -347,13 +563,11 @@ function buildTimeNav() {
     row.appendChild(btn);
   }
 
-  // Past days → Live → Future days
-  for (const off of PAST_OFFSETS)   addDayBtn(off);
+  for (const off of PAST_OFFSETS) addDayBtn(off);
   document.getElementById('btnLive').onclick = () => selectLive();
   row.appendChild(document.getElementById('btnLive'));
   for (const off of FUTURE_OFFSETS) addDayBtn(off);
 
-  // Hour buttons
   const hourRow = document.getElementById('hourRow');
   for (const h of FORECAST_HOURS) {
     const btn = document.createElement('button');
@@ -363,6 +577,7 @@ function buildTimeNav() {
     btn.onclick = () => selectHour(h);
     hourRow.appendChild(btn);
   }
+  console.log('[Lenti:foehn] time nav built');
 }
 
 function selectLive() {
@@ -374,8 +589,7 @@ function selectLive() {
 }
 
 function selectDay(off) {
-  _mode   = 'forecast';
-  _dayOff = off;
+  _mode = 'forecast'; _dayOff = off;
   document.getElementById('btnLive').classList.remove('selected');
   document.querySelectorAll('[data-off]').forEach(b =>
     b.classList.toggle('selected', +b.dataset.off === off));
@@ -391,118 +605,126 @@ function selectHour(h) {
 }
 
 function getValidTime() {
-  const d = new Date();
-  d.setDate(d.getDate() + _dayOff);
-  d.setHours(_hour, 0, 0, 0);   // local browser time
+  const d = new Date(); d.setDate(d.getDate() + _dayOff); d.setHours(_hour, 0, 0, 0);
   return d;
 }
 
 function getFoehnUrl() {
   if (_mode === 'live') return '/api/foehn/status';
-  const vt = getValidTime();
+  const vt  = getValidTime();
   const iso = encodeURIComponent(vt.toISOString());
-  // Past snapshots use actual observations; future uses forecast
   return vt <= new Date()
     ? `/api/foehn/observation?valid_time=${iso}`
     : `/api/foehn/forecast?valid_time=${iso}`;
 }
 
-// ── Banner ───────────────────────────────────────────────────────────────────
+// ── Banner ────────────────────────────────────────────────────────────────────
 
 function renderBanner(overall, isForecast, isSnapshot) {
   const el = document.getElementById('statusBanner');
-  const { status, active_regions, partial_regions, pressure_risk } = overall;
+  const { status, active_regions, partial_regions, pressure_risk, north_foehn_risk } = overall;
   const fc = isSnapshot ? window.t('foehn.status.historical') : isForecast ? window.t('foehn.status.forecast') : '';
 
   let icon, title, sub;
   if (status === 'active') {
-    const names = active_regions.map(k => REGION_LABELS[k] || k).join(', ');
-    icon  = '▲';
-    title = window.t('foehn.status.active_title', {suffix: fc, names});
-    sub   = pressure_risk
-      ? window.t('foehn.status.active_sub_pressure')
-      : window.t('foehn.status.active_sub_no_pressure');
+    const names = active_regions.join(', ');
+    icon = '▲'; title = window.t('foehn.status.active_title', {suffix: fc, names});
+    sub  = pressure_risk ? window.t('foehn.status.active_sub_pressure') : window.t('foehn.status.active_sub_no_pressure');
   } else if (status === 'risk') {
-    icon  = '⚠';
-    title = window.t('foehn.status.risk_title', {suffix: fc});
-    sub   = window.t('foehn.status.risk_sub');
+    icon = '↑'; title = window.t('foehn.status.risk_title', {suffix: fc});
+    sub  = window.t('foehn.status.risk_sub');
+  } else if (status === 'north_risk') {
+    icon = '↓'; title = 'North Föhn Risk' + (fc ? ' — ' + fc : '');
+    sub  = 'North > South pressure gradient ≥ threshold — North Föhn possible';
   } else if (status === 'partial') {
-    const names = partial_regions.map(k => REGION_LABELS[k] || k).join(', ');
-    icon  = '↗';
-    title = window.t('foehn.status.partial_title', {suffix: fc, names});
-    sub   = window.t('foehn.status.partial_sub');
+    const names = partial_regions.join(', ');
+    icon = '↗'; title = window.t('foehn.status.partial_title', {suffix: fc, names});
+    sub  = window.t('foehn.status.partial_sub');
   } else {
-    icon  = '✓';
-    title = window.t('foehn.status.inactive_title', {suffix: fc});
-    sub   = window.t('foehn.status.inactive_sub');
+    icon = '✓'; title = window.t('foehn.status.inactive_title', {suffix: fc});
+    sub  = window.t('foehn.status.inactive_sub');
   }
 
   el.className = `status-banner ${status}`;
-  el.innerHTML = `
-    <div class="banner-icon">${icon}</div>
-    <div class="banner-body">
-      <div class="banner-title ${status}">${title}</div>
-      <div class="banner-sub">${sub}</div>
-    </div>`;
+  el.innerHTML = `<div class="banner-icon">${icon}</div>
+    <div><div class="banner-title ${status}">${title}</div><div class="banner-sub">${sub}</div></div>`;
 }
 
-// ── Pressure panel ───────────────────────────────────────────────────────────
+// ── Pressure panel ────────────────────────────────────────────────────────────
 
 function renderOnePressure(p) {
   const d = p.delta_hpa;
-  let cls = 'safe', badgeText = window.t('foehn.pressure.no_risk');
-  if (d != null && d >= 4)      { cls = 'danger';  badgeText = window.t('foehn.pressure.risk'); }
-  else if (d != null && d >= 1) { cls = 'caution'; badgeText = window.t('foehn.pressure.building'); }
+  let cls, badgeText;
+  if (p.south_active)                     { cls = 'danger';  badgeText = '↑ South Föhn'; }
+  else if (p.north_active)                { cls = 'north';   badgeText = '↓ North Föhn'; }
+  else if (d != null && Math.abs(d) >= 1) { cls = 'caution'; badgeText = window.t('foehn.pressure.building'); }
+  else                                    { cls = 'safe';    badgeText = window.t('foehn.pressure.no_risk'); }
 
   const fillPct = d != null ? Math.min(Math.abs(d) / 8 * 100, 100) : 0;
-  const fmt = v => v != null ? v.toFixed(1) : '—';
-  const deltaStr = d != null ? (d > 0 ? '+' : '') + d.toFixed(1) + ' hPa' : '—';
-  // Direction label: abbreviate "OTL (Locarno/Monti)" → "OTL"
-  const abbrev = label => label.split(' ')[0];
-  const dirLabel = `${abbrev(p.south_label)} − ${abbrev(p.north_label)}`;
+  const fillDir = p.north_active ? 'north' : cls;
+  const fmt     = v => v != null ? v.toFixed(1) : '—';
+  const delta   = d != null ? (d > 0 ? '+' : '') + d.toFixed(1) + ' hPa QFF' : '—';
+  const abbrev  = l => l.split(' ')[0];
 
   return `
     <div class="pressure-stations">
       <div class="pres-side">
         <div class="pres-station-label">${p.north_label}</div>
         <div class="pres-value ${p.north_hpa == null ? 'no-data' : ''}">${fmt(p.north_hpa)}</div>
-        <div class="pres-unit">hPa</div>
+        <div class="pres-unit">hPa QFF</div>
       </div>
       <div class="pres-delta-wrap">
-        <div class="pres-delta ${cls}">${deltaStr}</div>
-        <div class="pres-direction">${dirLabel}</div>
+        <div class="pres-delta ${cls}">${delta}</div>
+        <div class="pres-direction">${abbrev(p.south_label)} − ${abbrev(p.north_label)}</div>
       </div>
       <div class="pres-side">
         <div class="pres-station-label">${p.south_label}</div>
         <div class="pres-value ${p.south_hpa == null ? 'no-data' : ''}">${fmt(p.south_hpa)}</div>
-        <div class="pres-unit">hPa</div>
+        <div class="pres-unit">hPa QFF</div>
       </div>
     </div>
     <div class="gradient-track">
-      <div class="gradient-fill ${cls}" style="width:${fillPct}%"></div>
+      <div class="gradient-fill ${fillDir}" style="width:${fillPct}%"></div>
     </div>
-    <div class="pres-threshold">${window.t('foehn.pressure.threshold', {hpa: p.threshold_hpa})}</div>
+    <div class="pres-threshold">± ${p.threshold_hpa} hPa · +${p.threshold_hpa} = S-Föhn · −${p.threshold_hpa} = N-Föhn</div>
     <span class="pres-badge ${cls}">${badgeText}</span>`;
 }
 
 function renderPressures(pressures) {
-  const parts = pressures.map((p, i) =>
-    (i > 0 ? '<hr style="border-color:#1e2535;margin:14px 0 12px">' : '') + renderOnePressure(p)
-  );
-  document.getElementById('pressurePanel').innerHTML = parts.join('');
+  document.getElementById('pressurePanel').innerHTML =
+    pressures.map((p, i) =>
+      (i > 0 ? '<hr style="border-color:#1e2535;margin:14px 0 12px">' : '') + renderOnePressure(p)
+    ).join('');
 }
 
-// ── Region cards ─────────────────────────────────────────────────────────────
+// ── Per-region pressure mini-row ──────────────────────────────────────────────
 
-// dot color: cleared = green (no föhn), signalling = red/orange (föhn concern)
+function renderRegionPressure(rp) {
+  if (!rp) return '';
+  const d = rp.delta_hpa;
+  let cls, label;
+  if (rp.south_active)                    { cls = 'danger';  label = '↑ S-Föhn pressure'; }
+  else if (rp.north_active)               { cls = 'north';   label = '↓ N-Föhn pressure'; }
+  else if (d != null && Math.abs(d) >= 1) { cls = 'caution'; label = 'Pressure building'; }
+  else                                    { cls = 'safe';    label = 'Pressure ok'; }
+  const abbrev   = s => s.split(' ')[0];
+  const deltaStr = d != null ? (d > 0 ? '+' : '') + d.toFixed(1) + ' hPa' : '—';
+  return `
+    <div class="region-pressure">
+      <span class="region-pres-label">${abbrev(rp.south_label)} − ${abbrev(rp.north_label)} QFF:</span>
+      <span class="region-pres-val ${cls}">${deltaStr} — ${label}</span>
+    </div>`;
+}
+
+// ── Region cards ──────────────────────────────────────────────────────────────
+
 function dotCls(cond, regionStatus) {
   if (!cond.data_available) return 'no-data';
-  if (!cond.met)            return 'clear';           // not contributing to föhn → green
-  if (regionStatus === 'active')  return 'danger';    // confirmed föhn → red
-  return 'caution';                                   // partial signal → orange
+  if (!cond.met) return 'clear';
+  if (regionStatus === 'active') return 'danger';
+  return 'caution';
 }
 
-// Value classes: green = not in föhn range; red = in föhn range
 function fmtDir(deg) {
   if (deg == null) return null;
   const n = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
@@ -510,40 +732,53 @@ function fmtDir(deg) {
 }
 
 function renderCondActual(cond) {
-  if (!cond.data_available) return `<span class="v-none">${window.t('foehn.no_data_value')}</span>`;
+  if (!cond.data_available) return `<span class="v-none">no data</span>`;
 
-  const noDir = cond.dir_desc === 'beliebig';
-  const dirStr = fmtDir(cond.actual_direction);
-  const spdStr = cond.actual_gust != null ? Math.round(cond.actual_gust) + ' km/h↑' : (cond.actual_speed != null ? Math.round(cond.actual_speed) + ' km/h' : null);
+  if (cond.actual_value == null) {
+    const raw = cond.actual_raw != null
+      ? `${cond.actual_raw.toFixed(1)} ${cond.unit}`
+      : (cond.is_delta ? 'no history' : 'no data');
+    return `<span class="v-none">${raw}</span>`;
+  }
 
-  // Red = this value is in the "föhn" zone (concern); green = safe zone
-  const dirSpan = dirStr
-    ? `<span class="${noDir ? 'v-ok' : (cond.dir_ok ? 'v-bad' : 'v-ok')}">${dirStr}</span>` : '';
-  const spdSpan = spdStr
-    ? `<span class="${cond.speed_ok ? 'v-bad' : 'v-ok'}">${spdStr}</span>` : '';
-  const sep = dirStr && spdStr ? ' / ' : '';
+  const val    = cond.actual_value;
+  const metCls = cond.met ? 'v-bad' : 'v-ok';
 
-  return dirSpan + sep + spdSpan;
+  if (cond.is_delta) {
+    const sign   = val >= 0 ? '+' : '';
+    const curr   = cond.actual_raw != null ? `${cond.actual_raw.toFixed(1)}${cond.unit}` : '';
+    const nowPart = curr ? ` <span class="v-none">(now ${curr})</span>` : '';
+    return `<span class="${metCls}">${sign}${val.toFixed(1)}${cond.unit} Δ${cond.lookback_h}h</span>${nowPart}`;
+  }
+
+  let display;
+  if (cond.field === 'wind_direction') {
+    display = fmtDir(val) || `${val}°`;
+  } else if (cond.field === 'wind_gust' || cond.field === 'wind_speed') {
+    display = `${Math.round(val)} km/h${cond.field === 'wind_gust' ? '↑' : ''}`;
+  } else {
+    display = `${val.toFixed(1)} ${cond.unit}`;
+  }
+  return `<span class="${metCls}">${display}</span>`;
 }
 
 function renderRegionCard(r) {
   const badgeText = {
-    active:   window.t('foehn.badge.active', {met: r.conditions_met, total: r.conditions_total}),
-    partial:  window.t('foehn.badge.partial', {met: r.conditions_met, total: r.conditions_total}),
-    inactive: window.t('foehn.badge.inactive'),
-    no_data:  window.t('foehn.badge.no_data'),
+    active:   `${r.conditions_met}/${r.conditions_total} active`,
+    partial:  `${r.conditions_met}/${r.conditions_total} partial`,
+    inactive: 'inactive',
+    no_data:  'no data',
   }[r.status] || r.status;
 
   const condRows = r.conditions.map(c => {
-    const rule = c.dir_desc !== 'beliebig'
-      ? `${c.dir_desc} / >${c.speed_min} km/h`
-      : `>${c.speed_min} km/h`;
+    const fieldInfo = FIELD_MAP[c.field] || { l: c.field, unit: '' };
+    const rule = c.cond_desc || `${fieldInfo.l} ${c.operator} ${c.value_a}${c.unit}`;
     return `
       <div class="cond-row">
         <span class="cond-dot ${dotCls(c, r.status)}"></span>
         <div class="cond-body">
-          <div class="cond-station">${c.label}</div>
-          <div class="cond-rule">${rule}</div>
+          <div class="cond-station">${esc(c.label)}</div>
+          <div class="cond-rule">${esc(fieldInfo.l)} — ${esc(rule)}</div>
         </div>
         <div class="cond-actual">${renderCondActual(c)}</div>
       </div>`;
@@ -553,45 +788,50 @@ function renderRegionCard(r) {
     <div class="region-card ${r.status}">
       <div class="region-header">
         <div>
-          <div class="region-name">${r.label}</div>
-          <div class="region-desc">${r.description}</div>
+          <div class="region-name">${esc(r.label)}</div>
+          <div class="region-desc">${esc(r.description)}</div>
         </div>
         <span class="region-badge ${r.status}">${badgeText}</span>
       </div>
       <div class="cond-list">${condRows}</div>
+      ${renderRegionPressure(r.pressure || null)}
     </div>`;
 }
 
-// ── Chart ─────────────────────────────────────────────────────────────────────
+// ── Pressure gradient chart ────────────────────────────────────────────────────
 
 let _chart = null;
 
 async function loadChart(centerTime) {
+  const t0 = performance.now();
   let url = '/api/foehn/history?hours=48';
-  if (centerTime) {
-    url += `&center_time=${encodeURIComponent(centerTime.toISOString())}`;
-  }
+  if (centerTime) url += `&center_time=${encodeURIComponent(centerTime.toISOString())}`;
+  console.log('[Lenti:foehn] chart fetch', url);
+
   let data;
   try {
-    const res = await fetch(url);
+    const res = isLoggedIn() ? await fetchAuth(url) : await fetch(url);
     data = await res.json();
-  } catch { return; }
+  } catch (e) {
+    console.warn('[Lenti:foehn] chart fetch failed', e);
+    return;
+  }
+  console.log('[Lenti:foehn] chart data received', data.pairs?.length, 'pairs,', data.rows?.length, 'rows in', (performance.now()-t0).toFixed(0), 'ms');
 
   const { pairs, rows } = data;
 
-  // Collect all unique hour-bucket timestamps across all stations
-  const byHour = {};   // ts → { [station_id]: [pressure_qnh, ...] }
+  const byHour = {};
   for (const r of rows) {
     const ts = new Date(r.timestamp);
     ts.setMinutes(0, 0, 0);
     const key = ts.toISOString();
     if (!byHour[key]) byHour[key] = {};
     if (!byHour[key][r.station_id]) byHour[key][r.station_id] = [];
-    if (r.pressure_qnh != null) byHour[key][r.station_id].push(r.pressure_qnh);
+    if (r.pressure_qff != null) byHour[key][r.station_id].push(r.pressure_qff);
   }
 
-  const avg = vals => vals && vals.length ? vals.reduce((a, b) => a + b) / vals.length : null;
-  const ptColor = d => d >= 4 ? '#fc8181' : d >= 1 ? '#f6ad55' : '#68d391';
+  const avg    = vals => vals?.length ? vals.reduce((a, b) => a + b) / vals.length : null;
+  const ptColor = d => d >= 4 ? '#fc8181' : d <= -4 ? '#63b3ed' : Math.abs(d) >= 1 ? '#f6ad55' : '#68d391';
   const abbrev  = label => label.split(' ')[0];
 
   const sortedTs = Object.keys(byHour).sort();
@@ -601,7 +841,7 @@ async function loadChart(centerTime) {
       + ' ' + d.toLocaleTimeString('en-CH', { hour: '2-digit', minute: '2-digit', hour12: false });
   });
 
-  const COLORS = ['#718096', '#9f7aea'];   // valley = grey, alpine = purple
+  const PALETTE = ['#718096','#9f7aea','#63b3ed','#68d391','#f6ad55','#fc8181'];
 
   const datasets = pairs.map((pair, i) => {
     const deltas = sortedTs.map(ts => {
@@ -610,19 +850,32 @@ async function loadChart(centerTime) {
       const n = avg(bucket[pair.north_station_id]);
       return (s != null && n != null) ? +(s - n).toFixed(2) : null;
     });
-    const pairLabel = `${abbrev(pair.south_label)} − ${abbrev(pair.north_label)} (hPa)`;
     return {
-      label: pairLabel,
-      data: deltas,
-      borderColor: COLORS[i] || '#718096',
-      backgroundColor: `${COLORS[i] || '#718096'}0f`,
+      label:              `${abbrev(pair.south_label)} − ${abbrev(pair.north_label)} QFF (hPa)`,
+      data:               deltas,
+      borderColor:        PALETTE[i % PALETTE.length],
+      backgroundColor:    `${PALETTE[i % PALETTE.length]}0f`,
       pointBackgroundColor: deltas.map(d => d == null ? 'transparent' : ptColor(d)),
-      pointRadius: 3,
-      borderWidth: 1.5,
-      tension: 0.3,
-      fill: false,
-      spanGaps: true,
+      pointRadius:        3,
+      borderWidth:        1.5,
+      tension:            0.3,
+      fill:               false,
+      spanGaps:           true,
     };
+  });
+
+  // Add threshold reference lines
+  const refData = sortedTs.map(() => 4);
+  const refDataN = sortedTs.map(() => -4);
+  datasets.push({
+    label: '+4 hPa (S-Föhn threshold)', data: refData,
+    borderColor: '#fc818150', borderDash: [4,4], borderWidth: 1,
+    pointRadius: 0, fill: false, spanGaps: true,
+  });
+  datasets.push({
+    label: '−4 hPa (N-Föhn threshold)', data: refDataN,
+    borderColor: '#63b3ed50', borderDash: [4,4], borderWidth: 1,
+    pointRadius: 0, fill: false, spanGaps: true,
   });
 
   const ctx = document.getElementById('gradientChart');
@@ -637,7 +890,8 @@ async function loadChart(centerTime) {
       plugins: {
         legend: {
           display: true,
-          labels: { color: '#718096', font: { size: 10 }, boxWidth: 12, padding: 10 },
+          labels: { color: '#718096', font: { size: 10 }, boxWidth: 12, padding: 8,
+            filter: item => !item.text.includes('threshold') },
         },
         tooltip: {
           callbacks: {
@@ -650,56 +904,52 @@ async function loadChart(centerTime) {
         x: { ticks: { color: '#718096', maxTicksLimit: 8, font: { size: 10 } }, grid: { color: '#1a2035' } },
         y: {
           ticks: { color: '#718096', font: { size: 11 } }, grid: { color: '#1a2035' },
-          title: { display: true, text: 'Δ hPa (south − north)', color: '#4a5568', font: { size: 10 } },
+          title: { display: true, text: 'Δ hPa QFF (south − north)', color: '#4a5568', font: { size: 10 } },
         },
       },
     },
   });
+  console.log('[Lenti:foehn] chart rendered', datasets.length - 2, 'pairs');
 }
 
-// ── Main ──────────────────────────────────────────────────────────────────────
+// ── Main load ─────────────────────────────────────────────────────────────────
 
 async function load() {
+  const t0 = performance.now();
+  const url = getFoehnUrl();
+  console.log('[Lenti:foehn] load', url);
   let data;
   try {
-    const url = getFoehnUrl();
-    const res = await fetch(url);
+    const res = isLoggedIn() ? await fetchAuth(url) : await fetch(url);
     data = await res.json();
   } catch (e) {
-    document.getElementById('regionGrid').innerHTML =
-      `<p class="error-msg">Error loading data: ${e.message}</p>`;
+    console.error('[Lenti:foehn] load error', e);
+    document.getElementById('regionGrid').innerHTML = `<p class="error-msg">Error loading data: ${esc(e.message)}</p>`;
     return;
   }
 
   const isForecast = !!data.is_forecast;
   const isSnapshot = !!data.is_snapshot;
 
-  // Update chart title
-  let chartSuffix = ' ' + window.t('foehn.chart_last48h');
-  if (_mode !== 'live') {
-    const noon = new Date();
-    noon.setDate(noon.getDate() + _dayOff);
-    const label = noon.toLocaleDateString('en-CH', { weekday: 'short', month: 'numeric', day: 'numeric' });
-    chartSuffix = ' ' + window.t('foehn.chart_around', {label});
-  }
-  document.getElementById('chartTitle').textContent = window.t('foehn.chart_title_base') + chartSuffix;
-
-  // Update meta
   let ts;
   if (isSnapshot) {
-    ts = window.t('foehn.time.historical', {ts: new Date(data.valid_time).toLocaleString('en-CH', {weekday:'short', month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit', hour12: false})});
+    ts = window.t('foehn.time.historical', {ts: new Date(data.valid_time).toLocaleString('en-CH', {weekday:'short',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false})});
   } else if (isForecast) {
-    ts = window.t('foehn.time.forecast', {ts: new Date(data.valid_time).toLocaleString('en-CH', {weekday:'short', month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit', hour12: false})});
+    ts = window.t('foehn.time.forecast',   {ts: new Date(data.valid_time).toLocaleString('en-CH', {weekday:'short',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false})});
   } else {
-    ts = window.t('foehn.time.live', {ts: new Date(data.assessed_at).toLocaleTimeString('en-CH', { hour: '2-digit', minute: '2-digit', hour12: false })});
+    ts = window.t('foehn.time.live', {ts: new Date(data.assessed_at).toLocaleTimeString('en-CH', {hour:'2-digit',minute:'2-digit',hour12:false})});
   }
   document.getElementById('lastUpdated').textContent = ts;
 
-  renderBanner(data.overall, isForecast || isSnapshot, isSnapshot);
-  renderPressures(data.pressures);
-  document.getElementById('regionGrid').innerHTML = data.regions.map(renderRegionCard).join('');
+  // Update chart title with pair list
+  const pairNames = (data.pressures || []).map(p => `${p.south_label?.split(' ')[0] ?? '?'} − ${p.north_label?.split(' ')[0] ?? '?'}`).join(', ');
+  document.getElementById('chartTitle').textContent = `48h QFF Gradient${pairNames ? ': ' + pairNames : ''}`;
 
-  // Chart always centers on noon of the selected day (or now for live)
+  renderBanner(data.overall, isForecast || isSnapshot, isSnapshot);
+  renderPressures(data.pressures || []);
+  document.getElementById('regionGrid').innerHTML = (data.regions || []).map(renderRegionCard).join('');
+  console.log('[Lenti:foehn] loaded', data.overall.status, '| S-risk:', data.overall.south_foehn_risk, '| N-risk:', data.overall.north_foehn_risk, '| elapsed:', (performance.now()-t0).toFixed(0), 'ms');
+
   if (_mode === 'live') {
     loadChart(null);
   } else {
@@ -710,7 +960,509 @@ async function load() {
   }
 }
 
-// ── Boot ──────────────────────────────────────────────────────────────────────
+// ── Escape helper ─────────────────────────────────────────────────────────────
+
+function esc(s) {
+  if (s == null) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MY SETUP TAB
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ── Station loader ────────────────────────────────────────────────────────────
+
+let _stationsPromise = null;
+
+async function loadStations() {
+  if (_allStations.length > 0) return;           // already populated
+  if (_stationsPromise) return _stationsPromise; // deduplicate concurrent calls
+  console.log('[Lenti:foehn] loading stations for editor');
+  _stationsPromise = (async () => {
+    try {
+      const res = await fetchAuth('/api/stations');
+      if (!res.ok) { console.warn('[Lenti:foehn] stations fetch failed', res.status); return; }
+      const data = await res.json();
+      _allStations = data.map(s => ({
+        station_id: s.station_id,
+        name:       s.name,
+        network:    s.network || '',
+        canton:     s.canton || '',
+      })).sort((a, b) => a.name.localeCompare(b.name));
+      console.log('[Lenti:foehn] stations loaded', _allStations.length);
+    } catch (e) {
+      console.error('[Lenti:foehn] loadStations error', e);
+      _stationsPromise = null; // allow retry on error
+    }
+  })();
+  return _stationsPromise;
+}
+
+// ── Station search widget ─────────────────────────────────────────────────────
+
+function makeStationSearch(container, inputEl, dropEl, initialId, onChange) {
+  /** Wire autocomplete inside container. inputEl/dropEl are already in the DOM. */
+  if (initialId) {
+    const st = _allStations.find(s => s.station_id === initialId);
+    if (st && !inputEl.value) inputEl.value = st.name;
+    inputEl.dataset.selectedId = initialId;
+  }
+
+  function showDrop() {
+    const q = inputEl.value.toLowerCase();
+    const matches = _allStations.filter(s =>
+      s.name.toLowerCase().includes(q) ||
+      s.station_id.toLowerCase().includes(q) ||
+      s.canton.toLowerCase().includes(q)
+    ).slice(0, 25);
+    dropEl.innerHTML = matches.map(s =>
+      `<div class="station-option" data-id="${esc(s.station_id)}">
+         ${esc(s.name)} <span class="sid">${esc(s.network)} · ${esc(s.station_id)}</span>
+       </div>`
+    ).join('') || `<div class="station-option" style="color:#718096">No matches</div>`;
+    dropEl.classList.add('open');
+  }
+
+  inputEl.addEventListener('input', showDrop);
+  inputEl.addEventListener('focus', () => { if (inputEl.value) showDrop(); });
+
+  dropEl.addEventListener('mousedown', e => {
+    const opt = e.target.closest('.station-option[data-id]');
+    if (!opt) return;
+    inputEl.dataset.selectedId = opt.dataset.id;
+    const st = _allStations.find(s => s.station_id === opt.dataset.id);
+    inputEl.value = st ? st.name : opt.dataset.id;
+    dropEl.classList.remove('open');
+    if (onChange) onChange(opt.dataset.id);
+    e.preventDefault();
+  });
+
+  document.addEventListener('click', e => {
+    if (!container.contains(e.target)) dropEl.classList.remove('open');
+  }, { passive: true });
+}
+
+// ── Global pressure pairs editor ──────────────────────────────────────────────
+
+function renderGlobalPairsEditor(pairs) {
+  const container = document.getElementById('globalPairsEditor');
+  container.innerHTML = '';
+  if (!pairs || pairs.length === 0) {
+    container.innerHTML = '<p style="font-size:0.78rem;color:#4a5568;padding:4px 0">No global pairs defined.</p>';
+  }
+  for (const pair of (pairs || [])) {
+    container.appendChild(makeGlobalPairRow(pair));
+  }
+}
+
+function makeGlobalPairRow(pair = {}) {
+  const row = document.createElement('div');
+  row.className = 'global-pair-row';
+  row.innerHTML = `
+    <div class="pp-label" style="width:44px">South:</div>
+    <div class="pp-station" style="flex:2">
+      <input class="pp-station-input" placeholder="South station (higher pressure)…"
+             value="${esc(pair.south_label || '')}" data-selected-id="${esc(pair.south_id || '')}" />
+      <div class="station-dropdown"></div>
+    </div>
+    <div class="pp-arrow">→</div>
+    <div class="pp-label" style="width:42px">North:</div>
+    <div class="pp-station" style="flex:2">
+      <input class="pp-station-input" placeholder="North station…"
+             value="${esc(pair.north_label || '')}" data-selected-id="${esc(pair.north_id || '')}" />
+      <div class="station-dropdown"></div>
+    </div>
+    <div class="pp-threshold-wrap">
+      <input class="pp-threshold" type="number" step="0.5" min="0.5" max="20" value="${pair.threshold ?? 4.0}" title="Threshold (hPa)" />
+      <span class="pp-unit">hPa</span>
+    </div>
+    <button class="btn-remove-region" title="Remove pair">×</button>`;
+
+  const [southWrap, northWrap] = row.querySelectorAll('.pp-station');
+  const [sInput, nInput]       = row.querySelectorAll('.pp-station-input');
+  const [sDrop,  nDrop]        = row.querySelectorAll('.station-dropdown');
+
+  makeStationSearch(southWrap, sInput, sDrop, pair.south_id || null, id => {
+    const st = _allStations.find(s => s.station_id === id);
+    sInput.value = st ? st.name : id;
+    console.log('[Lenti:foehn] global pair south station set to', id);
+  });
+  makeStationSearch(northWrap, nInput, nDrop, pair.north_id || null, id => {
+    const st = _allStations.find(s => s.station_id === id);
+    nInput.value = st ? st.name : id;
+    console.log('[Lenti:foehn] global pair north station set to', id);
+  });
+
+  row.querySelector('.btn-remove-region').addEventListener('click', () => {
+    row.remove();
+    console.log('[Lenti:foehn] global pair removed');
+  });
+  return row;
+}
+
+document.getElementById('addGlobalPairBtn').addEventListener('click', () => {
+  document.getElementById('globalPairsEditor').appendChild(makeGlobalPairRow());
+  console.log('[Lenti:foehn] global pair added');
+});
+
+// ── Region editor ─────────────────────────────────────────────────────────────
+
+function renderRegionsEditor(regions) {
+  const container = document.getElementById('regionsEditor');
+  container.innerHTML = '';
+  for (const r of (regions || [])) {
+    container.appendChild(makeRegionCard(r));
+  }
+}
+
+function makeRegionCard(region = {}) {
+  const card = document.createElement('div');
+  card.className = 'setup-region';
+
+  card.innerHTML = `
+    <div class="setup-region-head">
+      <span class="setup-region-handle" title="Drag to reorder">⠿</span>
+      <input class="setup-region-name" type="text" placeholder="Region name…"
+             value="${esc(region.label || '')}" />
+      <input class="setup-region-desc" type="text" placeholder="Description (optional)…"
+             value="${esc(region.description || '')}" />
+      <button class="btn-remove-region" title="Remove region">×</button>
+    </div>
+
+    <!-- Pressure pair -->
+    <div class="pp-section">
+      <div class="pp-title">Pressure Pair (QFF)</div>
+      <div class="pp-row">
+        <div class="pp-label">South:</div>
+        <div class="pp-station">
+          <input class="pp-station-input rpp-south" placeholder="South station…"
+                 value="${esc(region.pressure_pair?.south_label || '')}"
+                 data-selected-id="${esc(region.pressure_pair?.south_id || '')}" />
+          <div class="station-dropdown"></div>
+        </div>
+        <div class="pp-arrow">↕</div>
+        <div class="pp-threshold-wrap">
+          <input class="pp-threshold rpp-threshold" type="number" step="0.5" min="0.5" max="20"
+                 value="${region.pressure_pair?.threshold ?? 4.0}" title="Threshold (hPa)" />
+          <span class="pp-unit">hPa</span>
+        </div>
+        <div class="pp-arrow">↕</div>
+        <div class="pp-label">North:</div>
+        <div class="pp-station">
+          <input class="pp-station-input rpp-north" placeholder="North station…"
+                 value="${esc(region.pressure_pair?.north_label || '')}"
+                 data-selected-id="${esc(region.pressure_pair?.north_id || '')}" />
+          <div class="station-dropdown"></div>
+        </div>
+      </div>
+      <p class="pp-none-hint" style="margin-top:6px">Leave blank to skip per-region pressure for this region.</p>
+    </div>
+
+    <!-- Conditions -->
+    <div class="conds-section">
+      <div class="conds-header">
+        <span class="conds-title">Indicator Conditions</span>
+        <button class="btn btn-add btn-add-cond">＋ Add condition</button>
+      </div>
+      <div class="conds-list"></div>
+    </div>`;
+
+  // Wire pressure pair station searches
+  const [southWrap, northWrap] = card.querySelectorAll('.pp-station');
+  const sInput = card.querySelector('.rpp-south');
+  const nInput = card.querySelector('.rpp-north');
+  const sDrop  = southWrap.querySelector('.station-dropdown');
+  const nDrop  = northWrap.querySelector('.station-dropdown');
+
+  makeStationSearch(southWrap, sInput, sDrop, region.pressure_pair?.south_id || null, id => {
+    const st = _allStations.find(s => s.station_id === id);
+    sInput.value = st ? st.name : id;
+    console.log('[Lenti:foehn] region pp south set to', id);
+  });
+  makeStationSearch(northWrap, nInput, nDrop, region.pressure_pair?.north_id || null, id => {
+    const st = _allStations.find(s => s.station_id === id);
+    nInput.value = st ? st.name : id;
+    console.log('[Lenti:foehn] region pp north set to', id);
+  });
+
+  // Remove region button
+  card.querySelector('.btn-remove-region').addEventListener('click', () => {
+    if (confirm('Remove this region?')) {
+      card.remove();
+      console.log('[Lenti:foehn] region removed');
+    }
+  });
+
+  // Add condition
+  card.querySelector('.btn-add-cond').addEventListener('click', () => {
+    card.querySelector('.conds-list').appendChild(makeCondRow({}));
+    console.log('[Lenti:foehn] condition added');
+  });
+
+  // Restore existing conditions
+  const condsList = card.querySelector('.conds-list');
+  for (const c of (region.conditions || [])) {
+    condsList.appendChild(makeCondRow(c));
+  }
+
+  return card;
+}
+
+// ── Condition row (editor) ────────────────────────────────────────────────────
+
+let _condSeq = 0;
+
+function makeCondRow(data = {}) {
+  const id     = ++_condSeq;
+  const field  = data.field    || 'wind_gust';
+  const op     = data.operator || '>=';
+  const lbh    = data.lookback_h ? String(data.lookback_h) : '';
+  const colour = data.result_colour || 'red';
+  const needsB = TWO_VAL_OPS.has(op);
+
+  const row = document.createElement('div');
+  row.className = 'fcond-row';
+  row.dataset.condId = id;
+
+  row.innerHTML = `
+    <div class="fcond-station">
+      <input class="fcond-input" placeholder="Station…" autocomplete="off"
+             value="${esc(_allStations.find(s => s.station_id === data.station_id)?.name || data.station_id || '')}"
+             data-selected-id="${esc(data.station_id || '')}" />
+      <div class="station-dropdown"></div>
+    </div>
+    <select class="fcond-select fcond-field">
+      ${FIELDS.map(f => `<option value="${f.v}" ${f.v === field ? 'selected' : ''}>${f.l}</option>`).join('')}
+    </select>
+    <select class="fcond-select fcond-op">
+      ${OPS.map(o => `<option value="${o.v}" ${o.v === op ? 'selected' : ''}>${o.l}</option>`).join('')}
+    </select>
+    <input class="fcond-val fcond-va" type="number" step="any"
+           value="${data.value_a ?? ''}" placeholder="Value A" />
+    <input class="fcond-val fcond-vb" type="number" step="any"
+           value="${data.value_b ?? ''}" placeholder="Value B"
+           ${needsB ? '' : 'disabled'} style="${needsB ? '' : 'opacity:0.3'}" />
+    <select class="fcond-select fcond-lb">
+      ${LOOKBACK_OPTIONS.map(o => `<option value="${o.v}" ${o.v === lbh ? 'selected' : ''}>${o.l}</option>`).join('')}
+    </select>
+    <select class="fcond-select fcond-colour">
+      ${COLOURS.map(c => `<option value="${c.v}" ${c.v === colour ? 'selected' : ''} class="${c.cls}">${c.l}</option>`).join('')}
+    </select>
+    <button class="btn-remove-cond" title="Remove">×</button>`;
+
+  // Station search
+  const stWrap = row.querySelector('.fcond-station');
+  const stInput = row.querySelector('.fcond-input');
+  const stDrop  = row.querySelector('.station-dropdown');
+  makeStationSearch(stWrap, stInput, stDrop, data.station_id || null, sid => {
+    console.log('[Lenti:foehn] cond station set to', sid, '(cond', id, ')');
+  });
+
+  // Show/hide value B based on operator
+  const opSel = row.querySelector('.fcond-op');
+  const vbInput = row.querySelector('.fcond-vb');
+  opSel.addEventListener('change', () => {
+    const needs = TWO_VAL_OPS.has(opSel.value);
+    vbInput.disabled = !needs;
+    vbInput.style.opacity = needs ? '1' : '0.3';
+  });
+
+  // Remove
+  row.querySelector('.btn-remove-cond').addEventListener('click', () => row.remove());
+
+  return row;
+}
+
+// ── Collect editor state → config dict ───────────────────────────────────────
+
+function collectConfig() {
+  // Global pressure pairs
+  const pressure_pairs = [];
+  const gpRows = document.querySelectorAll('#globalPairsEditor .global-pair-row');
+  let pairIdx = 0;
+  for (const gpRow of gpRows) {
+    const inputs = gpRow.querySelectorAll('.pp-station-input');
+    const sId    = inputs[0].dataset.selectedId || '';
+    const nId    = inputs[1].dataset.selectedId || '';
+    if (!sId || !nId) continue;
+    const sName  = inputs[0].value || sId;
+    const nName  = inputs[1].value || nId;
+    const thresh = parseFloat(gpRow.querySelector('.pp-threshold').value) || 4.0;
+    pressure_pairs.push({
+      key:         `gp_${pairIdx++}`,
+      south_id:    sId,
+      south_label: sName,
+      north_id:    nId,
+      north_label: nName,
+      threshold:   thresh,
+    });
+  }
+
+  // Regions
+  const regions = [];
+  for (const rCard of document.querySelectorAll('#regionsEditor .setup-region')) {
+    const name  = rCard.querySelector('.setup-region-name').value.trim();
+    const desc  = rCard.querySelector('.setup-region-desc').value.trim();
+    const key   = name.toLowerCase().replace(/[^a-z0-9]+/g, '_') || `region_${Date.now()}`;
+
+    // Pressure pair
+    const sIn  = rCard.querySelector('.rpp-south');
+    const nIn  = rCard.querySelector('.rpp-north');
+    const sId  = sIn.dataset.selectedId || '';
+    const nId  = nIn.dataset.selectedId || '';
+    let pressure_pair = null;
+    if (sId && nId) {
+      pressure_pair = {
+        key:         key + '_pp',
+        south_id:    sId,
+        south_label: sIn.value || sId,
+        north_id:    nId,
+        north_label: nIn.value || nId,
+        threshold:   parseFloat(rCard.querySelector('.rpp-threshold').value) || 4.0,
+      };
+    }
+
+    // Conditions
+    const conditions = [];
+    for (const cRow of rCard.querySelectorAll('.fcond-row')) {
+      const stInput = cRow.querySelector('.fcond-input');
+      const stId    = stInput.dataset.selectedId || '';
+      if (!stId) continue;
+      const stName  = stInput.value || stId;
+      const field   = cRow.querySelector('.fcond-field').value;
+      const op      = cRow.querySelector('.fcond-op').value;
+      const vaStr   = cRow.querySelector('.fcond-va').value;
+      const vbStr   = cRow.querySelector('.fcond-vb').value;
+      const lbh     = parseInt(cRow.querySelector('.fcond-lb').value) || null;
+      const colour  = cRow.querySelector('.fcond-colour').value;
+      if (vaStr === '') continue;
+      conditions.push({
+        station_id:    stId,
+        label:         stName,
+        field,
+        operator:      op,
+        value_a:       parseFloat(vaStr),
+        value_b:       vbStr !== '' ? parseFloat(vbStr) : null,
+        lookback_h:    lbh,
+        result_colour: colour,
+      });
+    }
+
+    regions.push({ key, label: name || 'Unnamed Region', description: desc, pressure_pair, conditions });
+  }
+
+  return { regions, pressure_pairs };
+}
+
+// ── Save / reset ──────────────────────────────────────────────────────────────
+
+async function saveSetup() {
+  const config       = collectConfig();
+  const setAsDefault = document.getElementById('setAsDefaultChk')?.checked || false;
+  console.log('[Lenti:foehn] saving setup', config.regions.length, 'regions,', config.pressure_pairs.length, 'pairs, setAsDefault:', setAsDefault);
+
+  const [btn, btn2] = [document.getElementById('setupSaveBtn'), document.getElementById('setupSaveBtn2')];
+  const [msg, msg2] = [document.getElementById('setupSaveMsg'), document.getElementById('setupSaveMsg2')];
+  const [err, err2] = [document.getElementById('setupSaveErr'), document.getElementById('setupSaveErr2')];
+  btn.disabled = btn2.disabled = true;
+  msg.style.display = msg2.style.display = 'none';
+  err.style.display = err2.style.display = 'none';
+
+  const url = setAsDefault ? '/api/foehn/config?set_as_default=true' : '/api/foehn/config';
+
+  try {
+    const res = await fetchAuth(url, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.detail || `HTTP ${res.status}`);
+    }
+    const result = await res.json();
+    _setupConfig = config;
+    const savedText = result.default_updated ? '✓ Saved + set as system default' : '✓ Saved';
+    msg.textContent = msg2.textContent = savedText;
+    msg.style.display = msg2.style.display = 'inline';
+    setTimeout(() => { msg.style.display = msg2.style.display = 'none'; }, 3500);
+    if (setAsDefault) document.getElementById('setAsDefaultChk').checked = false;
+    console.log('[Lenti:foehn] setup saved, default_updated:', result.default_updated);
+    load();
+  } catch (e) {
+    console.error('[Lenti:foehn] save error', e);
+    err.textContent = err2.textContent = `Save failed: ${e.message}`;
+    err.style.display = err2.style.display = 'inline';
+  } finally {
+    btn.disabled = btn2.disabled = false;
+  }
+}
+
+async function resetSetup() {
+  if (!confirm('Reset your Föhn setup to system defaults? Your custom regions will be lost.')) return;
+  console.log('[Lenti:foehn] resetting setup to defaults');
+  try {
+    await fetchAuth('/api/foehn/config', { method: 'DELETE' });
+    _setupConfig = null;
+    await loadSetup();
+    load();
+  } catch (e) {
+    console.error('[Lenti:foehn] reset error', e);
+  }
+}
+
+// ── Load setup ────────────────────────────────────────────────────────────────
+
+let _setupLoading = false;
+
+async function loadSetup() {
+  if (_setupLoading) { console.log('[Lenti:foehn] loadSetup already in progress, skipping'); return; }
+  _setupLoading = true;
+  console.log('[Lenti:foehn] loadSetup start');
+
+  const editorEl = document.getElementById('setupEditor');
+  const loadingEl = document.getElementById('setupLoadingMsg');
+  if (loadingEl) loadingEl.style.display = '';
+
+  try {
+    await loadStations();
+
+    const res = await fetchAuth('/api/foehn/config');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    _setupConfig = await res.json();
+  } catch (e) {
+    console.error('[Lenti:foehn] loadSetup error', e);
+    _setupLoading = false;
+    if (loadingEl) loadingEl.style.display = 'none';
+    return;
+  }
+
+  if (loadingEl) loadingEl.style.display = 'none';
+  _setupLoading = false;
+  console.log('[Lenti:foehn] config loaded', _setupConfig.regions?.length ?? 0, 'regions,', _setupConfig.pressure_pairs?.length ?? 0, 'pairs');
+  renderGlobalPairsEditor(_setupConfig.pressure_pairs || []);
+  renderRegionsEditor(_setupConfig.regions || []);
+}
+
+// ── Add region ────────────────────────────────────────────────────────────────
+
+document.getElementById('addRegionBtn').addEventListener('click', async () => {
+  await loadStations();
+  document.getElementById('regionsEditor').appendChild(makeRegionCard());
+  console.log('[Lenti:foehn] region added');
+});
+
+// ── Save / reset button wiring ────────────────────────────────────────────────
+
+for (const id of ['setupSaveBtn', 'setupSaveBtn2'])
+  document.getElementById(id).addEventListener('click', saveSetup);
+for (const id of ['setupResetBtn', 'setupResetBtn2'])
+  document.getElementById(id).addEventListener('click', resetSetup);
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// BOOT
+// ═══════════════════════════════════════════════════════════════════════════════
 
 await initI18n();
 renderNavAuth('foehn');
@@ -718,7 +1470,49 @@ renderLangPicker();
 document.getElementById('infoBox').innerHTML = window.t('foehn.info_box');
 buildTimeNav();
 load();
+
+// Show/hide lock icon on My Setup tab
+if (isLoggedIn()) {
+  document.getElementById('setupLock').style.display = 'none';
+}
+
+// Show login prompt or editor in setup tab
+document.getElementById('setupLoginPrompt').style.display = isLoggedIn() ? 'none' : '';
+document.getElementById('setupEditor').style.display      = isLoggedIn() ? '' : 'none';
+
+// Pre-load setup in background so regions are ready when the tab is opened
+if (isLoggedIn()) {
+  console.log('[Lenti:foehn] pre-loading setup in background');
+  loadSetup();
+}
+
+// Admin-only controls
+const _user = isLoggedIn() ? (await import('/static/auth.js').then(m => m.getUser()).catch(() => null)) : null;
+if (_user?.role === 'admin') {
+  document.getElementById('adminDefaultWrap').style.display = 'flex';
+  document.getElementById('adminResetDefaultWrap').style.display = '';
+  console.log('[Lenti:foehn] admin mode: system-default controls enabled');
+}
+
+// Admin: reset system-wide default back to hardcoded values
+document.getElementById('adminResetDefaultBtn')?.addEventListener('click', async () => {
+  if (!confirm('Reset the system-wide Föhn default back to hardcoded values?\nThis cannot be undone.')) return;
+  try {
+    const res = await fetchAuth('/api/foehn/config?set_as_default=true', { method: 'DELETE' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    console.log('[Lenti:foehn] system default reset', data);
+    await loadSetup();
+    load();
+  } catch (e) {
+    console.error('[Lenti:foehn] admin reset default error', e);
+    alert('Reset failed: ' + e.message);
+  }
+});
+
 setInterval(() => { if (_mode === 'live') load(); }, 5 * 60 * 1000);
+
+console.log('[Lenti:foehn] boot complete, logged in:', isLoggedIn());
 </script>
 
 </body>

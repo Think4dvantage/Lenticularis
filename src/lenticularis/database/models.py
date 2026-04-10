@@ -230,6 +230,16 @@ class StationDedupOverride(Base):
     )
 
 
+class UserFoehnConfig(Base):
+    """Per-user Föhn threshold overrides.  One row per user; absent = use system defaults."""
+
+    __tablename__ = "user_foehn_configs"
+
+    user_id     = Column(String, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    config_json = Column(String, nullable=False)
+    updated_at  = Column(DateTime(timezone=True), nullable=True)
+
+
 class RuleCondition(Base):
     """One condition row in a rule set's condition builder."""
 

@@ -17,7 +17,7 @@
 
     /* ── Nav ── */
     .top-nav { background: #1a1f2e; border-bottom: 1px solid #2d3748; padding: 0 24px; display: flex; align-items: center; flex-shrink: 0; height: 48px; }
-    .nav-brand { font-size: 1.1rem; font-weight: 600; color: #90cdf4; margin-right: 24px; white-space: nowrap; }
+    .nav-brand { font-size: 1.1rem; font-weight: 600; color: #90cdf4; margin-right: 24px; white-space: nowrap; text-decoration: none; }
     .nav-links { display: flex; gap: 2px; flex: 1; }
     .nav-link { color: #718096; text-decoration: none; font-size: 0.85rem; padding: 6px 14px; border-radius: 6px; transition: background 0.15s, color 0.15s; }
     .nav-link:hover { background: #2d3748; color: #e2e8f0; }
@@ -179,7 +179,7 @@
 <body>
 
 <nav class="top-nav">
-  <span class="nav-brand">🪁 Lenticularis</span>
+  <a href="/" class="nav-brand">🪁 Lenticularis</a>
   <div class="nav-links">
     <a href="/" class="nav-link" data-i18n="nav.map">Map</a>
     <a href="/stations" class="nav-link" data-i18n="nav.stations">Stations</a>
@@ -356,12 +356,14 @@ function getFieldLabel() {
     pressure_delta:window.t('editor.fields.pressure_delta'),
     precipitation: window.t('editor.fields.precipitation'),
     snow_depth:    window.t('editor.fields.snow_depth'),
+    foehn_active:  window.t('editor.fields.foehn_active'),
   };
 }
 const FIELD_UNIT = {
   wind_speed:'km/h', wind_gust:'km/h', wind_direction:'°',
   temperature:'°C', humidity:'%', pressure:'hPa',
-  pressure_delta:'hPa', precipitation:'mm', snow_depth:'cm'
+  pressure_delta:'hPa', precipitation:'mm', snow_depth:'cm',
+  foehn_active:''
 };
 const DC = { green:'#68d391', orange:'#f6ad55', red:'#fc8181' };
 const DECISION_RANK = { green: 0, orange: 1, red: 2 };
@@ -542,11 +544,11 @@ function renderConditions(dec) {
   function makeRow(cr, groupLabel, groupAllMatched) {
     const isGroupMember = groupLabel !== null;
     const triggered = cr.matched && (isGroupMember ? groupAllMatched : true);
-    const effectiveColour = triggered ? cr.result_colour : 'green';
+    const effectiveColour = triggered ? cr.result_colour : (cr.matched ? 'green' : 'red');
     const dotCls = `dot-${effectiveColour}`;
     const statusLabel = triggered
       ? `<span style="color:${DC[cr.result_colour]};font-weight:600">${cr.result_colour.toUpperCase()}</span>`
-      : `<span style="color:${DC.green}">—</span>`;
+      : `<span style="color:${cr.matched ? DC.green : DC.red}">—</span>`;
     const actualStr = cr.actual_value != null
       ? `${cr.actual_value.toFixed(1)} ${FIELD_UNIT[cr.field] || ''}`
       : `<span class="no-data-note">${window.t('map.popup.no_data')}</span>`;
@@ -854,11 +856,11 @@ function buildCondDetail(condResults) {
   function renderRows(crs, isGroup, groupAllMatched) {
     return crs.map(cr => {
       const triggered = cr.matched && (isGroup ? groupAllMatched : true);
-      const effCol = triggered ? cr.result_colour : 'green';
+      const effCol = triggered ? cr.result_colour : (cr.matched ? 'green' : 'red');
       const dot    = `<span class="status-dot dot-${effCol}"></span>`;
       const status = triggered
         ? `<span style="color:${DC2[cr.result_colour]};font-weight:600">${cr.result_colour.toUpperCase()}</span>`
-        : `<span style="color:${DC2.green}">—</span>`;
+        : `<span style="color:${cr.matched ? DC2.green : DC2.red}">—</span>`;
       const actual = cr.actual_value != null
         ? `${cr.actual_value.toFixed(1)} ${FIELD_UNIT[cr.field] || ''}`
         : `<span style="color:#4a5568;font-style:italic">${window.t('map.popup.no_data')}</span>`;

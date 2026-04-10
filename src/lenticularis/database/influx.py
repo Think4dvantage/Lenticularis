@@ -315,13 +315,13 @@ from(bucket: "{self._cfg.bucket}")
     def query_foehn_pressure_history(
         self, station_ids: list[str], hours: int = 48, center_time: Optional[datetime] = None
     ) -> list[dict]:
-        """Return hourly-averaged ``pressure_qnh`` per station for a ±(hours/2) window.
+        """Return hourly-averaged ``pressure_qff`` per station for a ±(hours/2) window.
 
         ``center_time=None`` → live mode: show the last ``hours`` hours ending now.
         ``center_time`` set   → show ``hours/2`` before and after that moment,
                                 using observed data for the past half and forecast
                                 data (``weather_forecast``) for any future half.
-        Each row: ``{station_id, timestamp, pressure_qnh}``.
+        Each row: ``{station_id, timestamp, pressure_qff}``.
         """
         if not station_ids:
             return []
@@ -356,7 +356,7 @@ from(bucket: "{self._cfg.bucket}")
   |> range(start: {s}, stop: {e})
   |> filter(fn: (r) => r._measurement == "{measurement}")
   |> filter(fn: (r) => contains(value: r.station_id, set: {ids_literal}))
-  |> filter(fn: (r) => r._field == "pressure_qnh")
+  |> filter(fn: (r) => r._field == "pressure_qff")
   |> aggregateWindow(every: 1h, fn: mean, createEmpty: false)
   |> sort(columns: ["_time"])
 """
@@ -373,7 +373,7 @@ from(bucket: "{self._cfg.bucket}")
                             rows.append({
                                 "station_id":   sid,
                                 "timestamp":    record.get_time(),
-                                "pressure_qnh": val,
+                                "pressure_qff": val,
                             })
             except Exception as exc:
                 logger.error("InfluxDB query_foehn_pressure_history %s error: %s", label, exc)

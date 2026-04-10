@@ -182,7 +182,8 @@
       "pressure": "Pressione",
       "pressure_delta": "Delta pressione (hPa tra due stazioni)",
       "precipitation": "Precipitazioni",
-      "snow_depth": "Altezza neve"
+      "snow_depth": "Altezza neve",
+      "foehn_active": "Regione föhn attiva"
     },
     "ops": {
       "gt": "> maggiore di",

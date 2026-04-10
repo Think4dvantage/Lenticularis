@@ -14,7 +14,7 @@
 
     /* ── Nav ── */
     .top-nav { background: #1a1f2e; border-bottom: 1px solid #2d3748; padding: 0 24px; display: flex; align-items: center; flex-shrink: 0; height: 48px; }
-    .nav-brand { font-size: 1.1rem; font-weight: 600; color: #90cdf4; margin-right: 24px; white-space: nowrap; }
+    .nav-brand { font-size: 1.1rem; font-weight: 600; color: #90cdf4; margin-right: 24px; white-space: nowrap; text-decoration: none; }
     .nav-links { display: flex; gap: 2px; flex: 1; }
     .nav-link { color: #718096; text-decoration: none; font-size: 0.85rem; padding: 6px 14px; border-radius: 6px; transition: background 0.15s, color 0.15s; }
     .nav-link:hover { background: #2d3748; color: #e2e8f0; }
@@ -115,8 +115,6 @@
     .error-msg { color: #fc8181; font-size: 0.82rem; margin-top: 12px; }
     .empty-msg  { color: #718096; font-size: 0.85rem; padding: 20px 0; }
 
-    /* ── Föhn config editor ── */
-    .foehn-toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; flex-wrap: wrap; }
     .btn-primary { background: #3182ce; color: #fff; border: none; border-radius: 6px; padding: 8px 20px; font-size: 0.88rem; cursor: pointer; font-weight: 500; }
     .btn-primary:hover { background: #2b6cb0; }
     .btn-secondary { background: transparent; border: 1px solid #4a5568; color: #a0aec0; border-radius: 6px; padding: 7px 16px; font-size: 0.85rem; cursor: pointer; }
@@ -128,11 +126,6 @@
     .btn-remove { background: transparent; border: none; color: #718096; font-size: 0.82rem; cursor: pointer; padding: 2px 6px; border-radius: 4px; }
     .btn-remove:hover { color: #fc8181; background: #4a1515; }
     .saved-msg { color: #68d391; font-size: 0.85rem; }
-    .foehn-section { margin-bottom: 32px; }
-    .foehn-section-title { font-size: 1rem; font-weight: 600; color: #e2e8f0; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid #2d3748; }
-    .region-card { background: #1a1f2e; border: 1px solid #2d3748; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
-    .region-header { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 12px; }
-    .region-header-fields { display: flex; gap: 8px; flex: 1; flex-wrap: wrap; }
     .fi { background: #0f1117; border: 1px solid #2d3748; color: #e2e8f0; border-radius: 5px; padding: 5px 8px; font-size: 0.82rem; }
     .fi:focus { outline: none; border-color: #4a7bab; }
     .fi.key-field { width: 120px; }
@@ -149,7 +142,7 @@
 <body>
 
 <nav class="top-nav">
-  <span class="nav-brand">🪁 Lenticularis</span>
+  <a href="/" class="nav-brand">🪁 Lenticularis</a>
   <div class="nav-links">
     <a href="/" class="nav-link" data-i18n="nav.map"></a>
     <a href="/stations" class="nav-link" data-i18n="nav.stations"></a>
@@ -179,8 +172,7 @@
     <div class="tab-bar">
       <button class="tab-btn active" onclick="switchTab('users')" id="tab-users" data-i18n="admin.tabs.users"></button>
       <button class="tab-btn" onclick="switchTab('collectors')" id="tab-collectors" data-i18n="admin.tabs.collectors"></button>
-      <button class="tab-btn" onclick="switchTab('foehn_config')" id="tab-foehn_config" data-i18n="admin.tabs.foehn_config"></button>
-      <button class="tab-btn" onclick="switchTab('presets')" id="tab-presets" data-i18n="admin.tabs.presets"></button>
+<button class="tab-btn" onclick="switchTab('presets')" id="tab-presets" data-i18n="admin.tabs.presets"></button>
       <button class="tab-btn" onclick="switchTab('orgs')" id="tab-orgs" data-i18n="admin.tabs.orgs"></button>
       <button class="tab-btn" onclick="switchTab('station_dedup')" id="tab-station_dedup" data-i18n="admin.tabs.station_dedup"></button>
     </div>
@@ -302,46 +294,6 @@
       <div id="presetsCount" class="note"></div>
     </div>
 
-    <!-- Föhn Config tab -->
-    <div class="tab-panel" id="panel-foehn_config">
-      <div id="foehnConfigError" class="error-msg" style="display:none"></div>
-      <div id="foehnConfigContent" style="display:none">
-        <div class="foehn-toolbar">
-          <button class="btn-primary" onclick="saveFoehnConfig()" data-i18n="admin.foehn_config.save"></button>
-          <button class="btn-secondary" onclick="resetFoehnConfig()" data-i18n="admin.foehn_config.reset"></button>
-          <span id="foehnSavedMsg" class="saved-msg" style="display:none" data-i18n="admin.foehn_config.saved"></span>
-        </div>
-        <!-- Pressure pairs -->
-        <div class="foehn-section">
-          <div class="foehn-section-title" data-i18n="admin.foehn_config.pressures_title"></div>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th data-i18n="admin.foehn_config.col_key"></th>
-                  <th data-i18n="admin.foehn_config.col_south"></th>
-                  <th data-i18n="admin.foehn_config.col_south_label"></th>
-                  <th data-i18n="admin.foehn_config.col_north"></th>
-                  <th data-i18n="admin.foehn_config.col_north_label"></th>
-                  <th data-i18n="admin.foehn_config.col_threshold"></th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody id="pressurePairsBody"></tbody>
-            </table>
-          </div>
-          <button class="btn-add" onclick="addPressurePair()" data-i18n="admin.foehn_config.add_pair"></button>
-        </div>
-        <!-- Regions -->
-        <div class="foehn-section">
-          <div class="foehn-section-title" data-i18n="admin.foehn_config.regions_title"></div>
-          <div id="regionsContainer"></div>
-          <button class="btn-add" onclick="addRegion()" data-i18n="admin.foehn_config.add_region"></button>
-        </div>
-        <div class="note" data-i18n="admin.foehn_config.persistent_note"></div>
-      </div>
-    </div>
-
     <!-- Station Dedup tab -->
     <div class="tab-panel" id="panel-station_dedup">
       <div id="dedupError" class="error-msg" style="display:none"></div>
@@ -409,17 +361,12 @@ if (!user || user.role !== 'admin') {
 // ---------------------------------------------------------------------------
 // Tab switching
 // ---------------------------------------------------------------------------
-let _foehnConfigLoaded = false;
 let _presetsLoaded = false;
 let _orgsLoaded = false;
 let _dedupLoaded = false;
 window.switchTab = function(name) {
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.id === `tab-${name}`));
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === `panel-${name}`));
-  if (name === 'foehn_config' && !_foehnConfigLoaded) {
-    _foehnConfigLoaded = true;
-    loadFoehnConfig();
-  }
   if (name === 'presets' && !_presetsLoaded) {
     _presetsLoaded = true;
     loadPresets();
@@ -841,218 +788,6 @@ window.removePreset = async function(id, btn) {
     _presetsLoaded = false;
     loadPresets();
   }
-};
-
-// ---------------------------------------------------------------------------
-// Föhn config
-// ---------------------------------------------------------------------------
-
-async function loadFoehnConfig() {
-  const res = await fetchAuth('/api/admin/foehn-config');
-  if (!res.ok) {
-    document.getElementById('foehnConfigError').style.display = 'block';
-    document.getElementById('foehnConfigError').textContent = `Error ${res.status}`;
-    return;
-  }
-  const data = await res.json();
-  document.getElementById('foehnConfigContent').style.display = 'block';
-  renderFoehnConfig(data);
-}
-
-function renderFoehnConfig(data) {
-  renderPressurePairs(data.pressure_pairs || []);
-  renderRegions(data.regions || []);
-  applyDataI18n(document.getElementById('panel-foehn_config'));
-}
-
-// ── Pressure pairs ──
-
-function pressurePairRow(p) {
-  const tr = document.createElement('tr');
-  tr.className = 'pressure-pair-row';
-  tr.innerHTML = `
-    <td><input class="fi narrow" data-f="key" value="${escHtml(p.key ?? '')}"></td>
-    <td><input class="fi medium" data-f="south_id" value="${escHtml(p.south_id ?? '')}"></td>
-    <td><input class="fi medium" data-f="south_label" value="${escHtml(p.south_label ?? '')}"></td>
-    <td><input class="fi medium" data-f="north_id" value="${escHtml(p.north_id ?? '')}"></td>
-    <td><input class="fi medium" data-f="north_label" value="${escHtml(p.north_label ?? '')}"></td>
-    <td><input class="fi narrow" type="number" step="0.1" data-f="threshold" value="${p.threshold ?? 4}"></td>
-    <td><button class="btn-remove" onclick="this.closest('tr').remove()" data-i18n="admin.foehn_config.remove"></button></td>`;
-  return tr;
-}
-
-function renderPressurePairs(pairs) {
-  const tbody = document.getElementById('pressurePairsBody');
-  tbody.innerHTML = '';
-  pairs.forEach(p => tbody.appendChild(pressurePairRow(p)));
-}
-
-window.addPressurePair = function() {
-  const tbody = document.getElementById('pressurePairsBody');
-  tbody.appendChild(pressurePairRow({ key: '', south_id: '', south_label: '', north_id: '', north_label: '', threshold: 4.0 }));
-  applyDataI18n(tbody);
-};
-
-// ── Regions ──
-
-function condRow(c) {
-  const dir_low  = c.dir_low  != null ? c.dir_low  : '';
-  const dir_high = c.dir_high != null ? c.dir_high : '';
-  const tr = document.createElement('tr');
-  tr.className = 'cond-row';
-  tr.innerHTML = `
-    <td><input class="fi wide" data-f="station_id" value="${escHtml(c.station_id ?? '')}"></td>
-    <td><input class="fi medium" data-f="label" value="${escHtml(c.label ?? '')}"></td>
-    <td><input class="fi narrow" type="number" step="1" data-f="speed_min" value="${c.speed_min ?? 40}"></td>
-    <td><input class="fi narrow" type="number" step="0.5" data-f="dir_low"  value="${dir_low}"  placeholder="${window.t('admin.foehn_config.dir_any')}"></td>
-    <td><input class="fi narrow" type="number" step="0.5" data-f="dir_high" value="${dir_high}" placeholder="${window.t('admin.foehn_config.dir_any')}"></td>
-    <td><button class="btn-remove" onclick="this.closest('tr').remove()" data-i18n="admin.foehn_config.remove"></button></td>`;
-  return tr;
-}
-
-function regionCard(r, idx) {
-  const card = document.createElement('div');
-  card.className = 'region-card';
-
-  const header = document.createElement('div');
-  header.className = 'region-header';
-  header.innerHTML = `
-    <div class="region-header-fields">
-      <input class="fi key-field" data-f="key" placeholder="key" value="${escHtml(r.key ?? '')}">
-      <input class="fi label-field" data-f="label" placeholder="label" value="${escHtml(r.label ?? '')}">
-      <input class="fi desc-field" data-f="description" placeholder="description" value="${escHtml(r.description ?? '')}">
-    </div>
-    <button class="btn-remove" onclick="this.closest('.region-card').remove()" data-i18n="admin.foehn_config.remove"></button>`;
-
-  const condTable = document.createElement('table');
-  condTable.className = 'conditions-table';
-  condTable.innerHTML = `<thead><tr>
-    <th data-i18n="admin.foehn_config.col_station"></th>
-    <th data-i18n="admin.foehn_config.col_label"></th>
-    <th data-i18n="admin.foehn_config.col_speed_min"></th>
-    <th data-i18n="admin.foehn_config.col_dir_low"></th>
-    <th data-i18n="admin.foehn_config.col_dir_high"></th>
-    <th></th>
-  </tr></thead>`;
-  const tbody = document.createElement('tbody');
-  tbody.className = 'cond-body';
-  (r.conditions || []).forEach(c => tbody.appendChild(condRow(c)));
-  condTable.appendChild(tbody);
-
-  const addBtn = document.createElement('button');
-  addBtn.className = 'btn-add';
-  addBtn.setAttribute('data-i18n', 'admin.foehn_config.add_condition');
-  addBtn.onclick = () => {
-    tbody.appendChild(condRow({ station_id: '', label: '', speed_min: 40 }));
-    applyDataI18n(tbody);
-  };
-
-  card.appendChild(header);
-  card.appendChild(condTable);
-  card.appendChild(addBtn);
-  return card;
-}
-
-function renderRegions(regions) {
-  const container = document.getElementById('regionsContainer');
-  container.innerHTML = '';
-  regions.forEach((r, i) => container.appendChild(regionCard(r, i)));
-}
-
-window.addRegion = function() {
-  const container = document.getElementById('regionsContainer');
-  const card = regionCard({ key: '', label: '', description: '', conditions: [] }, container.children.length);
-  container.appendChild(card);
-  applyDataI18n(card);
-};
-
-// ── Collect config from DOM ──
-
-function collectFoehnConfig() {
-  const pairs = [];
-  document.querySelectorAll('.pressure-pair-row').forEach(row => {
-    pairs.push({
-      key:         row.querySelector('[data-f="key"]').value.trim(),
-      south_id:    row.querySelector('[data-f="south_id"]').value.trim(),
-      south_label: row.querySelector('[data-f="south_label"]').value.trim(),
-      north_id:    row.querySelector('[data-f="north_id"]').value.trim(),
-      north_label: row.querySelector('[data-f="north_label"]').value.trim(),
-      threshold:   parseFloat(row.querySelector('[data-f="threshold"]').value) || 0,
-    });
-  });
-
-  const regions = [];
-  document.querySelectorAll('.region-card').forEach(card => {
-    const conditions = [];
-    card.querySelectorAll('.cond-row').forEach(row => {
-      const dl = row.querySelector('[data-f="dir_low"]').value.trim();
-      const dh = row.querySelector('[data-f="dir_high"]').value.trim();
-      conditions.push({
-        station_id: row.querySelector('[data-f="station_id"]').value.trim(),
-        label:      row.querySelector('[data-f="label"]').value.trim(),
-        speed_min:  parseFloat(row.querySelector('[data-f="speed_min"]').value) || 0,
-        dir_low:    dl === '' ? null : parseFloat(dl),
-        dir_high:   dh === '' ? null : parseFloat(dh),
-      });
-    });
-    regions.push({
-      key:         card.querySelector('[data-f="key"]').value.trim(),
-      label:       card.querySelector('[data-f="label"]').value.trim(),
-      description: card.querySelector('[data-f="description"]').value.trim(),
-      conditions,
-    });
-  });
-
-  return { regions, pressure_pairs: pairs };
-}
-
-// ── Save / Reset ──
-
-window.saveFoehnConfig = async function() {
-  const errEl   = document.getElementById('foehnConfigError');
-  const savedEl = document.getElementById('foehnSavedMsg');
-  errEl.style.display   = 'none';
-  savedEl.style.display = 'none';
-
-  const body = collectFoehnConfig();
-  const res  = await fetchAuth('/api/admin/foehn-config', {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    errEl.textContent  = err.detail || `Error ${res.status}`;
-    errEl.style.display = 'block';
-    return;
-  }
-
-  const data = await res.json();
-  renderFoehnConfig(data);
-  savedEl.style.display = 'inline';
-  setTimeout(() => { savedEl.style.display = 'none'; }, 3000);
-};
-
-window.resetFoehnConfig = async function() {
-  if (!confirm('Reset to hardcoded defaults? This will delete data/foehn_config.json.')) return;
-  const errEl   = document.getElementById('foehnConfigError');
-  const savedEl = document.getElementById('foehnSavedMsg');
-  errEl.style.display   = 'none';
-  savedEl.style.display = 'none';
-
-  const res = await fetchAuth('/api/admin/foehn-config', { method: 'DELETE' });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    errEl.textContent  = err.detail || `Error ${res.status}`;
-    errEl.style.display = 'block';
-    return;
-  }
-
-  const data = await res.json();
-  renderFoehnConfig(data);
-  savedEl.style.display = 'inline';
-  setTimeout(() => { savedEl.style.display = 'none'; }, 3000);
 };
 
 // ---------------------------------------------------------------------------

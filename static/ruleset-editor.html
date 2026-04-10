@@ -14,7 +14,7 @@
 
     /* ── Nav ── */
     .top-nav { background: #1a1f2e; border-bottom: 1px solid #2d3748; padding: 0 24px; display: flex; align-items: center; flex-shrink: 0; height: 48px; }
-    .nav-brand { font-size: 1.1rem; font-weight: 600; color: #90cdf4; margin-right: 24px; white-space: nowrap; }
+    .nav-brand { font-size: 1.1rem; font-weight: 600; color: #90cdf4; margin-right: 24px; white-space: nowrap; text-decoration: none; }
     .nav-links { display: flex; gap: 2px; flex: 1; }
     .nav-link { color: #718096; text-decoration: none; font-size: 0.85rem; padding: 6px 14px; border-radius: 6px; transition: background 0.15s, color 0.15s; }
     .nav-link:hover { background: #2d3748; color: #e2e8f0; }
@@ -291,7 +291,7 @@
 <body>
 
 <nav class="top-nav">
-  <span class="nav-brand" id="navBrand">🪁 Lenticularis</span>
+  <a href="/" class="nav-brand" id="navBrand">🪁 Lenticularis</a>
   <div class="nav-links" id="navLinks">
     <a href="/" class="nav-link" data-i18n="nav.map">Map</a>
     <a href="/stations" class="nav-link" data-i18n="nav.stations">Stations</a>
@@ -728,6 +728,18 @@
     { v: 'pressure_delta',  l: window.t('editor.fields.pressure_delta'), unit: 'hPa'  },
     { v: 'precipitation',   l: window.t('editor.fields.precipitation'),  unit: 'mm'   },
     { v: 'snow_depth',      l: window.t('editor.fields.snow_depth'),     unit: 'cm'   },
+    { v: 'foehn_active',    l: window.t('editor.fields.foehn_active'),   unit: ''     },
+  ];
+
+  // Virtual station IDs written by FoehnCollector every 10 min
+  const FOEHN_REGIONS = [
+    { v: 'foehn-beo',       l: 'BEO Föhn'  },
+    { v: 'foehn-haslital',  l: 'Haslital'  },
+    { v: 'foehn-wallis',    l: 'Wallis'    },
+    { v: 'foehn-reussthal', l: 'Reussthal' },
+    { v: 'foehn-rheintal',  l: 'Rheintal'  },
+    { v: 'foehn-guggi',     l: 'Guggiföhn' },
+    { v: 'foehn-overall',   l: 'Overall'   },
   ];
 
   const OPS = [
@@ -854,19 +866,34 @@
     wrapper.appendChild(el);
     container.appendChild(wrapper);
 
-    const isDir = (data.field || 'wind_speed') === 'wind_direction';
+    const isDir   = (data.field || 'wind_speed') === 'wind_direction';
+    const isFoehn = data.field === 'foehn_active';
     const fieldOpts = FIELDS.map(f => `<option value="${f.v}"${data.field === f.v ? ' selected' : ''}>${f.l}</option>`).join('');
     const opOpts = OPS
       .filter(o => isDir ? o.v === 'in_direction_range' : o.v !== 'in_direction_range')
       .map(o => `<option value="${o.v}"${data.operator === o.v ? ' selected' : ''}>${o.l}</option>`).join('');
     const staBName = data.station_b_id ? (allStations.find(s => s.station_id === data.station_b_id)?.name || data.station_b_id) : '';
+    const foehnOpts = FOEHN_REGIONS.map(r => `<option value="${r.v}"${data.station_id === r.v ? ' selected' : ''}>${r.l}</option>`).join('');
+    // Derive initial foehn status label from stored op+value
+    const foehnStatus = isFoehn
+      ? (data.operator === '>=' ? 'partial_or_active' : (parseFloat(data.value_a) === 0 ? 'inactive' : 'active'))
+      : 'active';
 
     el.innerHTML = `
       <div class="station-search">
         <input type="text" class="station-input" placeholder="${window.t('editor.search_station')}"
           data-selected-id="${esc(data.station_id || '')}"
-          value="${data.station_id ? esc(allStations.find(s => s.station_id === data.station_id)?.name || data.station_id) : ''}" />
-        <div class="station-dropdown"></div>
+          value="${data.station_id && !isFoehn ? esc(allStations.find(s => s.station_id === data.station_id)?.name || data.station_id) : ''}"
+          style="${isFoehn ? 'display:none' : ''}" />
+        <div class="station-dropdown" style="${isFoehn ? 'display:none' : ''}"></div>
+        <div class="foehn-region-wrap" style="${isFoehn ? '' : 'display:none'}">
+          <select class="cond-select foehn-region-select">${foehnOpts}</select>
+          <select class="cond-select foehn-status-select">
+            <option value="active"           ${foehnStatus === 'active'           ? 'selected' : ''}>Active</option>
+            <option value="partial_or_active"${foehnStatus === 'partial_or_active'? 'selected' : ''}>Partial or active</option>
+            <option value="inactive"         ${foehnStatus === 'inactive'         ? 'selected' : ''}>Inactive</option>
+          </select>
+        </div>
         <div class="station-b-wrap">
           <div class="station-b-label">${window.t('editor.station_b_label')}</div>
           <input type="text" class="station-input station-b-input" placeholder="${window.t('editor.search_station_b')}"
@@ -876,9 +903,9 @@
         </div>
       </div>
       <select class="cond-select field-select">${fieldOpts}</select>
-      <select class="cond-select op-select">${opOpts}</select>
-      <input type="number" class="cond-input val-a" step="any" value="${data.value_a ?? ''}" placeholder="0" />
-      <input type="number" class="cond-input val-b" step="any" value="${data.value_b ?? ''}" placeholder="0" />
+      <select class="cond-select op-select" style="${isFoehn ? 'display:none' : ''}">${opOpts}</select>
+      <input type="number" class="cond-input val-a" step="any" value="${data.value_a ?? (isFoehn ? '1' : '')}" placeholder="0" style="${isFoehn ? 'display:none' : ''}" />
+      <input type="number" class="cond-input val-b" step="any" value="${data.value_b ?? ''}" placeholder="0" style="${isFoehn ? 'display:none' : ''}" />
       <button class="btn-remove" title="Remove condition">✕</button>`;
 
     // ── Station A autocomplete ──
@@ -889,31 +916,64 @@
     makeStationSearch(staBWrap, 'station-b-input', 'station-b-dropdown', data.station_b_id || '', 'Search station B…');
 
     // ── Show/hide value B and station B based on field/operator ──
-    const fieldSel = el.querySelector('.field-select');
-    const opSel    = el.querySelector('.op-select');
-    const valA     = el.querySelector('.val-a');
-    const valB     = el.querySelector('.val-b');
+    const fieldSel      = el.querySelector('.field-select');
+    const opSel         = el.querySelector('.op-select');
+    const valA          = el.querySelector('.val-a');
+    const valB          = el.querySelector('.val-b');
+    const stationInp    = el.querySelector('.station-input');
+    const stationDrop   = el.querySelector('.station-dropdown');
+    const foehnWrap     = el.querySelector('.foehn-region-wrap');
+    const foehnSel      = el.querySelector('.foehn-region-select');
+    const foehnStatSel  = el.querySelector('.foehn-status-select');
+
+    // Map status label → hidden op + value_a
+    function applyFoehnStatus(status) {
+      if (status === 'partial_or_active') { opSel.value = '>='; valA.value = '0.5'; }
+      else if (status === 'inactive')     { opSel.value = '=';  valA.value = '0';   }
+      else                                { opSel.value = '=';  valA.value = '1';   }
+    }
 
     function updateDynamic() {
       const isPressureDelta = fieldSel.value === 'pressure_delta';
       const isDirection     = fieldSel.value === 'wind_direction';
+      const isFoehnField    = fieldSel.value === 'foehn_active';
       const currentOp = opSel.value;
       opSel.innerHTML = OPS
         .filter(o => isDirection ? o.v === 'in_direction_range' : o.v !== 'in_direction_range')
         .map(o => `<option value="${o.v}">${o.l}</option>`).join('');
       opSel.value = [...opSel.options].some(o => o.value === currentOp) ? currentOp : opSel.options[0]?.value;
       staBWrap.style.display = isPressureDelta ? 'block' : 'none';
-      const needsB = TWO_VALUE_OPS.has(opSel.value);
-      valB.style.opacity = needsB ? '1' : '0.2';
-      valB.disabled = !needsB;
-      valA.setAttribute('list', isDirection ? 'compassDirs' : '');
-      valB.setAttribute('list', isDirection ? 'compassDirs' : '');
+      // Foehn region picker: swap station autocomplete and hide op/val inputs
+      stationInp.style.display  = isFoehnField ? 'none' : '';
+      stationDrop.style.display = isFoehnField ? 'none' : '';
+      foehnWrap.style.display   = isFoehnField ? 'block' : 'none';
+      opSel.style.display       = isFoehnField ? 'none' : '';
+      valA.style.display        = isFoehnField ? 'none' : '';
+      valB.style.display        = isFoehnField ? 'none' : '';
+      if (isFoehnField) {
+        stationInp.dataset.selectedId = foehnSel?.value || 'foehn-beo';
+        applyFoehnStatus(foehnStatSel?.value || 'active');
+      } else {
+        const needsB = TWO_VALUE_OPS.has(opSel.value);
+        valB.style.opacity = needsB ? '1' : '0.2';
+        valB.disabled = !needsB;
+        valA.setAttribute('list', isDirection ? 'compassDirs' : '');
+        valB.setAttribute('list', isDirection ? 'compassDirs' : '');
+      }
       redrawMapOverlays();
     }
     fieldSel.addEventListener('change', updateDynamic);
     opSel.addEventListener('change', updateDynamic);
     valA.addEventListener('input', redrawMapOverlays);
     valB.addEventListener('input', redrawMapOverlays);
+    foehnSel?.addEventListener('change', (e) => {
+      stationInp.dataset.selectedId = e.target.value;
+      console.log('[Lenti:editor] foehn region changed:', e.target.value);
+    });
+    foehnStatSel?.addEventListener('change', (e) => {
+      applyFoehnStatus(e.target.value);
+      console.log('[Lenti:editor] foehn status changed:', e.target.value);
+    });
     updateDynamic();
 
     // ── Remove button ──

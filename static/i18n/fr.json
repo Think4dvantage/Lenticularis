@@ -178,7 +178,8 @@
       "pressure": "Pression",
       "pressure_delta": "Delta de pression (hPa entre deux stations)",
       "precipitation": "Précipitations",
-      "snow_depth": "Épaisseur de neige"
+      "snow_depth": "Épaisseur de neige",
+      "foehn_active": "Région foehn active"
     },
     "ops": {
       "gt": "> supérieur à",

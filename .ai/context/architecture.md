@@ -14,6 +14,7 @@
 | `ruleset_webcams` | `id`, `ruleset_id`, `url`, `label`, `sort_order` |
 | `notification_configs` | `id`, `user_id`, `launch_site_id`, `channel`, `config_json`, `on_transitions_json` |
 | `station_dedup_overrides` | `id`, `station_id_a`, `station_id_b`, `note`, `created_at` — manually-defined co-location pairs that are merged regardless of GPS distance; pre-seeded with Lehn pair (holfuy-1850 ↔ windline-6116) |
+| `user_foehn_configs` | `user_id` PK FK → users, `config_json` (full föhn config blob), `updated_at` — per-user föhn config overrides; when present, replaces the system-wide default for that user |
 
 ---
 
@@ -89,11 +90,19 @@
 
 All time-range endpoints accept `?from=&to=`. Best-windows also accepts `?top_n=5`.
 
+### Föhn
+- `GET /api/foehn/status` — evaluate all regions + pressure pairs (live data); pre-fetches historical snapshots for delta conditions
+- `GET /api/foehn/forecast?valid_time=` — evaluate from forecast data at a specific valid_time
+- `GET /api/foehn/observation?valid_time=` — evaluate from historical observed data
+- `GET /api/foehn/history?hours=&center_time=` — hourly QFF pressure per pair station for gradient chart
+- `GET /api/foehn/config` — user's saved config (or system default if none)
+- `PUT /api/foehn/config?set_as_default=false` — save user's config; `?set_as_default=true` (admin only) also overwrites `data/foehn_config.json`
+- `DELETE /api/foehn/config?set_as_default=false` — delete user's override; `?set_as_default=true` (admin only) also resets system default to hardcoded values
+
 ### Admin (require_admin)
 - `GET/PUT /api/admin/users`
 - `GET/PUT /api/admin/collectors`
 - `POST /api/admin/collectors/{key}/trigger`
-- `GET/PUT/DELETE /api/admin/foehn-config`
 - `GET/POST /api/admin/orgs`
 - `GET /api/admin/station-dedup` — list manual dedup pairs
 - `POST /api/admin/station-dedup` — add pair `{station_id_a, station_id_b, note?}`; calls `rebuild_display_registry` immediately
@@ -234,6 +243,26 @@ The frontend mirrors this with a client-side `ReplayEngine._cache` (Map, 10 min 
 - Admin API: `rebuild_display_registry(app_state)` called immediately on pair add/delete.
 
 **config.yml** key: `station_dedup.distance_m` (default 50).
+
+---
+
+### Föhn Detection Design
+
+`foehn_detection.py` — shared between the scheduler collector and the API router.
+
+**`FoehnCondition`** (`__slots__`): `station_id`, `field`, `operator`, `value_a`, `value_b`, `lookback_h` (optional int: 1/2/3/6), `label`, `result_colour`.
+
+**`FoehnRegion`**: `key`, `label`, `description`, `pressure_pair` (south/north/threshold or None), `conditions: list[FoehnCondition]`. Alias `Region = FoehnRegion` for backward compat with the scheduler.
+
+**`eval_foehn_condition(cond, latest, historical=None)`**: For delta conditions (`lookback_h` set), evaluates `current_field − historical[lookback_h][station][field]` vs threshold. Supports all fields and operators including `between`, `not_between`, `in_direction_range`. Returns rich dict with `actual_value`, `prev_value`, `is_delta`, `met`, `data_available`.
+
+**Delta/trend conditions** solve the "föhn arriving" problem: `humidity Δ2h < −10` fires when humidity drops >10% in 2 hours, even before wind confirms. The API router pre-fetches historical snapshots for each unique `lookback_h` in the config before evaluating.
+
+**Config persistence**: `data/foehn_config.json` for system-wide default; `user_foehn_configs` SQLite table for per-user overrides. `get_foehn_config_dict()` / `set_foehn_config()` / `reset_foehn_config()` manage the file. `_region_from_dict()` handles both new format and legacy `speed_min/dir_low/dir_high` format transparently.
+
+**Virtual foehn stations** (`VIRTUAL_STATIONS` list): `foehn-beo`, `foehn-haslital`, `foehn-wallis`, `foehn-reussthal`, `foehn-rheintal`, `foehn-guggi`, `foehn-overall`. Written to InfluxDB `weather_data` measurement every 10 min by `FoehnCollector` with field `foehn_active` (1.0=active, 0.5=partial, 0.0=inactive, −1.0=no_data). These virtual stations appear in the station registry and can be used in ruleset conditions with field `foehn_active`.
+
+**Ruleset editor integration**: Field `foehn_active` in `FieldName` Literal. When selected, station autocomplete is replaced by a region dropdown + status picker (Active/Partial or active/Inactive); raw operator+value are set behind the scenes (`= 1`, `>= 0.5`, `= 0`). `FIELD_MAP` in `rules/evaluator.py` maps `foehn_active → foehn_active`.
 
 ---
 

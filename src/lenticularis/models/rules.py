@@ -14,6 +14,7 @@ FieldName = Literal[
     "wind_speed", "wind_gust", "wind_direction",
     "temperature", "humidity", "pressure", "pressure_delta",
     "precipitation", "snow_depth",
+    "foehn_active",
 ]
 
 OperatorName = Literal[

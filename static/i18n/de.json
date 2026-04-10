@@ -178,7 +178,8 @@
       "pressure": "Luftdruck",
       "pressure_delta": "Druckdifferenz (hPa zwischen zwei Stationen)",
       "precipitation": "Niederschlag",
-      "snow_depth": "Schneehöhe"
+      "snow_depth": "Schneehöhe",
+      "foehn_active": "Föhn-Region aktiv"
     },
     "ops": {
       "gt": "> grösser als",

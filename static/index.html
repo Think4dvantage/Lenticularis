@@ -39,6 +39,7 @@
       color: #90cdf4;
       margin-right: 24px;
       white-space: nowrap;
+      text-decoration: none;
     }
 
     .nav-links {
@@ -285,7 +286,7 @@
 <body>
 
 <nav class="top-nav">
-  <span class="nav-brand">🪁 Lenticularis</span>
+  <a href="/" class="nav-brand">🪁 Lenticularis</a>
   <div class="nav-links">
     <a href="/" class="nav-link active" data-i18n="nav.map">Map</a>
     <a href="/stations" class="nav-link" data-i18n="nav.stations">Stations</a>
@@ -663,11 +664,13 @@ window._stationsReady.then(async () => {
     pressure_delta:window.t('map.popup.pressure_delta'),
     precipitation: window.t('map.popup.precipitation'),
     snow_depth:    window.t('map.popup.snow'),
+    foehn_active:  window.t('editor.fields.foehn_active'),
   };
   const FIELD_UNIT = {
     wind_speed:'km/h', wind_gust:'km/h', wind_direction:'°',
     temperature:'°C', humidity:'%', pressure:'hPa',
-    pressure_delta:'hPa', precipitation:'mm', snow_depth:'cm'
+    pressure_delta:'hPa', precipitation:'mm', snow_depth:'cm',
+    foehn_active:''
   };
   const DC_HEX = { green:'#68d391', orange:'#f6ad55', red:'#fc8181' };
 
