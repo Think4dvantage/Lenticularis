@@ -660,7 +660,7 @@ function setDbDot(ok) {
 
 function setRefreshLabel() {
   document.getElementById('lastRefresh').textContent =
-    window.t('common.updated') + ' ' + new Date().toLocaleTimeString();
+    window.t('common.updated') + ' ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
 }
 
 function openAccuracy() {

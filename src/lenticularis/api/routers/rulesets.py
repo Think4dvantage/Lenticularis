@@ -21,8 +21,9 @@ from __future__ import annotations
 import uuid
 import logging
 from datetime import datetime, timezone
+from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -156,9 +157,17 @@ def create_ruleset(
 def evaluate_ruleset(
     ruleset_id: str,
     request: Request,
+    at_time: Optional[datetime] = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    """
+    Evaluate a ruleset.
+
+    - No ``at_time``: use live station data and write the decision to InfluxDB.
+    - ``at_time`` set: evaluate against historical observed data at that moment
+      (read-only — does not write to InfluxDB).
+    """
     rs = db.get(RuleSet, ruleset_id)
     if rs is None:
         raise HTTPException(status_code=404, detail="Rule set not found")
@@ -166,20 +175,29 @@ def evaluate_ruleset(
         raise HTTPException(status_code=403, detail="Not your rule set")
 
     if not rs.conditions:
+        ts = at_time.isoformat() if at_time else datetime.now(timezone.utc).isoformat()
         return EvaluationResult(
             decision="green",
-            evaluated_at=datetime.now(timezone.utc).isoformat(),
+            evaluated_at=ts,
             condition_results=[],
             no_data_stations=[],
         )
 
-    from lenticularis.rules.evaluator import run_evaluation, write_decision
-
     influx = request.app.state.influx
     virtual_members = getattr(request.app.state, "virtual_members", {})
-    result = run_evaluation(rs, influx, virtual_members)
-    write_decision(rs, result, influx)
-    logger.info("Evaluated ruleset %s → %s (no-data: %s)", rs.id, result["decision"], result["no_data_stations"])
+
+    if at_time is not None:
+        from lenticularis.rules.evaluator import run_evaluation_at
+        result = run_evaluation_at(rs, influx, at_time, virtual_members)
+        logger.info(
+            "Historical evaluation of ruleset %s at %s → %s",
+            rs.id, at_time.isoformat(), result["decision"],
+        )
+    else:
+        from lenticularis.rules.evaluator import run_evaluation, write_decision
+        result = run_evaluation(rs, influx, virtual_members)
+        write_decision(rs, result, influx)
+        logger.info("Evaluated ruleset %s → %s (no-data: %s)", rs.id, result["decision"], result["no_data_stations"])
 
     # Evaluate linked landing rulesets and attach to result
     if rs.landing_links:
@@ -355,6 +373,8 @@ def delete_ruleset(
 def replace_conditions(
     ruleset_id: str,
     body: ConditionsReplaceRequest,
+    request: Request,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(require_pilot),
     db: Session = Depends(get_db),
 ):
@@ -376,6 +396,62 @@ def replace_conditions(
     rs.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(rs)
+
+    if rs.conditions:
+        influx = request.app.state.influx
+        virtual_members = getattr(request.app.state, "virtual_members", {})
+
+        # Determine whether a 30-day backfill is needed BEFORE writing the
+        # immediate decision (so the just-written point doesn't skew the check).
+        # We need a backfill when there is no history at all, OR when the
+        # oldest existing decision is less than 48 h old — meaning only the
+        # regular 10-min scheduler has run so far and deep history is absent.
+        existing_history = influx.query_decision_history(rs.id, hours=720)
+        if not existing_history:
+            needs_backfill = True
+        else:
+            oldest_ts = min(row["timestamp"] for row in existing_history)
+            try:
+                oldest_dt = datetime.fromisoformat(oldest_ts)
+                age_hours = (datetime.now(timezone.utc) - oldest_dt).total_seconds() / 3600
+                needs_backfill = age_hours < 48
+            except Exception:
+                needs_backfill = True
+
+        # Trigger an immediate evaluation so the map badge is populated right away
+        # (the scheduler only runs every 10 min; a new ruleset would otherwise have
+        # no decision until the next tick).
+        try:
+            from lenticularis.rules.evaluator import run_evaluation, write_decision
+            result = run_evaluation(rs, influx, virtual_members)
+            write_decision(rs, result, influx)
+            logger.info(
+                "Post-save evaluation for ruleset %s → %s", rs.id, result["decision"]
+            )
+        except Exception as exc:
+            logger.warning("Post-save evaluation failed for ruleset %s: %s", rs.id, exc)
+
+        # If there was no existing decision history, backfill the last 30 days in
+        # the background so the Decision History chart is populated immediately.
+        if needs_backfill:
+            def _backfill(ruleset_id: str) -> None:
+                from lenticularis.rules.evaluator import run_history_backfill, write_decisions_batch
+                from lenticularis.database.db import get_session_factory
+                db2 = get_session_factory()()
+                try:
+                    rs2 = db2.get(RuleSet, ruleset_id)
+                    if rs2 is None:
+                        return
+                    backfill_results = run_history_backfill(rs2, influx, days=30, virtual_members=virtual_members)
+                    write_decisions_batch(rs2, backfill_results, influx)
+                except Exception as exc:
+                    logger.error("History backfill failed for ruleset %s: %s", ruleset_id, exc)
+                finally:
+                    db2.close()
+
+            background_tasks.add_task(_backfill, rs.id)
+            logger.info("Scheduled 30-day history backfill for ruleset %s (no deep history yet)", rs.id)
+
     return rs
 
 

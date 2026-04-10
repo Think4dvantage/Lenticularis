@@ -8,7 +8,7 @@
 | `users` | `id`, `username`, `email`, `hashed_password`, `role`, `org_id` FK → organizations, `created_at` |
 | `weather_stations` | `station_id`, `name`, `network`, `latitude`, `longitude`, `elevation`, `canton`, `active` |
 | `launch_sites` | `id`, `name`, `latitude`, `longitude`, `owner_id` FK → users |
-| `rulesets` | `id`, `name`, `description`, `launch_site_id`, `owner_id`, `org_id` FK → organizations, `site_type` (launch/landing/opportunity), `combination_logic`, `is_public`, `is_preset`, `clone_count`, `cloned_from_id`, `created_at`, `updated_at` |
+| `rulesets` | `id`, `name`, `description`, `launch_site_id`, `owner_id`, `org_id` FK → organizations, `site_type` (launch/landing/opportunity), `combination_logic`, `is_public`, `is_preset`, `clone_count`, `cloned_from_id`, `notify_on` (nullable CSV of colours e.g. `"green,orange"`), `last_notified_decision` (nullable), `created_at`, `updated_at` |
 | `rule_conditions` | `id`, `ruleset_id`, `group_id` (nullable), `station_id`, `station_b_id` (nullable), `field`, `operator`, `value_a`, `value_b` (nullable), `result_colour`, `sort_order` |
 | `condition_groups` | `id`, `ruleset_id`, `parent_group_id` (nullable), `logic` (AND/OR), `sort_order` |
 | `ruleset_webcams` | `id`, `ruleset_id`, `url`, `label`, `sort_order` |
@@ -234,6 +234,32 @@ The frontend mirrors this with a client-side `ReplayEngine._cache` (Map, 10 min 
 - Admin API: `rebuild_display_registry(app_state)` called immediately on pair add/delete.
 
 **config.yml** key: `station_dedup.distance_m` (default 50).
+
+---
+
+### Email Notifications
+
+`utils/mailer.py` — `send_email(cfg, to, subject, body_text, body_html)` sends via `smtplib` STARTTLS. Returns `bool` (errors logged, never raised). Switch providers by changing `smtp:` in config.yml — no code changes needed.
+
+**Config** (`config.yml`):
+```yaml
+smtp:
+  enabled: true/false
+  host: smtp.protonmail.ch        # or smtp.resend.com / smtp-relay.brevo.com for prod
+  port: 587
+  user: you@proton.me
+  password: ...
+  from_address: ...
+  from_name: Lenticularis
+  timeout_seconds: 30
+```
+
+**Notification logic** (`scheduler.py` → `_maybe_notify`):
+- Called after every `write_decision` in `_run_ruleset_evaluator`
+- Fires only when: `rs.notify_on` is set AND new decision is in `notify_on` AND decision changed from `rs.last_notified_decision`
+- On send: updates `rs.last_notified_decision` and commits to SQLite
+
+**Per-ruleset config**: `notify_on` column (CSV string e.g. `"green"`, `"green,orange"`) set via ruleset editor checkboxes. Exposed in `RuleSetUpdate` / `RuleSetOut` Pydantic models.
 
 ---
 

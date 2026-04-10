@@ -367,7 +367,7 @@ class CollectorScheduler:
         count = 0
         try:
             from sqlalchemy import select
-            from lenticularis.database.models import RuleSet
+            from lenticularis.database.models import RuleSet, User
             from lenticularis.rules.evaluator import run_evaluation, write_decision
 
             rulesets = db.execute(select(RuleSet)).scalars().all()
@@ -378,6 +378,7 @@ class CollectorScheduler:
                     result = run_evaluation(rs, self._influx, self._virtual_members)
                     write_decision(rs, result, self._influx)
                     count += 1
+                    self._maybe_notify(rs, result["decision"], db)
                 except Exception as exc:
                     logger.error("Ruleset evaluator: failed to evaluate %s: %s", rs.id, exc)
 
@@ -405,6 +406,65 @@ class CollectorScheduler:
             logger.error("Ruleset evaluator job failed: %s", exc)
         finally:
             db.close()
+
+    def _maybe_notify(self, rs, decision: str, db) -> None:
+        """
+        Send an email notification if the ruleset decision changed and the
+        new decision matches the user's ``notify_on`` preference.
+
+        Updates ``rs.last_notified_decision`` in-place and commits to SQLite.
+        """
+        if not rs.notify_on:
+            return
+
+        notify_colours = {c.strip() for c in rs.notify_on.split(",") if c.strip()}
+        if decision not in notify_colours:
+            return
+        if decision == rs.last_notified_decision:
+            return  # No state change — suppress repeat notification
+
+        smtp_cfg = self._cfg.smtp
+        if not smtp_cfg.enabled:
+            logger.debug(
+                "Notification suppressed (SMTP disabled) for ruleset %s → %s", rs.id, decision
+            )
+            return
+
+        try:
+            from lenticularis.database.models import User
+            owner = db.get(User, rs.owner_id)
+            if owner is None or not owner.email:
+                logger.warning("Cannot notify: owner %s has no email (ruleset %s)", rs.owner_id, rs.id)
+                return
+
+            colour_emoji = {"green": "🟢", "orange": "🟠", "red": "🔴"}.get(decision, "")
+            subject = f"{colour_emoji} {rs.name} — {decision.upper()}"
+
+            body_text = (
+                f"Your ruleset '{rs.name}' just evaluated {decision.upper()}.\n\n"
+                f"View analysis: {smtp_cfg.from_address and 'https://lenti.lg4.ch'}/ruleset-analysis?id={rs.id}\n\n"
+                f"— Lenticularis"
+            )
+            body_html = f"""<!DOCTYPE html>
+<html><body style="font-family:sans-serif;background:#0f1117;color:#e2e8f0;padding:32px">
+  <h2 style="color:#{'68d391' if decision=='green' else 'f6ad55' if decision=='orange' else 'fc8181'}">{colour_emoji} {rs.name}</h2>
+  <p style="font-size:1.1rem">Current decision: <strong style="color:#{'68d391' if decision=='green' else 'f6ad55' if decision=='orange' else 'fc8181'}">{decision.upper()}</strong></p>
+  <p><a href="https://lenti.lg4.ch/ruleset-analysis?id={rs.id}" style="color:#90cdf4">View full analysis →</a></p>
+  <hr style="border-color:#2d3748;margin:24px 0"/>
+  <p style="font-size:0.8rem;color:#4a5568">You are receiving this because you enabled email notifications for this ruleset.<br/>
+  Edit your notification preferences in the <a href="https://lenti.lg4.ch/ruleset-editor?id={rs.id}" style="color:#4a5568">ruleset editor</a>.</p>
+</body></html>"""
+
+            from lenticularis.utils.mailer import send_email
+            sent = send_email(smtp_cfg, owner.email, subject, body_text, body_html)
+            if sent:
+                rs.last_notified_decision = decision
+                db.commit()
+                logger.info(
+                    "Notification sent for ruleset %s → %s (to %s)", rs.id, decision, owner.email
+                )
+        except Exception as exc:
+            logger.error("Notification failed for ruleset %s: %s", rs.id, exc)
 
     async def _run_collector(self, collector) -> None:
         """Execute a single observation collector run and write results to InfluxDB."""

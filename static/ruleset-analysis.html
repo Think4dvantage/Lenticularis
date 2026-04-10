@@ -542,10 +542,11 @@ function renderConditions(dec) {
   function makeRow(cr, groupLabel, groupAllMatched) {
     const isGroupMember = groupLabel !== null;
     const triggered = cr.matched && (isGroupMember ? groupAllMatched : true);
-    const dotCls = triggered ? `dot-${cr.result_colour}` : 'dot-grey';
+    const effectiveColour = triggered ? cr.result_colour : 'green';
+    const dotCls = `dot-${effectiveColour}`;
     const statusLabel = triggered
       ? `<span style="color:${DC[cr.result_colour]};font-weight:600">${cr.result_colour.toUpperCase()}</span>`
-      : `<span style="color:#4a5568">—</span>`;
+      : `<span style="color:${DC.green}">—</span>`;
     const actualStr = cr.actual_value != null
       ? `${cr.actual_value.toFixed(1)} ${FIELD_UNIT[cr.field] || ''}`
       : `<span class="no-data-note">${window.t('map.popup.no_data')}</span>`;
@@ -606,15 +607,22 @@ window.loadHistory = async function(hours) {
   document.getElementById('histContent').style.display = 'none';
   document.getElementById('histEmpty').style.display   = 'none';
 
+  const t0 = performance.now();
+  console.log(`[Lenti:analysis] loadHistory hours=${hours} ruleset=${rsId}`);
   try {
     const res = await fetchAuth(`/api/rulesets/${rsId}/history?hours=${hours}`);
     document.getElementById('histLoading').style.display = 'none';
-    if (!res.ok) { document.getElementById('histEmpty').style.display = ''; return; }
+    if (!res.ok) {
+      console.warn(`[Lenti:analysis] loadHistory failed status=${res.status}`);
+      document.getElementById('histEmpty').style.display = ''; return;
+    }
     const json = await res.json();
     const { data } = json;
     _activeWindowH = json.active_window_hours ?? null;
+    console.log(`[Lenti:analysis] loadHistory ok rows=${data?.length ?? 0} activeWindowH=${_activeWindowH} elapsed=${(performance.now()-t0).toFixed(0)}ms`);
 
     if (!data || data.length === 0) {
+      console.warn(`[Lenti:analysis] loadHistory empty result for ruleset=${rsId} hours=${hours}`);
       document.getElementById('histEmpty').style.display = '';
       return;
     }
@@ -669,7 +677,7 @@ function renderTimeline(data, hours) {
     const opacity = (!inWin && _activeWindowH != null) ? 'opacity:0.25;' : '';
     const winNote = !inWin ? ' (outside daylight window)' : '';
     html += `<div class="tl-seg tl-${d}" style="width:${pct.toFixed(2)}%;${opacity}"
-              title="${new Date(data[i].timestamp).toLocaleString()} — ${d.toUpperCase()}${winNote}"></div>`;
+              title="${new Date(data[i].timestamp).toLocaleString([], {hour12:false})} — ${d.toUpperCase()}${winNote}"></div>`;
   }
 
   // Amber marker at the moment the ruleset was last modified
@@ -678,7 +686,7 @@ function renderTimeline(data, hours) {
     if (updMs > start && updMs < now) {
       const pct = ((updMs - start) / rangeMs) * 100;
       html += `<div style="position:absolute;top:0;bottom:0;left:${pct.toFixed(2)}%;width:2px;background:#f6ad55;z-index:2;pointer-events:none"
-                    title="Rules last updated: ${new Date(_rsUpdatedAt).toLocaleString()}"></div>`;
+                    title="Rules last updated: ${new Date(_rsUpdatedAt).toLocaleString([], {hour12:false})}"></div>`;
     }
   }
 
@@ -708,6 +716,7 @@ const _rulesChangedPlugin = {
 };
 
 function renderHistChart(data, hours) {
+  console.log(`[Lenti:analysis] renderHistChart points=${data.length} hours=${hours}`);
   if (_histChart) { _histChart.destroy(); _histChart = null; }
 
   const now = Date.now();
@@ -749,6 +758,7 @@ function renderHistChart(data, hours) {
           type: 'time',
           min: rangeStart,
           max: now,
+          time: { displayFormats: { millisecond: 'HH:mm', second: 'HH:mm', minute: 'HH:mm', hour: 'HH:mm', day: 'dd.MM', week: 'dd.MM', month: 'MM.yy', quarter: 'MM.yy', year: 'yyyy' } },
           grid: { color: '#1e2533' },
           ticks: { color: '#718096', maxTicksLimit: 8 },
         },
@@ -769,7 +779,7 @@ function renderHistChart(data, hours) {
           callbacks: {
             label: ctx => {
               const d = ctx.dataset.data[ctx.dataIndex];
-              return `${d.decision.toUpperCase()} — ${new Date(d.x).toLocaleString()}`;
+              return `${d.decision.toUpperCase()} — ${new Date(d.x).toLocaleString([], {hour12:false})}`;
             },
           },
         },
@@ -810,7 +820,7 @@ function fmtDuration(ms) {
 }
 
 function fmtTs(iso) {
-  return new Date(iso).toLocaleString([], { month:'short', day:'2-digit', hour:'2-digit', minute:'2-digit' });
+  return new Date(iso).toLocaleString([], { month:'short', day:'2-digit', hour:'2-digit', minute:'2-digit', hour12: false });
 }
 
 function buildCondDetail(condResults) {
@@ -844,12 +854,11 @@ function buildCondDetail(condResults) {
   function renderRows(crs, isGroup, groupAllMatched) {
     return crs.map(cr => {
       const triggered = cr.matched && (isGroup ? groupAllMatched : true);
-      const dot    = triggered
-        ? `<span class="status-dot dot-${cr.result_colour}"></span>`
-        : `<span class="status-dot dot-grey"></span>`;
+      const effCol = triggered ? cr.result_colour : 'green';
+      const dot    = `<span class="status-dot dot-${effCol}"></span>`;
       const status = triggered
         ? `<span style="color:${DC2[cr.result_colour]};font-weight:600">${cr.result_colour.toUpperCase()}</span>`
-        : `<span style="color:#4a5568">—</span>`;
+        : `<span style="color:${DC2.green}">—</span>`;
       const actual = cr.actual_value != null
         ? `${cr.actual_value.toFixed(1)} ${FIELD_UNIT[cr.field] || ''}`
         : `<span style="color:#4a5568;font-style:italic">${window.t('map.popup.no_data')}</span>`;
@@ -893,6 +902,7 @@ function buildCondDetail(condResults) {
 }
 
 function renderHistTable(data) {
+  console.log(`[Lenti:analysis] renderHistTable runs=${groupRuns([...data].reverse()).length} from ${data.length} rows`);
   const tbody = document.getElementById('histBody');
   const runs  = groupRuns([...data].reverse()); // most recent first
   let html = '';
@@ -947,15 +957,22 @@ window.loadForecast = async function(hours) {
   document.getElementById('fcContent').style.display = 'none';
   document.getElementById('fcEmpty').style.display   = 'none';
 
+  const t0 = performance.now();
+  console.log(`[Lenti:analysis] loadForecast hours=${hours} ruleset=${rsId}`);
   try {
     const res = await fetchAuth(`/api/rulesets/${rsId}/forecast?hours=${hours}`);
     document.getElementById('fcLoading').style.display = 'none';
-    if (!res.ok) { document.getElementById('fcEmpty').style.display = ''; return; }
+    if (!res.ok) {
+      console.warn(`[Lenti:analysis] loadForecast failed status=${res.status}`);
+      document.getElementById('fcEmpty').style.display = ''; return;
+    }
     const fcJson = await res.json();
     const { steps } = fcJson;
     const fcWindowH = fcJson.active_window_hours ?? null;
+    console.log(`[Lenti:analysis] loadForecast ok steps=${steps?.length ?? 0} fcWindowH=${fcWindowH} elapsed=${(performance.now()-t0).toFixed(0)}ms`);
 
     if (!steps || steps.length === 0) {
+      console.warn(`[Lenti:analysis] loadForecast empty result for ruleset=${rsId} hours=${hours}`);
       document.getElementById('fcEmpty').style.display = '';
       return;
     }
@@ -992,12 +1009,13 @@ function renderForecastTimeline(steps, hours, fcWindowH) {
     const opacity = (!inWin && fcWindowH != null) ? 'opacity:0.25;' : '';
     const winNote = !inWin ? ' (outside daylight window)' : '';
     html += `<div class="tl-seg tl-${d}" style="width:${w.toFixed(2)}%;${opacity}"
-              title="${new Date(steps[i].valid_time).toLocaleString()} — ${d.toUpperCase()}${winNote}"></div>`;
+              title="${new Date(steps[i].valid_time).toLocaleString([], {hour12:false})} — ${d.toUpperCase()}${winNote}"></div>`;
   }
   el.innerHTML = html || '<div class="tl-seg tl-empty" style="width:100%"></div>';
 }
 
 function renderForecastChart(steps, hours, fcWindowH) {
+  console.log(`[Lenti:analysis] renderForecastChart steps=${steps.length} hours=${hours} fcWindowH=${fcWindowH}`);
   if (_fcChart) { _fcChart.destroy(); _fcChart = null; }
 
   const now    = Date.now();
@@ -1035,6 +1053,7 @@ function renderForecastChart(steps, hours, fcWindowH) {
           type: 'time',
           min: now,
           max: now + hours * 3600 * 1000,
+          time: { displayFormats: { millisecond: 'HH:mm', second: 'HH:mm', minute: 'HH:mm', hour: 'HH:mm', day: 'dd.MM', week: 'dd.MM', month: 'MM.yy', quarter: 'MM.yy', year: 'yyyy' } },
           grid: { color: '#1e2533' },
           ticks: { color: '#718096', maxTicksLimit: 8 },
         },
@@ -1054,7 +1073,7 @@ function renderForecastChart(steps, hours, fcWindowH) {
           callbacks: {
             label: ctx => {
               const d = ctx.dataset.data[ctx.dataIndex];
-              return `${d.decision.toUpperCase()} — ${new Date(d.x).toLocaleString()}`;
+              return `${d.decision.toUpperCase()} — ${new Date(d.x).toLocaleString([], {hour12:false})}`;
             },
           },
         },

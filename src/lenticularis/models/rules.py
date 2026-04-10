@@ -100,6 +100,7 @@ class RuleSetUpdate(BaseModel):
     site_type: Optional[SiteType] = None
     combination_logic: Optional[CombinationLogic] = None
     is_public: Optional[bool] = None
+    notify_on: Optional[str] = None  # comma-separated colours e.g. "green" or "green,orange"
 
 
 class RuleSetOut(BaseModel):
@@ -117,6 +118,7 @@ class RuleSetOut(BaseModel):
     clone_count: int
     cloned_from_id: Optional[str]
     linked_landing_ids: list[str] = []
+    notify_on: Optional[str] = None
     created_at: datetime
     updated_at: Optional[datetime]
 

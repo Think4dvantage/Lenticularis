@@ -986,6 +986,65 @@ from(bucket: "{self._cfg.bucket}")
             for sid, by_vt in raw.items()
         }
 
+    def query_history_for_stations(
+        self, station_ids: list[str], days: int = 30, window_minutes: int = 30
+    ) -> dict[str, dict[str, dict]]:
+        """
+        Return historical ``weather_data`` for the given stations over the last
+        ``days`` days, aggregated into ``window_minutes``-minute buckets.
+
+        Returns the same shape as ``query_forecast_for_stations``::
+
+            {
+                station_id: {
+                    timestamp_iso: {
+                        "wind_speed": float | None,
+                        ...
+                    }
+                }
+            }
+
+        Each bucket uses ``last()`` aggregation — the most recent measurement
+        within the window — matching the replay-cache strategy.
+        """
+        if not station_ids:
+            return {}
+
+        station_filter = " or ".join(
+            f'r.station_id == "{sid}"' for sid in station_ids
+        )
+        flux = f"""
+from(bucket: "{self._cfg.bucket}")
+  |> range(start: -{days}d)
+  |> filter(fn: (r) => r._measurement == "{MEASUREMENT_WEATHER}")
+  |> filter(fn: (r) => {station_filter})
+  |> aggregateWindow(every: {window_minutes}m, fn: last, createEmpty: false)
+  |> pivot(rowKey: ["_time", "station_id", "network"], columnKey: ["_field"], valueColumn: "_value")
+  |> sort(columns: ["_time"])
+"""
+        try:
+            tables = self._query_api.query(flux, org=self._cfg.org)
+        except Exception as exc:
+            logger.error("InfluxDB query_history_for_stations error: %s", exc)
+            return {}
+
+        results: dict[str, dict[str, dict]] = {}
+        for table in tables:
+            for record in table.records:
+                sid = record.values.get("station_id", "")
+                if not sid:
+                    continue
+                vt_iso = record.get_time().isoformat()
+                fields = {
+                    k: v
+                    for k, v in record.values.items()
+                    if not k.startswith("_")
+                    and k not in ("result", "table", "station_id", "network")
+                    and v is not None
+                }
+                results.setdefault(sid, {})[vt_iso] = fields
+        return results
+
     def query_forecast_accuracy(
         self, station_id: str, start: datetime, end: datetime
     ) -> dict:

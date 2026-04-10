@@ -40,7 +40,7 @@ async function loadStations() {
 
     setStatus(true);
     document.getElementById('lastRefresh').textContent =
-      window.t('common.updated') + ' ' + new Date().toLocaleTimeString();
+      window.t('common.updated') + ' ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
   } catch (err) {
     console.error('Failed to load stations:', err);
     setStatus(false);

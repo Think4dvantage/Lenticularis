@@ -598,7 +598,7 @@ async function loadChart(centerTime) {
   const labels   = sortedTs.map(ts => {
     const d = new Date(ts);
     return d.toLocaleDateString('en-CH', { weekday: 'short', month: 'numeric', day: 'numeric' })
-      + ' ' + d.toLocaleTimeString('en-CH', { hour: '2-digit', minute: '2-digit' });
+      + ' ' + d.toLocaleTimeString('en-CH', { hour: '2-digit', minute: '2-digit', hour12: false });
   });
 
   const COLORS = ['#718096', '#9f7aea'];   // valley = grey, alpine = purple
@@ -687,11 +687,11 @@ async function load() {
   // Update meta
   let ts;
   if (isSnapshot) {
-    ts = window.t('foehn.time.historical', {ts: new Date(data.valid_time).toLocaleString('en-CH', {weekday:'short', month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'})});
+    ts = window.t('foehn.time.historical', {ts: new Date(data.valid_time).toLocaleString('en-CH', {weekday:'short', month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit', hour12: false})});
   } else if (isForecast) {
-    ts = window.t('foehn.time.forecast', {ts: new Date(data.valid_time).toLocaleString('en-CH', {weekday:'short', month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'})});
+    ts = window.t('foehn.time.forecast', {ts: new Date(data.valid_time).toLocaleString('en-CH', {weekday:'short', month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit', hour12: false})});
   } else {
-    ts = window.t('foehn.time.live', {ts: new Date(data.assessed_at).toLocaleTimeString('en-CH', { hour: '2-digit', minute: '2-digit' })});
+    ts = window.t('foehn.time.live', {ts: new Date(data.assessed_at).toLocaleTimeString('en-CH', { hour: '2-digit', minute: '2-digit', hour12: false })});
   }
   document.getElementById('lastUpdated').textContent = ts;
 

@@ -1,6 +1,6 @@
 # Feature History & Backlog
 
-## Current Version: v1.10 (shipped)
+## Current Version: v1.12 (shipped)
 
 ### Shipped Milestones
 
@@ -27,6 +27,8 @@
 | v1.8 | Replay performance: server-side in-memory TTL cache (5 min) in `/api/stations/replay`; startup background warm-up of all 9 day-button windows; `aggregateWindow(30m, last)` before pivot reduces observation rows ~3×; removed redundant `sort()` from Flux queries; frontend prefetch expanded to all 9 offsets in outward-from-today order; browser console logging throughout |
 | v1.9 | Virtual weather stations: co-located station deduplication via union-find clustering (`services/dedup.py`); 50 m GPS proximity threshold + manual admin overrides (`station_dedup_overrides` SQLite table); `display_registry` + `virtual_members` in app state; highest-priority network wins canonical metadata; newest-wins for latest data across all members; history filtered to established members only (pre-window 2 h data check prevents partial-coverage overlap); Lehn pair pre-seeded (holfuy-1850 ↔ windline-6116); admin Station Dedup tab with add/delete UI |
 | v1.10 | Forecast replay cache correctness: `_patch_scheduler_forecast` monkey-patch in `main.py` fires `invalidate_forecast_replay_cache()` + background `warm_replay_cache()` after each successful forecast collector run so replay windows always serve the latest model run; startup cache-poisoning guard skips caching when `fc_frame_count == 0` (prevents obs-only entries locking out forecast data for 5–10 min after startup); `obs_frame_count`/`fc_frame_count` fields added to replay payload for client diagnostics; `_tnOffset === 0` falsy bug fixed in hour-seek logic (`else if (_tnOffset != null)`); `collect_all_iter` rewritten from serial-with-per-station-sleep to serial (concurrency=1) with 429 retry/backoff (10s→30s→60s) in `_get` — eliminates Open-Meteo rate-limit errors that were causing ~45% station failures; comprehensive `[Lenti:replay]` browser console logging throughout |
+| v1.11 | Google OAuth login; opportunity ruleset fix; weather-agnostic UI |
+| v1.12 | Rules Engine improvements: (1) missing i18n translations fixed (editor.opportunity_btn, editor.ai_btn, editor.opportunity_site + 11 more); (2) UTC → local time conversion across all pages; (3) AM/PM → 24h format app-wide; (4) historical backtester in ruleset editor (datetime picker, evaluate against past weather); (5) immediate evaluation on ruleset save (map badge populated instantly); (6) 30-day decision history backfill on first save (background task); (7) green dot fix for non-triggered conditions in analysis status column; (8) Chart.js 24h format fix (`time.displayFormats`); (9) email notifications — per-ruleset opt-in (green/orange/red), state-change only, SMTP via Proton Mail (dev) / Resend (prod); `SmtpConfig` in config.yml, `utils/mailer.py`, `_maybe_notify` in scheduler, notify_on + last_notified_decision columns on rulesets; `[Lenti:analysis]` console logging throughout |
 
 ---
 
@@ -53,7 +55,7 @@ Replaces WhatsApp-based go/no-go coordination for VKPI commercial tandem operato
 - **Trusted users + field condition reports** — `is_trusted` boolean on `User`; trusted pilots submit on-site reports; `weather_reports` SQLite table; `POST /api/reports` + `GET /api/reports?lat=&lon=&radius_km=&hours=`; report pins on map.
 - **AI weather analysis** — scheduled job (Ollama/Claude); compares trusted-user reports vs nearest station measurements; flags discrepancies; `ai_insights` table; optional map overlay.
 - **Push notifications (FCM)** — `fcm_tokens` table; `POST /api/notifications/fcm-register`; `services/push_fcm.py` dispatches on ruleset status transitions.
-- **Email / Pushover alerts** — status-transition alerts; user-configurable per ruleset; `notification_configs` table.
+- ~~**Email alerts**~~ — shipped in v1.12. Per-ruleset opt-in (green/orange/red checkboxes in editor), state-change only. Pushover not implemented.
 - **Flutter mobile app** — separate repo `lenticularis-app`; screens: Map, My Sites, Stations, Föhn, Report conditions (GPS auto-fill), Admin.
 - **OGN live glider overlay** — toggleable Leaflet layer with live glider positions from OGN APRS feed; backend WebSocket proxy `/api/ogn/stream` filtered to Swiss bounding box.
 - **OGN launch statistics** — detect takeoffs from OGN tracks near known launch coordinates; store daily takeoff counts in `ogn_takeoffs` InfluxDB.

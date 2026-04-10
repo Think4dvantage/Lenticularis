@@ -431,10 +431,45 @@
     </div>
   </div>
 
+  <!-- ── Email Notifications ── -->
+  <div class="section">
+    <div class="section-title" data-i18n="editor.section_notifications">Email Notifications</div>
+    <p style="font-size:0.78rem;color:#718096;margin-bottom:14px" data-i18n="editor.notify_hint">Get an email when this ruleset changes to one of the selected decisions.</p>
+    <div style="margin-bottom:10px;font-size:0.82rem;color:#a0aec0" data-i18n="editor.notify_on_label">Notify me when decision becomes</div>
+    <div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:12px">
+      <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:0.85rem">
+        <input type="checkbox" id="notifyGreen" style="accent-color:#68d391;width:16px;height:16px">
+        <span style="color:#68d391;font-weight:600" data-i18n="editor.notify_green">Green</span>
+      </label>
+      <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:0.85rem">
+        <input type="checkbox" id="notifyOrange" style="accent-color:#f6ad55;width:16px;height:16px">
+        <span style="color:#f6ad55;font-weight:600" data-i18n="editor.notify_orange">Orange</span>
+      </label>
+      <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:0.85rem">
+        <input type="checkbox" id="notifyRed" style="accent-color:#fc8181;width:16px;height:16px">
+        <span style="color:#fc8181;font-weight:600" data-i18n="editor.notify_red">Red</span>
+      </label>
+    </div>
+    <div id="notifyEmailNote" style="font-size:0.75rem;color:#4a5568"></div>
+  </div>
+
   <!-- ── Save bar ── -->
   <div class="save-bar">
     <a id="cancelLink" href="/rulesets" class="btn btn-ghost" data-i18n="editor.cancel">Cancel</a>
     <button class="btn btn-primary" id="saveBtn" data-i18n="editor.save">Save rule set</button>
+  </div>
+
+  <!-- ── Historical backtester ── -->
+  <div class="section" id="backtestSection" style="display:none">
+    <div class="section-title" data-i18n="editor.backtest_title">Test against historical data</div>
+    <p style="font-size:0.78rem;color:#718096;margin-bottom:12px" data-i18n="editor.backtest_hint">Select a date and time to evaluate your rules against observed weather at that moment.</p>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <label style="font-size:0.82rem;color:#a0aec0" data-i18n="editor.backtest_at_label">Date &amp; time</label>
+      <input type="datetime-local" id="backtestAt" style="background:#1a202c;color:#e2e8f0;border:1px solid #4a5568;border-radius:6px;padding:5px 10px;font-size:0.82rem" />
+      <button class="btn btn-add" id="backtestRunBtn" data-i18n="editor.backtest_run">Test</button>
+      <button class="btn btn-ghost" id="backtestLiveBtn" data-i18n="editor.backtest_live">↺ Live</button>
+    </div>
+    <div id="backtestResult" style="margin-top:14px"></div>
   </div>
 </div>
 
@@ -949,6 +984,17 @@
     document.getElementById('publicLabel').textContent = isPublic ? window.t('editor.public_label') : window.t('editor.private_label');
   }
 
+  function updateNotifyNote() {
+    const el = document.getElementById('notifyEmailNote');
+    const anyChecked = ['notifyGreen', 'notifyOrange', 'notifyRed'].some(id => document.getElementById(id).checked);
+    if (anyChecked) {
+      const user = getUser();
+      el.textContent = user?.email ? window.t('editor.notify_sending_to', { email: user.email }) : '';
+    } else {
+      el.textContent = '';
+    }
+  }
+
   function esc(s) {
     return String(s).replace(/[&<>"']/g, c =>
       ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -1010,6 +1056,14 @@
     document.getElementById('rsPublic').checked = rs.is_public || false;
     updatePublicLabel();
     setSiteType(rs.site_type || 'launch');
+
+    // Populate notification checkboxes
+    const notifyColours = rs.notify_on ? rs.notify_on.split(',').map(s => s.trim()) : [];
+    document.getElementById('notifyGreen').checked  = notifyColours.includes('green');
+    document.getElementById('notifyOrange').checked = notifyColours.includes('orange');
+    document.getElementById('notifyRed').checked    = notifyColours.includes('red');
+    updateNotifyNote();
+    console.log('[Lenti:editor] loaded notify_on =', rs.notify_on);
     renderLandingPicker(rs.linked_landing_ids || []);
 
     // Populate webcam rows
@@ -1053,6 +1107,13 @@
 
     const siteType = document.getElementById('rsSiteType').value;
 
+    // Build notify_on from checkboxes (null = disabled)
+    const notifyColours = ['green', 'orange', 'red'].filter(
+      c => document.getElementById('notify' + c.charAt(0).toUpperCase() + c.slice(1)).checked
+    );
+    const notifyOn = notifyColours.length > 0 ? notifyColours.join(',') : null;
+    console.log('[Lenti:editor] notify_on =', notifyOn);
+
     const meta = {
       name,
       description: null,
@@ -1062,6 +1123,7 @@
       site_type:   siteType,
       combination_logic: 'worst_wins',
       is_public:   document.getElementById('rsPublic').checked,
+      notify_on:   notifyOn,
     };
 
     try {
@@ -1116,6 +1178,10 @@
       if (!wr.ok) throw new Error(await extractError(wr));
 
       showSuccess(window.t('editor.saved'));
+
+      // Show backtester and trigger a live evaluation to populate it
+      document.getElementById('backtestSection').style.display = '';
+      runBacktest(null);
     } catch (e) {
       showError(e.message);
     } finally {
@@ -1123,8 +1189,94 @@
     }
   });
 
+  // ── Historical backtester ───────────────────────────────────────────────
+  const DECISION_COLOURS = { green: '#48bb78', orange: '#ed8936', red: '#fc8181' };
+  const DECISION_ICONS   = { green: '🟢', orange: '🟠', red: '🔴' };
+
+  async function runBacktest(atIso) {
+    if (!editId) return;
+    const resultEl = document.getElementById('backtestResult');
+    resultEl.innerHTML = `<span style="color:#718096;font-size:0.82rem">${window.t('common.loading')}</span>`;
+    console.log('[Lenti:backtest] evaluate at', atIso ?? 'live');
+    try {
+      const url = atIso
+        ? `/api/rulesets/${editId}/evaluate?at_time=${encodeURIComponent(atIso)}`
+        : `/api/rulesets/${editId}/evaluate`;
+      const r = await fetchAuth(url);
+      if (!r.ok) { resultEl.innerHTML = `<span style="color:#fc8181">${r.status}</span>`; return; }
+      const data = await r.json();
+      console.log('[Lenti:backtest] result', data);
+      renderBacktestResult(data, atIso);
+    } catch (e) {
+      resultEl.innerHTML = `<span style="color:#fc8181">${e.message}</span>`;
+      console.error('[Lenti:backtest] error', e);
+    }
+  }
+
+  function renderBacktestResult(data, atIso) {
+    const resultEl = document.getElementById('backtestResult');
+    const dec = data.decision ?? 'unknown';
+    const colour = DECISION_COLOURS[dec] ?? '#718096';
+    const icon   = DECISION_ICONS[dec]  ?? '⚪';
+    const label  = atIso
+      ? window.t('editor.backtest_result_at', { ts: new Date(atIso).toLocaleString([], {hour12: false}) })
+      : window.t('editor.backtest_result_live');
+
+    const noData = (data.no_data_stations ?? []);
+    const noDataWarning = noData.length
+      ? `<div style="color:#f6ad55;font-size:0.75rem;margin-top:4px">⚠ no data: ${noData.join(', ')}</div>`
+      : '';
+
+    const rows = (data.condition_results ?? []).map(cr => {
+      const matched = cr.matched;
+      const actual  = cr.actual_value != null ? Number(cr.actual_value).toFixed(1) : '—';
+      const rowCol  = matched ? (DECISION_COLOURS[cr.result_colour] ?? '#718096') : '#4a5568';
+      return `<tr>
+        <td style="padding:3px 8px;font-size:0.75rem;color:#a0aec0">${cr.station_id}</td>
+        <td style="padding:3px 8px;font-size:0.75rem;color:#a0aec0">${cr.field}</td>
+        <td style="padding:3px 8px;font-size:0.75rem;color:#e2e8f0">${actual}</td>
+        <td style="padding:3px 8px;font-size:0.75rem;color:${rowCol}">${matched ? '✓' : '✗'}</td>
+      </tr>`;
+    }).join('');
+
+    resultEl.innerHTML = `
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <span style="font-size:1.5rem">${icon}</span>
+        <span style="font-size:1rem;font-weight:600;color:${colour};text-transform:uppercase">${dec}</span>
+        <span style="font-size:0.75rem;color:#718096">${label}</span>
+      </div>
+      ${noDataWarning}
+      ${rows ? `<table style="width:100%;border-collapse:collapse;margin-top:6px">
+        <thead><tr style="border-bottom:1px solid #2d3748">
+          <th style="padding:3px 8px;text-align:left;font-size:0.72rem;color:#718096">Station</th>
+          <th style="padding:3px 8px;text-align:left;font-size:0.72rem;color:#718096">Field</th>
+          <th style="padding:3px 8px;text-align:left;font-size:0.72rem;color:#718096">Actual</th>
+          <th style="padding:3px 8px;text-align:left;font-size:0.72rem;color:#718096">Match</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>` : ''}`;
+  }
+
+  document.getElementById('backtestRunBtn').addEventListener('click', () => {
+    const val = document.getElementById('backtestAt').value;
+    if (!val) { alert(window.t('editor.backtest_no_data')); return; }
+    // datetime-local gives local browser time — convert to UTC ISO string
+    const localDt = new Date(val);
+    const iso = localDt.toISOString();
+    console.log('[Lenti:backtest] local input', val, '→ UTC', iso);
+    runBacktest(iso);
+  });
+
+  document.getElementById('backtestLiveBtn').addEventListener('click', () => {
+    document.getElementById('backtestAt').value = '';
+    runBacktest(null);
+  });
+
   // ── Init ──────────────────────────────────────────────────────────────
   document.getElementById('rsPublic').addEventListener('change', updatePublicLabel);
+  ['notifyGreen', 'notifyOrange', 'notifyRed'].forEach(id =>
+    document.getElementById(id).addEventListener('change', updateNotifyNote)
+  );
   document.getElementById('btnTypeLaunch').addEventListener('click',      () => setSiteType('launch'));
   document.getElementById('btnTypeLanding').addEventListener('click',     () => setSiteType('landing'));
   document.getElementById('btnTypeOpportunity').addEventListener('click', () => setSiteType('opportunity'));
@@ -1341,10 +1493,12 @@
   drawStationMarkersOnEditorMap();
 
   if (editId) {
-    // Editing existing: hide preset picker entirely
+    // Editing existing: hide preset picker, show backtester
     document.getElementById('presetPanel').style.display = 'none';
     document.getElementById('presetActiveBanner').style.display = 'none';
     await loadEdit(editId);
+    document.getElementById('backtestSection').style.display = '';
+    runBacktest(null);
   } else {
     // New ruleset: load and show preset panel
     try {

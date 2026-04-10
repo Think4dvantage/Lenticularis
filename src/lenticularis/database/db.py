@@ -34,6 +34,14 @@ def _run_column_migrations(engine) -> None:
             conn.execute(text("ALTER TABLE rulesets ADD COLUMN org_id TEXT REFERENCES organizations(id)"))
             conn.commit()
             logger.info("Migration: added rulesets.org_id column")
+        if "notify_on" not in cols:
+            conn.execute(text("ALTER TABLE rulesets ADD COLUMN notify_on TEXT"))
+            conn.commit()
+            logger.info("Migration: added rulesets.notify_on column")
+        if "last_notified_decision" not in cols:
+            conn.execute(text("ALTER TABLE rulesets ADD COLUMN last_notified_decision TEXT"))
+            conn.commit()
+            logger.info("Migration: added rulesets.last_notified_decision column")
 
         # ── users ──
         ucols = {row[1] for row in conn.execute(text("PRAGMA table_info(users)")).fetchall()}

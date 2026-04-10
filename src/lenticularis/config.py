@@ -61,6 +61,17 @@ class StationDedupConfig(BaseModel):
     distance_m: float = 300.0
 
 
+class SmtpConfig(BaseModel):
+    enabled: bool = False
+    host: str = "smtp.protonmail.ch"
+    port: int = 587
+    user: str = ""
+    password: str = ""
+    from_address: str = ""
+    from_name: str = "Lenticularis"
+    timeout_seconds: int = 30
+
+
 class GoogleOAuthConfig(BaseModel):
     enabled: bool = False
     client_id: str = ""
@@ -90,6 +101,7 @@ class MainConfig(BaseModel):
     ollama: OllamaConfig = OllamaConfig()
     station_dedup: StationDedupConfig = StationDedupConfig()
     oauth: OAuthConfig = OAuthConfig()
+    smtp: SmtpConfig = SmtpConfig()
 
 
 #Module vars

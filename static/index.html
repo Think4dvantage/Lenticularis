@@ -365,15 +365,15 @@ const _mapReplay = new ReplayEngine(
     const el = document.getElementById('tnTimeDisplay');
     if (el) {
       el.textContent = (isForecast ? '📡 ' : '') +
-        d.toLocaleString([], { month:'short', day:'2-digit', hour:'2-digit', minute:'2-digit', timeZoneName:'short' });
+        d.toLocaleString([], { month:'short', day:'2-digit', hour:'2-digit', minute:'2-digit', hour12: false, timeZoneName:'short' });
       el.style.color = isForecast ? '#f6ad55' : '';
     }
     // Highlight the nearest hour button (only when not in our own play animation)
     if (!_tnPlayActive) {
-      const h = d.getUTCHours();
+      const h = d.getHours(); // local hour
       document.querySelectorAll('.tn-hour-btn').forEach(b => {
         const bh = +b.dataset.hour;
-        b.classList.toggle('active', bh === h || (d.getUTCMinutes() >= 30 && bh === h + 1));
+        b.classList.toggle('active', bh === h || (d.getMinutes() >= 30 && bh === h + 1));
       });
     }
   },
@@ -394,9 +394,11 @@ function tnInitLabels() {
   const DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const now = new Date();
+  // Use local midnight so the day labels match the user's calendar
+  const localMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
   for (let off = -3; off <= 5; off++) {
-    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) + off * 86400000);
-    const label = `${DOW[d.getUTCDay()]} ${d.getUTCDate()} ${MON[d.getUTCMonth()]}`;
+    const d = new Date(localMidnight + off * 86400000);
+    const label = `${DOW[d.getDay()]} ${d.getDate()} ${MON[d.getMonth()]}`;
     const key = off < 0 ? `m${-off}` : `${off}`;
     const el = document.getElementById(`tnLabel_${key}`);
     if (el) el.textContent = label;
@@ -510,6 +512,9 @@ function tnDayBounds(offset, dateStr) {
 function tnSeekToHour(hour) {
   const ts = _mapReplay._timestamps;
   if (!ts || ts.length === 0) return;
+  // hour is a local-time hour; convert to UTC for the seek target
+  const offsetHours = Math.round(-new Date().getTimezoneOffset() / 60);
+  const utcHour = (hour - offsetHours + 24) % 24;
   let dayMs;
   if (_tnCustomDate) {
     dayMs = new Date(_tnCustomDate + 'T00:00:00Z').getTime();
@@ -520,7 +525,7 @@ function tnSeekToHour(hour) {
   } else {
     dayMs = new Date(new Date(ts[0]).setUTCHours(0, 0, 0, 0)).getTime();
   }
-  const target = dayMs + hour * 3600000;
+  const target = dayMs + utcHour * 3600000;
   let bestIdx = 0, bestDiff = Infinity;
   for (let i = 0; i < ts.length; i++) {
     const diff = Math.abs(new Date(ts[i]).getTime() - target);

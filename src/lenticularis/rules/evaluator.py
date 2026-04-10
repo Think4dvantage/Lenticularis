@@ -183,6 +183,96 @@ def _eval_condition(
 # Public API
 # ---------------------------------------------------------------------------
 
+def _evaluate_from_station_data(
+    ruleset: RuleSet,
+    station_data: dict[str, dict],
+) -> tuple[str, list[dict]]:
+    """
+    Core evaluation logic shared by all evaluation entry-points.
+
+    Takes pre-fetched ``station_data`` keyed by station_id and returns
+    ``(decision, condition_results)``.  The caller is responsible for
+    building ``station_data`` and recording ``no_data_stations``.
+    """
+    conditions: list[RuleCondition] = ruleset.conditions
+
+    groups: dict[str, list[RuleCondition]] = {}
+    standalone: list[RuleCondition] = []
+    for c in conditions:
+        if c.group_id:
+            groups.setdefault(c.group_id, []).append(c)
+        else:
+            standalone.append(c)
+
+    condition_results: list[dict] = []
+    triggered_colours: list[str] = []
+
+    for cond in standalone:
+        matched, actual = _eval_condition(cond, station_data)
+        condition_results.append({
+            "condition_id":      cond.id,
+            "station_id":        cond.station_id,
+            "station_b_id":      cond.station_b_id,
+            "field":             cond.field,
+            "operator":          cond.operator,
+            "value_a":           cond.value_a,
+            "value_b":           cond.value_b,
+            "actual_value":      actual,
+            "matched":           matched,
+            "result_colour":     cond.result_colour,
+            "group_id":          None,
+            "group_all_matched": None,
+        })
+        if matched:
+            triggered_colours.append(cond.result_colour)
+
+    for group_id, group_conds in groups.items():
+        evals: list[tuple[bool, Optional[float]]] = [
+            _eval_condition(c, station_data) for c in group_conds
+        ]
+        all_matched = all(m for m, _ in evals)
+        for (matched, actual), cond in zip(evals, group_conds):
+            condition_results.append({
+                "condition_id":      cond.id,
+                "station_id":        cond.station_id,
+                "station_b_id":      cond.station_b_id,
+                "field":             cond.field,
+                "operator":          cond.operator,
+                "value_a":           cond.value_a,
+                "value_b":           cond.value_b,
+                "actual_value":      actual,
+                "matched":           matched,
+                "result_colour":     cond.result_colour,
+                "group_id":          group_id,
+                "group_all_matched": all_matched,
+            })
+        if all_matched:
+            triggered_colours.append(_worst([c.result_colour for c in group_conds]))
+
+    total_units = len(standalone) + len(groups)
+    if ruleset.site_type == "opportunity":
+        if len(triggered_colours) < total_units or not triggered_colours:
+            decision = "red"
+        elif ruleset.combination_logic == "worst_wins":
+            decision = _worst(triggered_colours)
+        else:
+            counter: dict[str, int] = {"green": 0, "orange": 0, "red": 0}
+            for colour in triggered_colours:
+                counter[colour] = counter.get(colour, 0) + 1
+            decision = max(counter, key=lambda k: (counter[k], COLOUR_RANK[k]))
+    elif not triggered_colours:
+        decision = "green"
+    elif ruleset.combination_logic == "worst_wins":
+        decision = _worst(triggered_colours)
+    else:
+        counter: dict[str, int] = {"green": 0, "orange": 0, "red": 0}
+        for colour in triggered_colours:
+            counter[colour] = counter.get(colour, 0) + 1
+        decision = max(counter, key=lambda k: (counter[k], COLOUR_RANK[k]))
+
+    return decision, condition_results
+
+
 def run_evaluation(
     ruleset: RuleSet,
     influx: InfluxClient,
@@ -333,6 +423,150 @@ def run_evaluation(
     return {
         "decision":          decision,
         "evaluated_at":      datetime.now(timezone.utc).isoformat(),
+        "condition_results": condition_results,
+        "no_data_stations":  no_data,
+    }
+
+
+def run_evaluation_at(
+    ruleset: RuleSet,
+    influx: InfluxClient,
+    at_time: datetime,
+    virtual_members: Optional[dict[str, list[str]]] = None,
+) -> dict:
+    """
+    Evaluate all conditions in *ruleset* against observed weather at *at_time*.
+
+    Uses ``query_observation_snapshot_for_stations`` (±30 min window around
+    ``at_time``) instead of the latest live measurement.  Does **not** write to
+    InfluxDB — the result is ephemeral (read-only preview).
+
+    Returns the same dict shape as ``run_evaluation``.
+    """
+    conditions: list[RuleCondition] = ruleset.conditions
+
+    # ---- collect unique station IDs (expanding virtual members) -----------
+    raw_ids: set[str] = set()
+    for c in conditions:
+        raw_ids.add(c.station_id)
+        if c.station_b_id:
+            raw_ids.add(c.station_b_id)
+
+    # Expand virtual members so the snapshot query covers all physical stations
+    all_member_ids: set[str] = set()
+    for sid in raw_ids:
+        members = (virtual_members or {}).get(sid)
+        if members:
+            all_member_ids.update(members)
+        else:
+            all_member_ids.add(sid)
+
+    # ---- fetch snapshot data -----------------------------------------------
+    snapshot = influx.query_observation_snapshot_for_stations(list(all_member_ids), at_time)
+
+    # For virtual stations: pick the member with the most-recent timestamp
+    station_data: dict[str, dict] = {}
+    no_data: list[str] = []
+    for sid in raw_ids:
+        members = (virtual_members or {}).get(sid)
+        if members:
+            candidates = [snapshot[m] for m in members if m in snapshot]
+            if candidates:
+                station_data[sid] = max(
+                    candidates,
+                    key=lambda r: r.get("timestamp", datetime.min.replace(tzinfo=timezone.utc)),
+                )
+            else:
+                no_data.append(sid)
+        else:
+            if sid in snapshot:
+                station_data[sid] = snapshot[sid]
+            else:
+                no_data.append(sid)
+                logger.warning(
+                    "No InfluxDB snapshot for station %s at %s (ruleset %s)",
+                    sid, at_time.isoformat(), ruleset.id,
+                )
+
+    # ---- reuse identical condition/group/combination logic -----------------
+    groups: dict[str, list[RuleCondition]] = {}
+    standalone: list[RuleCondition] = []
+    for c in conditions:
+        if c.group_id:
+            groups.setdefault(c.group_id, []).append(c)
+        else:
+            standalone.append(c)
+
+    condition_results: list[dict] = []
+    triggered_colours: list[str] = []
+
+    for cond in standalone:
+        matched, actual = _eval_condition(cond, station_data)
+        condition_results.append({
+            "condition_id":      cond.id,
+            "station_id":        cond.station_id,
+            "station_b_id":      cond.station_b_id,
+            "field":             cond.field,
+            "operator":          cond.operator,
+            "value_a":           cond.value_a,
+            "value_b":           cond.value_b,
+            "actual_value":      actual,
+            "matched":           matched,
+            "result_colour":     cond.result_colour,
+            "group_id":          None,
+            "group_all_matched": None,
+        })
+        if matched:
+            triggered_colours.append(cond.result_colour)
+
+    for group_id, group_conds in groups.items():
+        evals: list[tuple[bool, Optional[float]]] = [
+            _eval_condition(c, station_data) for c in group_conds
+        ]
+        all_matched = all(m for m, _ in evals)
+        for (matched, actual), cond in zip(evals, group_conds):
+            condition_results.append({
+                "condition_id":      cond.id,
+                "station_id":        cond.station_id,
+                "station_b_id":      cond.station_b_id,
+                "field":             cond.field,
+                "operator":          cond.operator,
+                "value_a":           cond.value_a,
+                "value_b":           cond.value_b,
+                "actual_value":      actual,
+                "matched":           matched,
+                "result_colour":     cond.result_colour,
+                "group_id":          group_id,
+                "group_all_matched": all_matched,
+            })
+        if all_matched:
+            group_colour = _worst([c.result_colour for c in group_conds])
+            triggered_colours.append(group_colour)
+
+    total_units = len(standalone) + len(groups)
+    if ruleset.site_type == "opportunity":
+        if len(triggered_colours) < total_units or not triggered_colours:
+            decision = "red"
+        elif ruleset.combination_logic == "worst_wins":
+            decision = _worst(triggered_colours)
+        else:
+            counter: dict[str, int] = {"green": 0, "orange": 0, "red": 0}
+            for colour in triggered_colours:
+                counter[colour] = counter.get(colour, 0) + 1
+            decision = max(counter, key=lambda k: (counter[k], COLOUR_RANK[k]))
+    elif not triggered_colours:
+        decision = "green"
+    elif ruleset.combination_logic == "worst_wins":
+        decision = _worst(triggered_colours)
+    else:
+        counter: dict[str, int] = {"green": 0, "orange": 0, "red": 0}
+        for colour in triggered_colours:
+            counter[colour] = counter.get(colour, 0) + 1
+        decision = max(counter, key=lambda k: (counter[k], COLOUR_RANK[k]))
+
+    return {
+        "decision":          decision,
+        "evaluated_at":      at_time.isoformat(),
         "condition_results": condition_results,
         "no_data_stations":  no_data,
     }
@@ -489,6 +723,137 @@ def run_forecast_evaluation(
         steps.append(step)
 
     return steps
+
+
+def run_history_backfill(
+    ruleset: RuleSet,
+    influx: InfluxClient,
+    days: int = 30,
+    virtual_members: Optional[dict[str, list[str]]] = None,
+) -> list[tuple[str, str, list[dict]]]:
+    """
+    Evaluate ruleset conditions against historical weather data.
+
+    Queries ``days`` days of 30-minute aggregated weather measurements, runs
+    ``_evaluate_from_station_data`` at each time bucket and returns the results
+    as a list of ``(timestamp_iso, decision, condition_results)`` tuples.
+
+    Does **not** write to InfluxDB — call ``write_decisions_batch`` afterwards.
+    """
+    conditions: list[RuleCondition] = ruleset.conditions
+    if not conditions:
+        return []
+
+    # Collect raw station IDs referenced by conditions
+    raw_ids: set[str] = set()
+    for c in conditions:
+        raw_ids.add(c.station_id)
+        if c.station_b_id:
+            raw_ids.add(c.station_b_id)
+
+    # Expand virtual members so the history query covers all physical stations
+    all_member_ids: set[str] = set()
+    for sid in raw_ids:
+        members = (virtual_members or {}).get(sid)
+        if members:
+            all_member_ids.update(members)
+        else:
+            all_member_ids.add(sid)
+
+    history = influx.query_history_for_stations(list(all_member_ids), days=days)
+    if not history:
+        logger.info("No historical weather data found for ruleset %s backfill", ruleset.id)
+        return []
+
+    # Collect all timestamps across all stations
+    all_timestamps: set[str] = set()
+    for ts_map in history.values():
+        all_timestamps.update(ts_map.keys())
+    sorted_timestamps = sorted(all_timestamps)
+
+    results: list[tuple[str, str, list[dict]]] = []
+    for ts_iso in sorted_timestamps:
+        # Build station_data for this timestamp (resolve virtual members)
+        station_data: dict[str, dict] = {}
+        for sid in raw_ids:
+            members = (virtual_members or {}).get(sid)
+            if members:
+                candidates = [
+                    history[m][ts_iso]
+                    for m in members
+                    if m in history and ts_iso in history[m]
+                ]
+                if candidates:
+                    station_data[sid] = candidates[0]
+            else:
+                if sid in history and ts_iso in history[sid]:
+                    station_data[sid] = history[sid][ts_iso]
+
+        if not station_data:
+            continue
+
+        decision, condition_results = _evaluate_from_station_data(ruleset, station_data)
+        results.append((ts_iso, decision, condition_results))
+
+    logger.info(
+        "History backfill for ruleset %s: %d time-buckets evaluated over %d days",
+        ruleset.id, len(results), days,
+    )
+    return results
+
+
+def write_decisions_batch(
+    ruleset: RuleSet,
+    results: list[tuple[str, str, list[dict]]],
+    influx: InfluxClient,
+) -> None:
+    """
+    Write a batch of historical evaluation decisions to InfluxDB.
+
+    Each entry in *results* is a ``(timestamp_iso, decision, condition_results)``
+    tuple as returned by ``run_history_backfill``.  Each point is written with
+    its original historical timestamp so the decision-history chart is populated
+    back in time.
+    """
+    from influxdb_client import Point
+
+    if not results:
+        return
+
+    points = []
+    for ts_iso, decision, condition_results in results:
+        try:
+            ts = datetime.fromisoformat(ts_iso)
+        except ValueError:
+            logger.warning("Invalid timestamp in backfill result: %s", ts_iso)
+            continue
+        p = (
+            Point("rule_decisions")
+            .tag("ruleset_id", ruleset.id)
+            .tag("owner_id", ruleset.owner_id)
+            .tag("site_type", ruleset.site_type)
+            .field("decision", decision)
+            .field("condition_results", json.dumps(condition_results))
+            .time(ts)
+        )
+        points.append(p)
+
+    if not points:
+        return
+
+    try:
+        influx._write_api.write(
+            bucket=influx._cfg.bucket,
+            org=influx._cfg.org,
+            record=points,
+        )
+        logger.info(
+            "Wrote %d historical decisions for ruleset %s", len(points), ruleset.id
+        )
+    except Exception as exc:
+        logger.error(
+            "Failed to write historical decisions for ruleset %s: %s", ruleset.id, exc
+        )
 
 
 def write_decision(ruleset: RuleSet, result: dict, influx: InfluxClient) -> None:

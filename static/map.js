@@ -401,7 +401,7 @@ async function loadStations() {
     }
 
     console.log(`[Lenti:map] ${placed} markers placed, total loadStations time: ${(performance.now()-t0).toFixed(0)}ms`);
-    const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
     setStatus(true, `${placed} station${placed !== 1 ? 's' : ''} · ${now}`);
   } catch (err) {
     console.error('[Lenti:map] Failed to load stations:', err);

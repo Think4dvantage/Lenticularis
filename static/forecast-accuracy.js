@@ -94,7 +94,7 @@ const CHART_DEFAULTS = {
           const ts = items[0].parsed.x;
           return new Date(ts).toLocaleString(undefined, {
             month: '2-digit', day: '2-digit',
-            hour: '2-digit', minute: '2-digit',
+            hour: '2-digit', minute: '2-digit', hour12: false,
           });
         },
       },
@@ -629,7 +629,7 @@ function setDbDot(ok) {
 function setRefreshLabel() {
   const t = typeof window.t === 'function' ? window.t : k => k;
   document.getElementById('lastRefresh').textContent =
-    t('common.updated') + ' ' + new Date().toLocaleTimeString();
+    t('common.updated') + ' ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
 }
 
 function hexToRgba(hex, alpha) {

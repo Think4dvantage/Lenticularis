@@ -227,7 +227,22 @@
     "ai_modal_explanation_label": "Spiegazione IA:",
     "ai_modal_added": "{n} condizione/i aggiunta/e.",
     "ai_modal_close": "Chiudi",
-    "ai_modal_cancel": "Annulla"
+    "ai_modal_cancel": "Annulla",
+    "backtest_title": "Testa contro dati storici",
+    "backtest_hint": "Seleziona una data e un'ora per valutare le tue regole contro i dati meteo osservati in quel momento — utile per verificare il tuo set di regole su una giornata di volo passata.",
+    "backtest_at_label": "Data e ora",
+    "backtest_run": "Testa",
+    "backtest_live": "↺ Live",
+    "backtest_no_data": "Nessun dato meteo trovato per l'orario selezionato.",
+    "backtest_result_at": "Risultato — {ts}",
+    "backtest_result_live": "Risultato in tempo reale",
+    "section_notifications": "Notifiche e-mail",
+    "notify_hint": "Ricevi un'e-mail quando la decisione cambia. Le notifiche vengono inviate solo in caso di cambio di stato.",
+    "notify_on_label": "Avvisami quando la decisione diventa",
+    "notify_green": "Verde",
+    "notify_orange": "Arancione",
+    "notify_red": "Rosso",
+    "notify_sending_to": "Le e-mail verranno inviate a {email}"
   },
   "forecast_accuracy": {
     "title": "Precisione previsioni",
@@ -346,7 +361,7 @@
       "daily_decisions": "Decisioni giornaliere",
       "daily_decisions_sub": "Valutazioni al giorno per tutti gli insiemi di regole",
       "hourly_pattern": "Tendenza oraria",
-      "hourly_pattern_sub": "% stato per ora del giorno (UTC), tutti gli insiemi di regole"
+      "hourly_pattern_sub": "% stato per ora del giorno (ora locale), tutti gli insiemi di regole"
     },
     "period_labels": {
       "now": "snapshot attuale (ultima misura per stazione)",

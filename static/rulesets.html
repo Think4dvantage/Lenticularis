@@ -307,7 +307,7 @@
       const labels = { green: 'Status Ok', orange: 'Warning', red: 'Stop' };
       strip.innerHTML = steps.map(s => {
         const dt = new Date(s.valid_time);
-        const label = `${dt.toUTCString().slice(0, 22)} — ${labels[s.decision] || s.decision}`;
+        const label = `${dt.toLocaleString([], { weekday:'short', month:'short', day:'2-digit', hour:'2-digit', minute:'2-digit', hour12: false })} — ${labels[s.decision] || s.decision}`;
         return `<div class="fc-cell ${s.decision}" title="${label}"></div>`;
       }).join('');
     } catch {

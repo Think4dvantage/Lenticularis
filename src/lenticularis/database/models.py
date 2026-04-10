@@ -131,6 +131,11 @@ class RuleSet(Base):
     # Preset — admin-curated template visible to all pilots in the new-ruleset form
     is_preset = Column(Boolean, nullable=False, default=False)
 
+    # Email notifications — comma-separated colours that trigger a notification
+    # on state-change, e.g. "green" or "green,orange". NULL = disabled.
+    notify_on = Column(String, nullable=True)
+    last_notified_decision = Column(String, nullable=True)
+
     # Organisation ownership (null for personal rulesets)
     org_id       = Column(String, ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True)
     organization = relationship("Organization", back_populates="rulesets")

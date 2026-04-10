@@ -567,12 +567,21 @@ function renderFlyable(data) {
 }
 
 function renderHourly(data) {
+  // data[i].hour is in UTC — shift to local browser time
+  const offsetHours = Math.round(-new Date().getTimezoneOffset() / 60);
+  // Build a lookup: utcHour → data row
+  const byUtcHour = Object.fromEntries(data.map(d => [d.hour, d]));
+  // Walk local hours 0..23, map back to UTC hour, pick data
+  const localData = Array.from({ length: 24 }, (_, localH) => {
+    const utcH = (localH - offsetHours + 24) % 24;
+    return byUtcHour[utcH] ?? { hour: utcH, green_pct: 0, orange_pct: 0, red_pct: 0, total: 0 };
+  });
   mkChart('chartHourly', 'bar', {
-    labels: data.map(d => `${String(d.hour).padStart(2,'0')}h`),
+    labels: localData.map((_, localH) => `${String(localH).padStart(2,'0')}h`),
     datasets: [
-      { label: window.t('decisions.green') + ' %',  data: data.map(d => d.green_pct),  backgroundColor: C.green.bg,  borderColor: C.green.border,  borderWidth: 1, stack: 'a' },
-      { label: window.t('decisions.orange') + ' %', data: data.map(d => d.orange_pct), backgroundColor: C.orange.bg, borderColor: C.orange.border, borderWidth: 1, stack: 'a' },
-      { label: window.t('decisions.red') + ' %',    data: data.map(d => d.red_pct),    backgroundColor: C.red.bg,    borderColor: C.red.border,    borderWidth: 1, stack: 'a' },
+      { label: window.t('decisions.green') + ' %',  data: localData.map(d => d.green_pct),  backgroundColor: C.green.bg,  borderColor: C.green.border,  borderWidth: 1, stack: 'a' },
+      { label: window.t('decisions.orange') + ' %', data: localData.map(d => d.orange_pct), backgroundColor: C.orange.bg, borderColor: C.orange.border, borderWidth: 1, stack: 'a' },
+      { label: window.t('decisions.red') + ' %',    data: localData.map(d => d.red_pct),    backgroundColor: C.red.bg,    borderColor: C.red.border,    borderWidth: 1, stack: 'a' },
     ],
   }, {
     responsive: true, maintainAspectRatio: false,
@@ -838,7 +847,7 @@ function esc(s) {
 }
 function fmtDt(iso) {
   if (!iso) return '—';
-  return new Date(iso).toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
+  return new Date(iso).toLocaleString([], { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
 }
 </script>
 </body>
