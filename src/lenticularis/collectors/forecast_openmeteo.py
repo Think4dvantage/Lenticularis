@@ -28,7 +28,8 @@ from datetime import datetime, timedelta, timezone
 from lenticularis.collectors.forecast_base import BaseForecastCollector
 from lenticularis.models.weather import ForecastPoint
 
-_OPENMETEO_URL = "https://api.open-meteo.com/v1/forecast"
+_OPENMETEO_URL_FREE       = "https://api.open-meteo.com/v1/forecast"
+_OPENMETEO_URL_COMMERCIAL = "https://customer-api.open-meteo.com/v1/forecast"
 
 # Open-Meteo variable names → ForecastPoint fields
 _HOURLY_VARS = [
@@ -62,18 +63,21 @@ class ForecastOpenMeteoCollector(BaseForecastCollector):
         # Open-Meteo maximum is 16 days; we cap at horizon_hours
         forecast_days = min((horizon_hours // 24) + 1, 16)
 
-        data = await self._get(
-            _OPENMETEO_URL,
-            params={
-                "latitude": lat,
-                "longitude": lon,
-                "hourly": ",".join(_HOURLY_VARS),
-                "wind_speed_unit": "kmh",
-                "forecast_days": forecast_days,
-                "models": "icon_seamless",
-                "timezone": "UTC",
-            },
-        )
+        api_key = self.config.get("api_key")
+        url = _OPENMETEO_URL_COMMERCIAL if api_key else _OPENMETEO_URL_FREE
+        params: dict = {
+            "latitude": lat,
+            "longitude": lon,
+            "hourly": ",".join(_HOURLY_VARS),
+            "wind_speed_unit": "kmh",
+            "forecast_days": forecast_days,
+            "models": "icon_seamless",
+            "timezone": "UTC",
+        }
+        if api_key:
+            params["apikey"] = api_key
+
+        data = await self._get(url, params=params)
 
         hourly = data.get("hourly", {})
         times: list[str] = hourly.get("time", [])

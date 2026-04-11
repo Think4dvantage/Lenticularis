@@ -30,6 +30,13 @@
 - **Fields**: `wind_speed`, `wind_gust`, `wind_direction`, `temperature`, `humidity`, `pressure_qnh`, `precipitation`
 - Kept indefinitely — enables forecast-vs-actual accuracy analysis.
 
+### `wind_forecast_grid`
+- **Tags**: `grid_id` (e.g. `"46.00_7.00"`), `level_hpa` (950/900/850/800/750/700/600/500), `init_date` (YYYY-MM-DD)
+- **Timestamp**: `valid_time` (UTC)
+- **Fields**: `wind_speed` (km/h), `wind_direction` (degrees int), `lat`, `lon`
+- Altitude → hPa mapping: 500m→950, 1000m→900, 1500m→850, 2000m→800, 2500m→750, 3000m→700, 4000m→600, 5000m→500 (550hPa is not available in ICON-seamless)
+- Written by `collectors/forecast_grid.py` via `influx.write_forecast_grid()`; queried by `influx.query_forecast_grid(start_dt, end_dt, level_hpa)` which deduplicates to latest `init_date` per (`grid_id`, `valid_time`)
+
 ### `rule_decisions`
 - **Tags**: `launch_site_id`, `ruleset_id`, `owner_id`, `site_type`
 - **Fields**: `decision` (green/orange/red), `condition_results` (JSON array), `blocking_conditions` (JSON array of condition IDs)
@@ -107,6 +114,9 @@ All time-range endpoints accept `?from=&to=`. Best-windows also accepts `?top_n=
 - `GET /api/admin/station-dedup` — list manual dedup pairs
 - `POST /api/admin/station-dedup` — add pair `{station_id_a, station_id_b, note?}`; calls `rebuild_display_registry` immediately
 - `DELETE /api/admin/station-dedup/{id}` — remove pair; calls `rebuild_display_registry` immediately
+
+### Wind Forecast Grid
+- `GET /api/wind-forecast/grid?date=YYYY-MM-DD&level_m=1500` — requires `require_pilot`; maps `level_m` → `level_hpa` via `ALTITUDE_TO_HPA`; returns `{date, level_m, level_hpa, grid:[{lat,lon},...], frames:[{t, ws:[...], wd:[...]},...]}`; `grid` order is canonical (lat desc, lon asc, 171 points); `ws`/`wd` are parallel arrays indexed to `grid`; `null` for missing data
 
 ### AI
 - `POST /api/ai/suggest-conditions` — Ollama-powered natural-language → condition JSON
@@ -211,6 +221,8 @@ The frontend mirrors this with a client-side `ReplayEngine._cache` (Map, 10 min 
 `BaseForecastCollector.collect_all_iter` (in `collectors/forecast_base.py`) iterates stations **serially** (concurrency=1). With Open-Meteo's ~7 s API response latency, this gives ~0.14 req/s (~8 req/min) — well within the free-tier rate limits. 475 stations complete in ~55 min, safely within the 60-min collection interval.
 
 `BaseForecastCollector._get` includes **429 retry with backoff**: on HTTP 429, waits 10s, 30s, 60s between successive retries (3 attempts total) before raising. This handles transient rate-limit spikes without silently dropping stations.
+
+**Commercial API key**: when `api_key` is set under any `forecast_collectors[*].config` in `config.yml`, both `ForecastOpenMeteoCollector` and `ForecastGridCollector` switch to `customer-api.open-meteo.com` (unlimited rate limits). The scheduler extracts the key from the first enabled forecast-collector entry with a non-empty key. The grid collector no longer sleeps between batches when running on a paid plan (inter-batch sleep was removed; 429 retry remains as safety net).
 
 ---
 

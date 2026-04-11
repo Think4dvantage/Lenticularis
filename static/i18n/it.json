@@ -5,6 +5,7 @@
     "rulesets": "Regole",
     "stats": "Statistiche",
     "foehn": "Föhn",
+    "wind_forecast": "Previsione del vento",
     "admin": "Admin",
     "sign_in": "Accedi",
     "sign_out": "Esci",
@@ -533,6 +534,14 @@
     "col_condition": "Condizione",
     "col_actual": "Attuale",
     "col_triggered": "Attivata"
+  },
+  "wind_forecast": {
+    "title": "Previsione del vento",
+    "loading": "⏳ Caricamento…",
+    "no_data": "Nessun dato di previsione disponibile. Il collettore griglia potrebbe non essere ancora partito.",
+    "play": "▶ Play",
+    "stop": "⏸ Stop",
+    "alt_label": "{m}m"
   },
   "admin": {
     "title": "Pannello admin",

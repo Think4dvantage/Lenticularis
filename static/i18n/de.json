@@ -5,6 +5,7 @@
     "rulesets": "Regelwerke",
     "stats": "Statistik",
     "foehn": "Föhn",
+    "wind_forecast": "Windvorhersage",
     "admin": "Admin",
     "sign_in": "Anmelden",
     "sign_out": "Abmelden",
@@ -532,6 +533,14 @@
     "col_condition": "Bedingung",
     "col_actual": "Aktuell",
     "col_triggered": "Ausgelöst"
+  },
+  "wind_forecast": {
+    "title": "Windvorhersage",
+    "loading": "⏳ Lädt…",
+    "no_data": "Keine Vorhersagedaten verfügbar. Der Grid-Collector hat noch nicht gestartet.",
+    "play": "▶ Play",
+    "stop": "⏸ Stop",
+    "alt_label": "{m}m"
   },
   "admin": {
     "title": "Admin-Panel",

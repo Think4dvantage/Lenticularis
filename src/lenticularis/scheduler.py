@@ -27,6 +27,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 
 from lenticularis.collectors.ecowitt import EcowittCollector
 from lenticularis.collectors.foehn import FoehnCollector
+from lenticularis.collectors.forecast_grid import ForecastGridCollector
 from lenticularis.collectors.forecast_openmeteo import ForecastOpenMeteoCollector
 from lenticularis.collectors.holfuy import HolfuyCollector
 from lenticularis.collectors.metar import MetarCollector
@@ -236,6 +237,33 @@ class CollectorScheduler:
         )
         logger.info("Registered foehn status collector with 10-minute interval")
 
+        # ---- wind forecast grid collector -----------------------------------
+        self._collector_health["forecast_grid"] = {
+            "collector": "grid",
+            "type": "forecast",
+            "enabled": True,
+            "interval_minutes": 180,
+            "status": "scheduled",
+            "last_started_at": None,
+            "last_finished_at": None,
+            "last_success_at": None,
+            "last_error_at": None,
+            "last_error": None,
+            "last_measurement_count": None,
+            "consecutive_failures": 0,
+        }
+        self._scheduler.add_job(
+            func=self._run_grid_forecast_collector,
+            trigger=IntervalTrigger(minutes=180),
+            id="forecast_grid",
+            name="wind forecast grid collector",
+            misfire_grace_time=600,
+            coalesce=True,
+            max_instances=1,
+            next_run_time=None,
+        )
+        logger.info("Registered wind forecast grid collector with 180-minute interval")
+
         # ---- ruleset evaluator (writes rule_decisions to InfluxDB) ----------
         if self._session_factory is not None:
             self._collector_health["ruleset_evaluator"] = {
@@ -288,6 +316,12 @@ class CollectorScheduler:
                         self._trigger_now(f"forecast_{name}")
                     ),
                 )
+
+        # Grid forecast collector starts after a longer delay (doesn't need stations)
+        asyncio.get_event_loop().call_later(
+            random.uniform(_JITTER_SECONDS * 2, _JITTER_SECONDS * 4),
+            lambda: asyncio.ensure_future(self._trigger_now("forecast_grid")),
+        )
 
         # Foehn collector starts after observation collectors have populated data
         asyncio.get_event_loop().call_later(
@@ -600,6 +634,71 @@ class CollectorScheduler:
                 "consecutive_failures": int(health.get("consecutive_failures", 0)) + 1,
             })
             logger.error("Forecast collector %s failed: %s", name, exc, exc_info=True)
+
+    async def _run_grid_forecast_collector(self) -> None:
+        """Collect wind forecasts for the 0.25° Switzerland grid and write to InfluxDB."""
+        health = self._collector_health.setdefault("forecast_grid", {
+            "collector": "grid",
+            "type": "forecast",
+            "enabled": True,
+            "interval_minutes": 180,
+            "status": "pending",
+            "last_started_at": None,
+            "last_finished_at": None,
+            "last_success_at": None,
+            "last_error_at": None,
+            "last_error": None,
+            "last_measurement_count": None,
+            "consecutive_failures": 0,
+        })
+
+        started_at = datetime.now(timezone.utc)
+        health["status"] = "running"
+        health["last_started_at"] = started_at
+        logger.info("[Lenti:grid-collector] Starting grid forecast collector run")
+
+        # Inherit the Open-Meteo API key from whichever forecast collector has one
+        api_key: str | None = None
+        for fc_cfg in self._cfg.forecast_collectors:
+            k = (fc_cfg.config or {}).get("api_key")
+            if k:
+                api_key = k
+                break
+
+        collector = ForecastGridCollector(api_key=api_key)
+        if api_key:
+            logger.info("[Lenti:grid-collector] Using commercial Open-Meteo API key")
+        try:
+            points = await collector.collect_all(horizon_hours=120)
+            if points:
+                self._influx.write_forecast_grid(points)
+
+            finished_at = datetime.now(timezone.utc)
+            health.update({
+                "status": "ok" if points else "ok_no_data",
+                "last_finished_at": finished_at,
+                "last_success_at": finished_at,
+                "last_error_at": None,
+                "last_error": None,
+                "last_measurement_count": len(points),
+                "consecutive_failures": 0,
+            })
+            logger.info(
+                "[Lenti:grid-collector] Run complete — wrote %d grid forecast points",
+                len(points),
+            )
+        except Exception as exc:
+            finished_at = datetime.now(timezone.utc)
+            health.update({
+                "status": "error",
+                "last_finished_at": finished_at,
+                "last_error_at": finished_at,
+                "last_error": str(exc),
+                "consecutive_failures": int(health.get("consecutive_failures", 0)) + 1,
+            })
+            logger.error("[Lenti:grid-collector] Run failed: %s", exc, exc_info=True)
+        finally:
+            await collector.close()
 
     def update_collector_runtime(
         self,

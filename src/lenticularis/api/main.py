@@ -38,6 +38,7 @@ from lenticularis.api.routers import stats as stats_router
 from lenticularis.api.routers import admin as admin_router
 from lenticularis.api.routers import ai as ai_router
 from lenticularis.api.routers import org as org_router
+from lenticularis.api.routers import wind_forecast as wind_forecast_router
 from lenticularis.database.db import init_db, get_session_factory
 from lenticularis.collectors.foehn import _VIRTUAL_WEATHER_STATIONS
 from lenticularis.services.dedup import build_deduped_registry
@@ -282,6 +283,7 @@ def create_app() -> FastAPI:
     app.include_router(admin_router.router)
     app.include_router(ai_router.router)
     app.include_router(org_router.router)
+    app.include_router(wind_forecast_router.router)
 
     # Static files (frontend)
     static_dir = Path(__file__).parent.parent.parent.parent / "static"
@@ -354,6 +356,10 @@ def create_app() -> FastAPI:
         @app.get("/foehn", include_in_schema=False)
         async def serve_foehn():
             return FileResponse(str(static_dir / "foehn.html"))
+
+        @app.get("/wind-forecast", include_in_schema=False)
+        async def serve_wind_forecast():
+            return FileResponse(str(static_dir / "wind-forecast.html"))
 
         @app.get("/admin", include_in_schema=False)
         async def serve_admin():

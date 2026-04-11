@@ -5,6 +5,7 @@
     "rulesets": "Règles",
     "stats": "Statistiques",
     "foehn": "Foehn",
+    "wind_forecast": "Prévision du vent",
     "admin": "Admin",
     "sign_in": "Connexion",
     "sign_out": "Déconnexion",
@@ -532,6 +533,14 @@
     "col_condition": "Condition",
     "col_actual": "Actuel",
     "col_triggered": "Déclenchée"
+  },
+  "wind_forecast": {
+    "title": "Prévision du vent",
+    "loading": "⏳ Chargement…",
+    "no_data": "Aucune donnée de prévision disponible. Le collecteur de grille n'a peut-être pas encore démarré.",
+    "play": "▶ Play",
+    "stop": "⏸ Stop",
+    "alt_label": "{m}m"
   },
   "admin": {
     "title": "Panneau admin",

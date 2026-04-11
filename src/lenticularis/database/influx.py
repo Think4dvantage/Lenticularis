@@ -844,6 +844,116 @@ from(bucket: "{self._cfg.bucket}")
             raise
 
     # ------------------------------------------------------------------
+    # Wind forecast grid — write + query
+    # ------------------------------------------------------------------
+
+    def write_forecast_grid(self, points: list) -> None:
+        """
+        Write a batch of GridForecastPoint objects to the ``wind_forecast_grid``
+        measurement.
+
+        Tags:   ``grid_id``, ``level_hpa``, ``init_date``
+        Fields: ``wind_speed``, ``wind_direction``, ``lat``, ``lon``
+        Time:   ``valid_time`` (UTC)
+        """
+        from lenticularis.models.weather import GridForecastPoint  # avoid circular at module level
+        if not points:
+            return
+
+        influx_points: list[Point] = []
+        for fp in points:
+            p = (
+                Point("wind_forecast_grid")
+                .tag("grid_id",   fp.grid_id)
+                .tag("level_hpa", str(fp.level_hpa))
+                .tag("init_date", fp.init_time.astimezone(timezone.utc).strftime("%Y-%m-%d"))
+                .time(int(fp.valid_time.timestamp()), "s")
+                .field("lat", float(fp.lat))
+                .field("lon", float(fp.lon))
+            )
+            if fp.wind_speed is not None:
+                p = p.field("wind_speed", float(fp.wind_speed))
+            if fp.wind_direction is not None:
+                p = p.field("wind_direction", float(fp.wind_direction))
+            influx_points.append(p)
+
+        try:
+            self._write_api.write(
+                bucket=self._cfg.bucket, org=self._cfg.org, record=influx_points
+            )
+            logger.debug("Wrote %d wind_forecast_grid points to InfluxDB", len(influx_points))
+        except Exception as exc:
+            logger.error("InfluxDB wind_forecast_grid write error: %s", exc)
+            raise
+
+    def query_forecast_grid(
+        self, start_dt: datetime, end_dt: datetime, level_hpa: int
+    ) -> list[dict]:
+        """
+        Return all grid-cell wind forecasts for the given day and pressure level.
+
+        Deduplicates to the latest ``init_date`` per (``grid_id``, ``valid_time``).
+
+        Returns a flat list of dicts:
+            {"grid_id": str, "lat": float, "lon": float,
+             "valid_time": ISO str, "wind_speed": float|None,
+             "wind_direction": int|None}
+        """
+        start_str = start_dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        end_str   = end_dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        flux = f"""
+from(bucket: "{self._cfg.bucket}")
+  |> range(start: {start_str}, stop: {end_str})
+  |> filter(fn: (r) => r._measurement == "wind_forecast_grid")
+  |> filter(fn: (r) => r.level_hpa == "{level_hpa}")
+  |> pivot(rowKey: ["_time", "grid_id", "level_hpa", "init_date"], columnKey: ["_field"], valueColumn: "_value")
+"""
+        try:
+            tables = self._query_api.query(flux, org=self._cfg.org)
+        except Exception as exc:
+            logger.error("InfluxDB query_forecast_grid error: %s", exc)
+            return []
+
+        # Deduplicate: keep latest init_date per (grid_id, valid_time)
+        raw: dict[tuple[str, str], dict] = {}
+        for table in tables:
+            for record in table.records:
+                grid_id    = record.values.get("grid_id", "")
+                vt_iso     = record.get_time().isoformat()
+                init_date  = record.values.get("init_date", "")
+                key = (grid_id, vt_iso)
+                existing = raw.get(key)
+                if existing is None or init_date > existing.get("_init_date", ""):
+                    raw[key] = {
+                        "grid_id":        grid_id,
+                        "lat":            record.values.get("lat"),
+                        "lon":            record.values.get("lon"),
+                        "valid_time":     vt_iso,
+                        "wind_speed":     record.values.get("wind_speed"),
+                        "wind_direction": record.values.get("wind_direction"),
+                        "_init_date":     init_date,
+                    }
+
+        result = []
+        for row in raw.values():
+            wd = row.get("wind_direction")
+            result.append({
+                "grid_id":        row["grid_id"],
+                "lat":            row["lat"],
+                "lon":            row["lon"],
+                "valid_time":     row["valid_time"],
+                "wind_speed":     row.get("wind_speed"),
+                "wind_direction": int(wd) if wd is not None else None,
+            })
+        result.sort(key=lambda r: r["valid_time"])
+        logger.debug(
+            "query_forecast_grid: %d rows for level_hpa=%d, %s–%s",
+            len(result), level_hpa, start_str, end_str,
+        )
+        return result
+
+    # ------------------------------------------------------------------
     # Forecast — query
     # ------------------------------------------------------------------
 

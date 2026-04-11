@@ -21,13 +21,18 @@ forecast_collectors:
     enabled: true
     interval_minutes: 180   # every 3 h — aligns with ICON-seamless update cadence
     horizon_hours: 30       # covers the next ~30 h where forecast freshness is most important
-    config: {}
+    config:
+      # Commercial API key from open-meteo.com — enables the customer endpoint
+      # (no rate limits). Also used automatically by the wind forecast grid collector.
+      # Remove or leave blank to use the free public endpoint.
+      api_key: ""
 
   - name: "open-meteo"
     enabled: true
     interval_minutes: 1440  # once per day — extended window changes slowly
     horizon_hours: 120      # full 5-day horizon
-    config: {}
+    config:
+      api_key: ""  # shared with open-meteo-short — set in one place, applies to both
 
 # Weather Data Collectors
 collectors:

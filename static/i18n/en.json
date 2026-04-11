@@ -5,6 +5,7 @@
     "rulesets": "Rule Sets",
     "stats": "Statistics",
     "foehn": "Föhn",
+    "wind_forecast": "Wind Forecast",
     "admin": "Admin",
     "sign_in": "Sign in",
     "sign_out": "Sign out",
@@ -532,6 +533,14 @@
     "col_condition": "Condition",
     "col_actual": "Actual",
     "col_triggered": "Triggered"
+  },
+  "wind_forecast": {
+    "title": "Wind Forecast",
+    "loading": "⏳ Loading…",
+    "no_data": "No forecast data available. The grid collector may not have run yet.",
+    "play": "▶ Play",
+    "stop": "⏸ Stop",
+    "alt_label": "{m}m"
   },
   "admin": {
     "title": "Admin Panel",

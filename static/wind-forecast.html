@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lenticularis — Wind Forecast</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <link rel="stylesheet" href="/static/shared.css" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: #0f1117;
+      color: #e2e8f0;
+      height: 100vh;
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Nav ────────────────────────────────────────────────────── */
+    .top-nav {
+      background: #1a1f2e; border-bottom: 1px solid #2d3748;
+      padding: 0 24px; display: flex; align-items: center; gap: 0;
+      flex-shrink: 0; height: 48px;
+    }
+    .nav-brand { font-size: 1.1rem; font-weight: 600; color: #90cdf4; margin-right: 24px; white-space: nowrap; text-decoration: none; }
+    .nav-links { display: flex; gap: 2px; flex: 1; }
+    .nav-link { color: #718096; text-decoration: none; font-size: 0.85rem; padding: 6px 14px; border-radius: 6px; transition: background 0.15s, color 0.15s; }
+    .nav-link:hover  { background: #2d3748; color: #e2e8f0; }
+    .nav-link.active { background: #2d4a6e; color: #90cdf4; font-weight: 500; }
+    .nav-user { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+    .nav-btn  { background: transparent; border: 1px solid #4a5568; color: #a0aec0; font-size: 0.8rem; padding: 4px 10px; border-radius: 5px; cursor: pointer; transition: background 0.15s; }
+    .nav-btn:hover { background: #2d3748; color: #e2e8f0; }
+    #navLangPicker { display: flex; gap: 2px; margin-left: 8px; }
+    .lang-btn { background: transparent; border: 1px solid #4a5568; color: #718096; font-size: 0.72rem; padding: 3px 7px; border-radius: 4px; cursor: pointer; transition: background 0.15s; }
+    .lang-btn:hover { background: #2d3748; color: #e2e8f0; }
+    .lang-btn.active { background: #2d4a6e; color: #90cdf4; border-color: #4a7bab; }
+
+    /* ── Map wrapper ────────────────────────────────────────────── */
+    #mapWrap {
+      position: relative;
+      flex: 1;
+      overflow: hidden;
+    }
+    #map {
+      width: 100%;
+      height: 100%;
+    }
+
+    /* ── Altitude sidebar (right of map) ────────────────────────── */
+    #altSidebar {
+      position: absolute;
+      top: 50%;
+      right: 10px;
+      transform: translateY(-50%);
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .alt-btn {
+      background: #1a1f2e;
+      border: 1px solid #2d3748;
+      color: #718096;
+      font-size: 0.72rem;
+      font-weight: 500;
+      padding: 5px 9px;
+      border-radius: 6px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+      text-align: right;
+    }
+    .alt-btn:hover  { background: #2d3748; color: #e2e8f0; }
+    .alt-btn.active { background: #2d4a6e; color: #90cdf4; border-color: #4a7bab; font-weight: 700; }
+
+    /* ── No-data overlay ────────────────────────────────────────── */
+    #noDataOverlay {
+      display: none;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 900;
+      background: rgba(26,31,46,0.92);
+      border: 1px solid #2d3748;
+      border-radius: 10px;
+      padding: 20px 28px;
+      color: #90cdf4;
+      font-size: 0.9rem;
+      text-align: center;
+      max-width: 340px;
+    }
+
+    /* ── Bottom control bar ─────────────────────────────────────── */
+    #controlBar {
+      background: #111827;
+      border-top: 1px solid #2d3748;
+      flex-shrink: 0;
+      padding: 8px 12px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    /* Day row */
+    .ctrl-day-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      flex-wrap: wrap;
+    }
+    .day-btn {
+      background: #1a1f2e;
+      border: 1px solid #2d3748;
+      color: #718096;
+      font-size: 0.8rem;
+      padding: 5px 14px;
+      border-radius: 7px;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    .day-btn:hover  { background: #2d3748; color: #e2e8f0; }
+    .day-btn.active { background: #2d4a6e; color: #90cdf4; border-color: #4a7bab; font-weight: 600; }
+
+    /* Hour row */
+    .ctrl-hour-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      flex-wrap: wrap;
+    }
+    .hour-btn {
+      background: #1a1f2e;
+      border: 1px solid #1a1f2e;
+      color: #4a5568;
+      font-size: 0.72rem;
+      padding: 3px 7px;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: background 0.12s, color 0.12s;
+    }
+    .hour-btn:hover  { background: #2d3748; color: #e2e8f0; }
+    .hour-btn.active { background: #2d4a6e; color: #90cdf4; border-color: #4a7bab; font-weight: 600; }
+
+    /* Play + status row */
+    .ctrl-play-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      justify-content: center;
+    }
+    #playBtn {
+      background: #1a3a22;
+      border: 1px solid #276749;
+      color: #68d391;
+      font-size: 0.8rem;
+      padding: 5px 18px;
+      border-radius: 7px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    #playBtn:hover { background: #22543d; }
+    #playBtn.playing {
+      background: #2d2010;
+      border-color: #744210;
+      color: #f6ad55;
+    }
+    #statusMsg {
+      font-size: 0.75rem;
+      color: #4a5568;
+    }
+  </style>
+</head>
+<body>
+
+<nav class="top-nav">
+  <a href="/" class="nav-brand">🪁 Lenticularis</a>
+  <div class="nav-links">
+    <a href="/" class="nav-link" data-i18n="nav.map">Map</a>
+    <a href="/stations" class="nav-link" data-i18n="nav.stations">Stations</a>
+    <a href="/rulesets" class="nav-link" data-i18n="nav.rulesets">Rule Sets</a>
+    <a href="/stats" class="nav-link" data-i18n="nav.stats">Statistics</a>
+    <a href="/foehn" class="nav-link" data-i18n="nav.foehn">Föhn</a>
+    <a href="/wind-forecast" class="nav-link active" data-i18n="nav.wind_forecast">Wind Forecast</a>
+    <a href="/help" class="nav-link" data-i18n="nav.help">Help</a>
+  </div>
+  <div id="navLangPicker"></div>
+  <div class="nav-user" id="navUser"></div>
+</nav>
+
+<div id="mapWrap">
+  <div id="map"></div>
+
+  <!-- Altitude sidebar -->
+  <div id="altSidebar">
+    <button class="alt-btn" data-m="5000">5000m</button>
+    <button class="alt-btn" data-m="4000">4000m</button>
+    <button class="alt-btn" data-m="3000">3000m</button>
+    <button class="alt-btn" data-m="2500">2500m</button>
+    <button class="alt-btn" data-m="2000">2000m</button>
+    <button class="alt-btn active" data-m="1500">1500m</button>
+    <button class="alt-btn" data-m="1000">1000m</button>
+    <button class="alt-btn" data-m="500">500m</button>
+  </div>
+
+  <!-- No-data notice -->
+  <div id="noDataOverlay"></div>
+</div>
+
+<!-- Bottom control bar -->
+<div id="controlBar">
+  <div class="ctrl-day-row" id="dayRow">
+    <button class="day-btn active" data-offset="1" data-i18n="map.time_nav.tomorrow">Tomorrow</button>
+    <button class="day-btn" data-offset="2" data-i18n="map.time_nav.plus2">+2 Days</button>
+    <button class="day-btn" data-offset="3" data-i18n="map.time_nav.plus3">+3 Days</button>
+    <button class="day-btn" data-offset="4" data-i18n="map.time_nav.plus4">+4 Days</button>
+    <button class="day-btn" data-offset="5" data-i18n="map.time_nav.plus5">+5 Days</button>
+  </div>
+  <div class="ctrl-hour-row" id="hourRow">
+    <button class="hour-btn" data-h="7">07:00</button>
+    <button class="hour-btn" data-h="8">08:00</button>
+    <button class="hour-btn" data-h="9">09:00</button>
+    <button class="hour-btn" data-h="10">10:00</button>
+    <button class="hour-btn" data-h="11">11:00</button>
+    <button class="hour-btn" data-h="12">12:00</button>
+    <button class="hour-btn" data-h="13">13:00</button>
+    <button class="hour-btn" data-h="14">14:00</button>
+    <button class="hour-btn" data-h="15">15:00</button>
+    <button class="hour-btn" data-h="16">16:00</button>
+    <button class="hour-btn" data-h="17">17:00</button>
+    <button class="hour-btn" data-h="18">18:00</button>
+    <button class="hour-btn" data-h="19">19:00</button>
+  </div>
+  <div class="ctrl-play-row">
+    <button id="playBtn" data-i18n="wind_forecast.play">▶ Play</button>
+    <span id="statusMsg" data-i18n="wind_forecast.loading">⏳ Loading…</span>
+  </div>
+</div>
+
+<script type="module">
+// ────────────────────────────────────────────────────────────────────────────
+// Wind Forecast Map — wind-forecast.html
+// Shows an animated 0.25° grid of wind arrows over Switzerland at selectable
+// altitude levels (500 m – 5 000 m ASL).
+// ────────────────────────────────────────────────────────────────────────────
+import { initI18n, renderLangPicker } from '/static/i18n.js';
+import { renderNavAuth, fetchAuth } from '/static/auth.js';
+
+// ── Init i18n & auth ─────────────────────────────────────────────────────────
+await initI18n();
+renderNavAuth('wind-forecast');
+renderLangPicker('navLangPicker');
+console.log('[Lenti:wind-forecast] Page init — i18n + auth ready');
+
+// ── Leaflet map ──────────────────────────────────────────────────────────────
+const map = L.map('map', { center: [46.83, 8.23], zoom: 8, zoomControl: true });
+L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+  attribution: 'Map data: &copy; <a href="https://openstreetmap.org/copyright">OpenStreetMap</a> contributors, ' +
+    '<a href="https://viewfinderpanoramas.org">SRTM</a> | ' +
+    'Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a> ' +
+    '(<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC-BY-SA</a>)',
+  maxZoom: 17,
+}).addTo(map);
+console.log('[Lenti:wind-forecast] Leaflet map created, center CH');
+
+let _markerLayer = L.layerGroup().addTo(map);
+
+// ── Arrow rendering ───────────────────────────────────────────────────────────
+// Colour scale: 0–15 km/h blue → 15–30 purple → 30–50 red → 50+ solid red
+function windSpeedColor(speed) {
+  if (speed == null) return '#a0aec0';
+  function lerp(a, b, t) { return Math.round(a + (b - a) * t); }
+  function lerpRGB(c1, c2, t) {
+    return '#' + [0, 1, 2].map(i => lerp(c1[i], c2[i], t).toString(16).padStart(2, '0')).join('');
+  }
+  const blue   = [0x00, 0x3b, 0xc4];
+  const purple = [0x89, 0x00, 0xc4];
+  const red    = [0xff, 0x00, 0x00];
+  if (speed <= 15) return '#003bc4';
+  if (speed <= 30) return lerpRGB(blue,   purple, (speed - 15) / 15);
+  if (speed <= 50) return lerpRGB(purple, red,    (speed - 30) / 20);
+  return '#ff0000';
+}
+
+function markerSize(speed) {
+  const s = Math.min(Math.max(speed ?? 0, 0), 70);
+  return Math.round(20 + (s / 70) * 24); // 20–44 px (slightly smaller than station arrows)
+}
+
+function gridMarkerIcon(ws, wd) {
+  const color  = windSpeedColor(ws);
+  const size   = markerSize(ws);
+  const hasDir = wd != null;
+  const dir    = wd ?? 0;
+
+  const arrow = hasDir
+    ? `<g transform="rotate(${dir},16,16)">
+         <line x1="16" y1="4" x2="16" y2="21" stroke="black" stroke-width="7" stroke-linecap="round"/>
+         <polygon points="6,18 26,18 16,32" fill="black"/>
+         <line x1="16" y1="4" x2="16" y2="21" stroke="${color}" stroke-width="4" stroke-linecap="round"/>
+         <polygon points="6,18 26,18 16,32" fill="${color}"/>
+       </g>`
+    : `<circle cx="16" cy="16" r="5" fill="${color}" stroke="white" stroke-width="1.5"/>`;
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 32 32">
+    ${arrow}
+    <circle cx="16" cy="16" r="3" fill="white" stroke="rgba(0,0,0,0.4)" stroke-width="1"/>
+  </svg>`;
+
+  return L.divIcon({
+    html: svg,
+    className: '',
+    iconSize:   [size, size],
+    iconAnchor: [size / 2, size / 2],
+  });
+}
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let _dayOffset  = 1;         // 1 = tomorrow … 5 = +5 days
+let _levelM     = 1500;
+let _hourFrames = [];        // [{localHour:int, utc:str, ws:[...], wd:[...]}]
+let _currentHourIdx = 0;
+let _playTimer  = null;
+let _grid       = [];        // [{lat, lon}, ...] — canonical order from API
+
+// Client-side cache: "YYYY-MM-DD|levelM" → {data, fetchedAt}
+const _cache = new Map();
+const _CACHE_TTL_MS = 10 * 60 * 1000; // 10 min
+
+// ── Status helpers ────────────────────────────────────────────────────────────
+function setStatus(msg) {
+  const el = document.getElementById('statusMsg');
+  if (el) el.textContent = msg;
+}
+
+// ── Date helpers ──────────────────────────────────────────────────────────────
+function offsetToDate(offsetDays) {
+  const d = new Date();
+  d.setDate(d.getDate() + offsetDays);
+  return d.toISOString().slice(0, 10); // YYYY-MM-DD
+}
+
+// Convert UTC ISO string → local CH hour (0–23)
+const _tz = 'Europe/Zurich';
+function utcToChHour(utcIso) {
+  const d = new Date(utcIso);
+  return parseInt(new Intl.DateTimeFormat('de-CH', {
+    timeZone: _tz, hour: '2-digit', hour12: false
+  }).format(d), 10);
+}
+
+// ── Build hour frames from API response ───────────────────────────────────────
+function buildHourFrames(apiData) {
+  // apiData.frames contains all hours for the day (UTC midnight to midnight)
+  // We filter to CH local hours 07–19 inclusive
+  const frames = [];
+  for (const frame of (apiData.frames || [])) {
+    const localH = utcToChHour(frame.t);
+    if (localH >= 7 && localH <= 19) {
+      frames.push({ localHour: localH, utc: frame.t, ws: frame.ws, wd: frame.wd });
+    }
+  }
+  // Sort by UTC time (should already be sorted but let's be safe)
+  frames.sort((a, b) => a.utc.localeCompare(b.utc));
+  console.log(`[Lenti:wind-forecast] buildHourFrames: ${frames.length} frames in 07:00–19:00 CH local`);
+  return frames;
+}
+
+// ── Render one frame ──────────────────────────────────────────────────────────
+function renderFrame(frameIdx) {
+  if (!_hourFrames.length || !_grid.length) return;
+  frameIdx = Math.max(0, Math.min(frameIdx, _hourFrames.length - 1));
+  _currentHourIdx = frameIdx;
+  const frame = _hourFrames[frameIdx];
+
+  // Update hour-button active state
+  document.querySelectorAll('.hour-btn').forEach(btn => {
+    btn.classList.toggle('active', parseInt(btn.dataset.h, 10) === frame.localHour);
+  });
+
+  // Build markers
+  const t0 = performance.now();
+  _markerLayer.clearLayers();
+  let rendered = 0;
+  for (let i = 0; i < _grid.length; i++) {
+    const { lat, lon } = _grid[i];
+    const ws  = frame.ws[i];
+    const wd  = frame.wd != null ? frame.wd[i] : null;
+    if (ws == null && wd == null) continue; // skip null grid cells
+    const icon   = gridMarkerIcon(ws, wd);
+    const marker = L.marker([lat, lon], { icon, keyboard: false, alt: '' });
+    _markerLayer.addLayer(marker);
+    rendered++;
+    if (rendered <= 10) {
+      console.log(`[Lenti:wind-forecast]   grid[${i}] lat=${lat} lon=${lon} ws=${ws} wd=${wd}`);
+    }
+  }
+  const elapsed = (performance.now() - t0).toFixed(1);
+  console.log(
+    `[Lenti:wind-forecast] renderFrame ${frameIdx} — ${frame.localHour}:00 CH local (${frame.utc}) ` +
+    `— ${rendered}/${_grid.length} arrows in ${elapsed}ms`
+  );
+}
+
+// ── Play / Stop ───────────────────────────────────────────────────────────────
+function stopPlay() {
+  if (_playTimer) { clearInterval(_playTimer); _playTimer = null; }
+  const btn = document.getElementById('playBtn');
+  if (btn) {
+    btn.textContent = window.t('wind_forecast.play');
+    btn.classList.remove('playing');
+  }
+  console.log('[Lenti:wind-forecast] Play stopped');
+}
+
+function startPlay() {
+  if (_playTimer) stopPlay();
+  if (!_hourFrames.length) return;
+  // Always start from the first frame (07:00) so the full day plays through
+  renderFrame(0);
+  const btn = document.getElementById('playBtn');
+  if (btn) {
+    btn.textContent = window.t('wind_forecast.stop');
+    btn.classList.add('playing');
+  }
+  console.log(`[Lenti:wind-forecast] Play started from frame 0 — ${_hourFrames.length} frames at 1.5s/frame`);
+  _playTimer = setInterval(() => {
+    const next = _currentHourIdx + 1;
+    if (next >= _hourFrames.length) {
+      stopPlay();
+      return;
+    }
+    renderFrame(next);
+  }, 1500);
+}
+
+document.getElementById('playBtn').addEventListener('click', () => {
+  if (_playTimer) { stopPlay(); }
+  else { startPlay(); }
+});
+
+// ── Hour button clicks ────────────────────────────────────────────────────────
+document.querySelectorAll('.hour-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    stopPlay();
+    const h = parseInt(btn.dataset.h, 10);
+    const idx = _hourFrames.findIndex(f => f.localHour === h);
+    if (idx >= 0) {
+      renderFrame(idx);
+      console.log(`[Lenti:wind-forecast] Hour button clicked: ${h}:00 → frame index ${idx}`);
+    } else {
+      console.warn(`[Lenti:wind-forecast] No frame for local hour ${h}:00`);
+    }
+  });
+});
+
+// ── Load data ─────────────────────────────────────────────────────────────────
+async function loadData(dayOffset, levelM) {
+  stopPlay();
+  const dateStr  = offsetToDate(dayOffset);
+  const cacheKey = `${dateStr}|${levelM}`;
+  const now      = Date.now();
+
+  // Cache lookup
+  const cached = _cache.get(cacheKey);
+  if (cached && now - cached.fetchedAt < _CACHE_TTL_MS) {
+    console.log(`[Lenti:wind-forecast] Cache HIT for ${cacheKey} (age ${Math.round((now - cached.fetchedAt)/1000)}s)`);
+    applyData(cached.data);
+    return;
+  }
+
+  const url = `/api/wind-forecast/grid?date=${dateStr}&level_m=${levelM}`;
+  setStatus(window.t('wind_forecast.loading'));
+  document.getElementById('noDataOverlay').style.display = 'none';
+  console.log(`[Lenti:wind-forecast] Fetching ${url}`);
+  const t0 = Date.now();
+
+  try {
+    const res  = await fetchAuth(url);
+    const data = await res.json();
+    const elapsed = Date.now() - t0;
+    console.log(
+      `[Lenti:wind-forecast] Fetch done — ${data.frames?.length ?? 0} frames, ` +
+      `${data.grid?.length ?? 0} grid points, ${elapsed}ms — cache MISS for ${cacheKey}`
+    );
+
+    if (!data.frames || !data.frames.length) {
+      console.warn('[Lenti:wind-forecast] Empty frames — grid collector may not have run yet');
+      _markerLayer.clearLayers();
+      const overlay = document.getElementById('noDataOverlay');
+      overlay.textContent = window.t('wind_forecast.no_data');
+      overlay.style.display = 'block';
+      setStatus('');
+      return;
+    }
+
+    _cache.set(cacheKey, { data, fetchedAt: Date.now() });
+    applyData(data);
+  } catch (err) {
+    console.error('[Lenti:wind-forecast] Fetch error:', err);
+    setStatus(`Error: ${err.message}`);
+  }
+}
+
+function applyData(data) {
+  _grid       = data.grid || [];
+  _hourFrames = buildHourFrames(data);
+
+  if (!_hourFrames.length) {
+    console.warn('[Lenti:wind-forecast] No frames in 07:00–19:00 CH local time for this day');
+    _markerLayer.clearLayers();
+    const overlay = document.getElementById('noDataOverlay');
+    overlay.textContent = window.t('wind_forecast.no_data');
+    overlay.style.display = 'block';
+    setStatus('');
+    return;
+  }
+
+  // Default to noon (12:00) or the closest frame
+  const noonIdx = _hourFrames.findIndex(f => f.localHour === 12);
+  renderFrame(noonIdx >= 0 ? noonIdx : 0);
+  setStatus(`${data.level_m}m · ${data.level_hpa} hPa`);
+  console.log(
+    `[Lenti:wind-forecast] applyData done — ${_hourFrames.length} displayable frames, ` +
+    `grid=${_grid.length} pts, level=${data.level_m}m/${data.level_hpa}hPa`
+  );
+}
+
+// ── Day button clicks ─────────────────────────────────────────────────────────
+document.querySelectorAll('.day-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    stopPlay();
+    document.querySelectorAll('.day-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    _dayOffset = parseInt(btn.dataset.offset, 10);
+    console.log(`[Lenti:wind-forecast] Day selected: offset=${_dayOffset} (${offsetToDate(_dayOffset)})`);
+    loadData(_dayOffset, _levelM);
+  });
+});
+
+// ── Altitude button clicks ────────────────────────────────────────────────────
+document.querySelectorAll('.alt-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    stopPlay();
+    document.querySelectorAll('.alt-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    _levelM = parseInt(btn.dataset.m, 10);
+    console.log(`[Lenti:wind-forecast] Altitude selected: ${_levelM}m`);
+    loadData(_dayOffset, _levelM);
+  });
+});
+
+// ── Initial load ──────────────────────────────────────────────────────────────
+console.log('[Lenti:wind-forecast] Initial load — tomorrow at 1500m');
+loadData(_dayOffset, _levelM);
+</script>
+
+</body>
+</html>

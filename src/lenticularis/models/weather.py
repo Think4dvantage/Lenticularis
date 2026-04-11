@@ -98,6 +98,39 @@ class WeatherMeasurement(BaseModel):
     }
 
 
+# Mapping: altitude in metres ASL → nearest standard pressure level (hPa)
+# Used by the grid forecast collector and the wind-forecast API router.
+ALTITUDE_TO_HPA: dict[int, int] = {
+    500:  950,
+    1000: 900,
+    1500: 850,
+    2000: 800,
+    2500: 750,
+    3000: 700,
+    4000: 600,
+    5000: 500,
+}
+
+
+class GridForecastPoint(BaseModel):
+    """
+    A single hourly forecast value for one 0.25° grid cell at one pressure level.
+
+    Written to the ``wind_forecast_grid`` InfluxDB measurement.
+    ``grid_id`` encodes the cell centre as ``"<lat>_<lon>"`` (e.g. ``"46.00_7.00"``).
+    """
+
+    grid_id: str
+    lat: float
+    lon: float
+    level_hpa: int
+    level_m: int
+    init_time: datetime
+    valid_time: datetime
+    wind_speed: Optional[float] = None
+    wind_direction: Optional[int] = None
+
+
 class ForecastPoint(BaseModel):
     """
     A single hourly forecast value for one station from one model run.
