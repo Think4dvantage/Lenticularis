@@ -132,7 +132,9 @@
     "badge_launch_red": "🔴 START",
     "org_title": "Organisations-Regelwerke",
     "org_subtitle": "Regelwerke für {name}",
-    "back_to_org": "← Zurück zum Dashboard"
+    "back_to_org": "← Zurück zum Dashboard",
+    "tab_mine": "Meine Regelwerke",
+    "tab_gallery": "Galerie"
   },
   "editor": {
     "new_title": "Neues Regelwerk",
@@ -151,6 +153,7 @@
     "combination_hint": "Kombinationslogik: Schlechtestes gewinnt — wenn eine Bedingung ROT auslöst, ist der Platz ROT; bei ORANGE entsprechend.",
     "private_label": "Privat (nur du)",
     "public_label": "Öffentlich (Galerie)",
+    "description_placeholder": "Kurzbeschreibung für die Galerie (optional)",
     "linked_landings": "Verknüpfte Landezonen",
     "linked_landings_hint": "Wähle die Landezonen, die Piloten nach dem Start hier verwenden würden. Auf der Karte erscheint ein Halo in der Farbe der besten Lande-Entscheidung.",
     "no_landings": "Noch keine Landezonen — erstelle zuerst ein Regelwerk vom Typ \"Landezone\".",
@@ -436,6 +439,20 @@
       "col_failures": "Fehler",
       "col_interval": "Intervall"
     }
+  },
+  "gallery": {
+    "title": "Regelwerk-Galerie",
+    "subtitle": "Durchsuche und klone öffentliche Regelwerke der Community.",
+    "search_placeholder": "Nach Name oder Beschreibung suchen…",
+    "by_pilot": "von {username}",
+    "clone_btn": "Klonen",
+    "cloning": "Wird geklont…",
+    "cloned_success": "Geklont! Editor wird geöffnet…",
+    "no_results": "Noch keine öffentlichen Regelwerke. Teile dein erstes, indem du es im Editor als öffentlich markierst.",
+    "no_matches": "Keine Regelwerke gefunden.",
+    "sign_in_prompt": "Anmelden um Regelwerke der Community zu durchsuchen und zu klonen.",
+    "conditions_count": "{n} Bedingung",
+    "conditions_count_plural": "{n} Bedingungen"
   },
   "auth": {
     "sign_in_title": "Anmelden",

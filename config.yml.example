@@ -118,6 +118,16 @@ collectors:
         - id: "4096"
           name: "Niederhuenigen"
 
+  - name: "fga"
+    enabled: false
+    interval_minutes: 10
+    config: {}
+    # Fluggruppe Aletsch / Meteo Oberwallis stations (Valais region).
+    # Fetches XML from https://meteo-oberwallis.ch/wetter/{station}/daten.xml
+    # No API key required — all 9 public stations are collected automatically.
+    # Stations: Fieschertal, Bellwald Fleschen, Ried-Brig, Chaeserstatt,
+    #           Jeizinen, Grimselpass, Hohbiel, Rothorli, Klaena
+
   - name: "ecowitt"
     enabled: false
     interval_minutes: 5

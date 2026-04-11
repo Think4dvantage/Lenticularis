@@ -133,7 +133,9 @@
     "badge_launch_red": "🔴 DECOLLO",
     "org_title": "Regole dell'organizzazione",
     "org_subtitle": "Regole per {name}",
-    "back_to_org": "← Torna alla dashboard"
+    "back_to_org": "← Torna alla dashboard",
+    "tab_mine": "Le mie regole",
+    "tab_gallery": "Galleria"
   },
   "editor": {
     "new_title": "Nuova regola",
@@ -155,6 +157,7 @@
     "opportunity_hint": "Un luogo speciale o una finestra di condizioni — es. uno spot termico, una finestra di volo di distanza, o qualsiasi condizione favorevole da monitorare.",
     "private_label": "Privato (solo tu)",
     "public_label": "Pubblico (galleria)",
+    "description_placeholder": "Breve descrizione mostrata nella galleria (opzionale)",
     "linked_landings": "Zone di atterraggio collegate",
     "linked_landings_hint": "Seleziona le zone di atterraggio che i piloti userebbero dopo aver decollato qui. La mappa mostrerà un alone colorato in base alla migliore decisione di atterraggio.",
     "no_landings": "Nessuna zona di atterraggio ancora — crea prima un insieme di regole con tipo \"Zona di atterraggio\".",
@@ -437,6 +440,20 @@
       "col_failures": "Fallimenti",
       "col_interval": "Intervallo"
     }
+  },
+  "gallery": {
+    "title": "Galleria regole",
+    "subtitle": "Sfoglia e clona le regole pubbliche condivise dalla comunità.",
+    "search_placeholder": "Cerca per nome o descrizione…",
+    "by_pilot": "di {username}",
+    "clone_btn": "Clona",
+    "cloning": "Clonazione…",
+    "cloned_success": "Clonato! Apertura editor…",
+    "no_results": "Nessuna regola pubblica ancora. Sii il primo a condividere la tua marcandola come pubblica nell'editor.",
+    "no_matches": "Nessuna regola corrisponde alla ricerca.",
+    "sign_in_prompt": "Accedi per sfogliare e clonare le regole della comunità.",
+    "conditions_count": "{n} condizione",
+    "conditions_count_plural": "{n} condizioni"
   },
   "auth": {
     "sign_in_title": "Accedi",

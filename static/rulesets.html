@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Lenticularis — My Rule Sets</title>
+  <title>Lenticularis — Rule Sets</title>
   <link rel="stylesheet" href="/static/shared.css" />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -31,17 +31,38 @@
     /* ── Page ── */
     .page { max-width: 900px; margin: 0 auto; padding: 32px 20px; width: 100%; }
 
-    .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 28px; }
+    .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
     .page-header h1 { font-size: 1.4rem; font-weight: 600; }
     .page-header p { color: #718096; font-size: 0.85rem; margin-top: 4px; }
 
     .btn { display: inline-flex; align-items: center; gap: 7px; padding: 9px 18px; border-radius: 7px; font-size: 0.88rem; font-weight: 500; cursor: pointer; border: none; transition: background 0.15s; text-decoration: none; }
     .btn-primary { background: #2b6cb0; color: #fff; }
     .btn-primary:hover { background: #3182ce; }
+    .btn-primary:disabled { background: #1a3a5e; color: #4a6a8e; cursor: default; }
     .btn-danger  { background: transparent; border: 1px solid #7b2020; color: #fc8181; }
     .btn-danger:hover { background: #2d1515; }
     .btn-ghost   { background: transparent; border: 1px solid #2d3748; color: #a0aec0; }
     .btn-ghost:hover { background: #2d3748; color: #e2e8f0; }
+
+    /* ── Tabs ── */
+    .tabs { display: flex; gap: 0; border-bottom: 1px solid #2d3748; margin-bottom: 24px; }
+    .tab-btn {
+      background: none; border: none; border-bottom: 2px solid transparent; color: #718096;
+      font-size: 0.88rem; font-weight: 500; padding: 8px 18px; cursor: pointer;
+      transition: color 0.15s, border-color 0.15s; margin-bottom: -1px;
+    }
+    .tab-btn:hover { color: #e2e8f0; }
+    .tab-btn.active { color: #90cdf4; border-bottom-color: #90cdf4; }
+
+    /* ── Search (gallery) ── */
+    .search-bar { margin-bottom: 20px; }
+    .search-input {
+      width: 100%; padding: 10px 14px; background: #1a1f2e; border: 1px solid #2d3748;
+      border-radius: 8px; color: #e2e8f0; font-size: 0.9rem; outline: none;
+      transition: border-color 0.15s;
+    }
+    .search-input:focus { border-color: #4a7bab; }
+    .search-input::placeholder { color: #4a5568; }
 
     /* ── Cards ── */
     .cards { display: flex; flex-direction: column; gap: 14px; }
@@ -53,7 +74,9 @@
     .card-icon { font-size: 1.5rem; flex-shrink: 0; margin-top: 2px; }
     .card-body { flex: 1; min-width: 0; text-decoration: none; color: inherit; cursor: pointer; }
     .card-body:hover .card-title { color: #90cdf4; }
+    .card-body-plain { flex: 1; min-width: 0; }
     .card-title { font-size: 1rem; font-weight: 600; color: #e2e8f0; transition: color 0.15s; }
+    .card-pilot { font-size: 0.78rem; color: #718096; margin-top: 3px; }
     .card-meta { margin-top: 5px; font-size: 0.78rem; color: #718096; display: flex; gap: 14px; flex-wrap: wrap; }
     .card-meta span { display: flex; align-items: center; gap: 5px; }
     .card-actions { display: flex; gap: 8px; flex-shrink: 0; align-items: center; }
@@ -73,10 +96,7 @@
     .forecast-strip { display: flex; gap: 2px; margin-top: 10px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: thin; }
     .forecast-strip::-webkit-scrollbar { height: 4px; }
     .forecast-strip::-webkit-scrollbar-thumb { background: #2d3748; border-radius: 2px; }
-    .fc-cell {
-      flex-shrink: 0; width: 14px; height: 22px; border-radius: 3px; cursor: default;
-      position: relative;
-    }
+    .fc-cell { flex-shrink: 0; width: 14px; height: 22px; border-radius: 3px; cursor: default; }
     .fc-cell.green  { background: #276749; }
     .fc-cell.orange { background: #c05621; }
     .fc-cell.red    { background: #7b2020; }
@@ -84,7 +104,7 @@
 
     .empty-state { text-align: center; padding: 60px 20px; color: #4a5568; }
     .empty-state .big { font-size: 2.5rem; margin-bottom: 14px; }
-    .empty-state p { margin-bottom: 20px; }
+    .empty-state p { margin-bottom: 20px; max-width: 480px; margin-left: auto; margin-right: auto; line-height: 1.6; }
 
     /* ── Auth gate ── */
     .auth-gate { display: none; text-align: center; padding: 60px 20px; }
@@ -119,7 +139,7 @@
   <!-- Main content (hidden until authenticated) -->
   <div id="mainContent" style="display:none">
     <!-- Org context banner (hidden in personal mode) -->
-    <div id="orgBanner" style="display:none;margin-bottom:20px;padding:10px 16px;background:#1a2535;border:1px solid #2d4a6e;border-radius:8px;display:none;align-items:center;gap:12px">
+    <div id="orgBanner" style="display:none;margin-bottom:20px;padding:10px 16px;background:#1a2535;border:1px solid #2d4a6e;border-radius:8px;align-items:center;gap:12px">
       <span style="color:#90cdf4;font-size:0.85rem" id="orgBannerText"></span>
       <a id="orgBannerBack" href="#" style="color:#718096;font-size:0.82rem;text-decoration:none;margin-left:auto" data-i18n="rulesets.back_to_org">← Back to dashboard</a>
     </div>
@@ -132,26 +152,57 @@
       <a id="newRulesetBtn" href="/ruleset-editor" class="btn btn-primary" data-i18n="rulesets.new_ruleset">＋ New rule set</a>
     </div>
 
-    <div class="cards" id="cardList">
-      <!-- filled by JS -->
+    <!-- Tabs (hidden in org mode) -->
+    <div class="tabs" id="tabBar">
+      <button class="tab-btn active" id="tabMine" data-i18n="rulesets.tab_mine">My Rule Sets</button>
+      <button class="tab-btn" id="tabGallery" data-i18n="rulesets.tab_gallery">Gallery</button>
     </div>
 
-    <div class="empty-state" id="emptyState" style="display:none">
-      <div class="big">🏔️</div>
-      <p data-i18n="rulesets.no_rulesets">No rule sets yet. Create your first one to start getting flyability decisions.</p>
-      <a id="createFirstBtn" href="/ruleset-editor" class="btn btn-primary" data-i18n="rulesets.create_first">＋ Create rule set</a>
+    <!-- ── Tab: My Rule Sets ── -->
+    <div id="paneMine">
+      <div class="cards" id="cardList"></div>
+      <div class="empty-state" id="emptyState" style="display:none">
+        <div class="big">🏔️</div>
+        <p data-i18n="rulesets.no_rulesets">No rule sets yet. Create your first one to start getting flyability decisions.</p>
+        <a id="createFirstBtn" href="/ruleset-editor" class="btn btn-primary" data-i18n="rulesets.create_first">＋ Create rule set</a>
+      </div>
+    </div>
+
+    <!-- ── Tab: Gallery ── -->
+    <div id="paneGallery" style="display:none">
+      <div class="search-bar">
+        <input
+          type="search"
+          id="gallerySearch"
+          class="search-input"
+          data-i18n-placeholder="gallery.search_placeholder"
+          placeholder="Search by name or description…"
+        />
+      </div>
+      <div class="cards" id="galleryList"></div>
+      <div class="empty-state" id="galleryEmpty" style="display:none">
+        <div class="big">🏔️</div>
+        <p data-i18n="gallery.no_results">No public rule sets yet. Be the first to share one by marking your rule set as public in the editor.</p>
+      </div>
+      <div class="empty-state" id="galleryNoMatch" style="display:none">
+        <div class="big">🔍</div>
+        <p data-i18n="gallery.no_matches">No rule sets match your search.</p>
+      </div>
     </div>
   </div>
 </div>
 
 <script type="module">
   import { initI18n, renderLangPicker } from '/static/i18n.js';
-  import { getUser, authHeader, renderNavAuth, isLoggedIn, fetchAuth } from '/static/auth.js';
+  import { getUser, renderNavAuth, isLoggedIn, fetchAuth } from '/static/auth.js';
   await initI18n();
   renderNavAuth('rulesets');
   renderLangPicker();
 
-  // Detect org context from ?org= param OR from subdomain (e.g. vkpi.lenti-dev.lg4.ch)
+  console.log('[Lenti:rulesets] page init');
+
+  // ── Org context ────────────────────────────────────────────────────────────
+
   function _detectOrgSlug() {
     const fromParam = new URLSearchParams(location.search).get('org');
     if (fromParam) return fromParam;
@@ -166,13 +217,23 @@
 
   if (!user) {
     document.getElementById('authGate').classList.add('visible');
+    console.log('[Lenti:rulesets] user not logged in — showing auth gate');
   } else {
     document.getElementById('mainContent').style.display = '';
-    if (orgSlug) setupOrgMode(orgSlug);
+    if (orgSlug) {
+      setupOrgMode(orgSlug);
+    } else {
+      setupTabs();
+    }
     loadRuleSets();
   }
 
+  // ── Org mode ───────────────────────────────────────────────────────────────
+
   function setupOrgMode(slug) {
+    // Hide tabs — gallery not relevant in org context
+    document.getElementById('tabBar').style.display = 'none';
+
     const banner = document.getElementById('orgBanner');
     banner.style.display = 'flex';
     document.getElementById('orgBannerText').textContent = slug.toUpperCase();
@@ -211,15 +272,50 @@
       <a href="${personalUrl}" class="nav-link">${window.t('nav.personal_rulesets')}</a>`;
   }
 
-  async function loadRuleSets() {
-    const url = orgSlug ? `/api/org/${orgSlug}/rulesets` : '/api/rulesets';
-    const res = await fetchAuth(url);
-    if (!res.ok) return;
-    const sets = await res.json();
-    render(sets);
+  // ── Tabs ───────────────────────────────────────────────────────────────────
+
+  let _galleryLoaded = false;
+
+  function setupTabs() {
+    document.getElementById('tabMine').addEventListener('click', () => switchTab('mine'));
+    document.getElementById('tabGallery').addEventListener('click', () => switchTab('gallery'));
+
+    // Restore tab from hash
+    if (location.hash === '#gallery') switchTab('gallery');
   }
 
-  function render(sets) {
+  function switchTab(tab) {
+    const isMine = tab === 'mine';
+    console.log(`[Lenti:rulesets] switching to tab: ${tab}`);
+
+    document.getElementById('tabMine').classList.toggle('active', isMine);
+    document.getElementById('tabGallery').classList.toggle('active', !isMine);
+    document.getElementById('paneMine').style.display = isMine ? '' : 'none';
+    document.getElementById('paneGallery').style.display = isMine ? 'none' : '';
+    document.getElementById('newRulesetBtn').style.display = isMine ? '' : 'none';
+
+    location.hash = isMine ? '' : 'gallery';
+
+    if (!isMine && !_galleryLoaded) {
+      _galleryLoaded = true;
+      loadGallery();
+    }
+  }
+
+  // ── My Rule Sets ───────────────────────────────────────────────────────────
+
+  async function loadRuleSets() {
+    const url = orgSlug ? `/api/org/${orgSlug}/rulesets` : '/api/rulesets';
+    console.log(`[Lenti:rulesets] fetching ${url}`);
+    const t0 = performance.now();
+    const res = await fetchAuth(url);
+    if (!res.ok) { console.error('[Lenti:rulesets] fetch failed', res.status); return; }
+    const sets = await res.json();
+    console.log(`[Lenti:rulesets] loaded ${sets.length} rulesets in ${Math.round(performance.now() - t0)}ms`);
+    renderMine(sets);
+  }
+
+  function renderMine(sets) {
     const list = document.getElementById('cardList');
     const empty = document.getElementById('emptyState');
     if (sets.length === 0) { empty.style.display = ''; return; }
@@ -238,7 +334,7 @@
             <span class="card-title">${esc(rs.name)}</span>
             ${siteBadge}
             <span class="badge ${rs.is_public ? 'badge-public' : 'badge-private'}">${rs.is_public ? window.t('rulesets.public') : window.t('rulesets.private')}</span>
-            <span class="decision-badge badge-loading" id="decision-${rs.id}">⏳ …</span>
+            <span class="decision-badge badge-loading" id="decision-${rs.id}">⏳ …</span>
             <span id="landing-badges-${rs.id}"></span>
           </div>
           <div class="card-meta">
@@ -254,17 +350,17 @@
           </div>
         </a>
         <div class="card-actions">
-          <a href="/ruleset-editor?id=${rs.id}" class="btn btn-ghost">Edit</a>
-          <button class="btn btn-danger" onclick="deleteSet('${rs.id}')">Delete</button>
+          <a href="/ruleset-editor?id=${rs.id}" class="btn btn-ghost" data-i18n="common.edit">Edit</a>
+          <button class="btn btn-danger" onclick="deleteSet('${rs.id}')" data-i18n="common.delete">Delete</button>
         </div>
       </div>`;
     }).join('');
 
-    // Fire evaluation + forecast calls in parallel — update as results arrive
     sets.forEach(rs => {
       evaluateCard(rs.id);
       loadForecast(rs.id);
     });
+    console.log(`[Lenti:rulesets] rendered ${sets.length} cards`);
   }
 
   async function evaluateCard(id) {
@@ -281,7 +377,6 @@
       if (no_data_stations && no_data_stations.length) {
         badge.title = `No data: ${no_data_stations.join(', ')}`;
       }
-      // Show landing decision badges for launch rulesets
       const landingSlot = document.getElementById(`landing-badges-${id}`);
       if (landingSlot && landing_decisions && landing_decisions.length) {
         const landingLabels = { green: '🟢', orange: '🟠', red: '🔴' };
@@ -321,9 +416,113 @@
     const res = await fetchAuth(`/api/rulesets/${id}`, { method: 'DELETE' });
     if (res.ok) {
       document.getElementById(`card-${id}`)?.remove();
-      if (!document.querySelector('.card')) document.getElementById('emptyState').style.display = '';
+      if (!document.querySelector('#cardList .card')) document.getElementById('emptyState').style.display = '';
+      console.log(`[Lenti:rulesets] deleted ruleset ${id}`);
     }
   };
+
+  // ── Gallery ────────────────────────────────────────────────────────────────
+
+  let _allGallery = [];
+
+  async function loadGallery() {
+    const t0 = performance.now();
+    console.log('[Lenti:rulesets] fetching /api/rulesets/gallery');
+    const res = await fetchAuth('/api/rulesets/gallery');
+    if (!res.ok) {
+      console.error('[Lenti:rulesets] gallery fetch failed', res.status);
+      document.getElementById('galleryEmpty').style.display = '';
+      return;
+    }
+    _allGallery = await res.json();
+    console.log(`[Lenti:rulesets] gallery loaded ${_allGallery.length} public rulesets in ${Math.round(performance.now() - t0)}ms`);
+    renderGallery(_allGallery);
+  }
+
+  function renderGallery(sets) {
+    const list = document.getElementById('galleryList');
+    const empty = document.getElementById('galleryEmpty');
+    const noMatch = document.getElementById('galleryNoMatch');
+    list.innerHTML = '';
+    empty.style.display = 'none';
+    noMatch.style.display = 'none';
+
+    if (_allGallery.length === 0) { empty.style.display = ''; return; }
+    if (sets.length === 0) { noMatch.style.display = ''; return; }
+
+    list.innerHTML = sets.map(rs => {
+      const isOpportunity = rs.site_type === 'opportunity';
+      const isLanding = rs.site_type === 'landing';
+      const siteIcon = isOpportunity ? '✦' : isLanding ? '⛑' : '▲';
+      const siteBadge = isOpportunity
+        ? `<span class="badge" style="background:#1f2a1a;color:#a0e070;border:1px solid #4a7a20">${window.t('editor.opportunity_site')}</span>`
+        : `<span class="badge" style="background:#1a2530;color:#90cdf4;border:1px solid #2a4a6e">${isLanding ? window.t('rulesets.landing_zone') : window.t('rulesets.launch')}</span>`;
+      return `
+      <div class="card" data-id="${rs.id}">
+        <div class="card-icon" style="font-size:1.2rem">${siteIcon}</div>
+        <div class="card-body-plain">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <span class="card-title">${esc(rs.name)}</span>
+            ${siteBadge}
+          </div>
+          <div class="card-pilot">${window.t('gallery.by_pilot', { username: esc(rs.owner_display_name || '…') })}</div>
+          <div class="card-meta">
+            ${rs.lat != null ? `<span>📍 ${rs.lat.toFixed(4)}, ${rs.lon.toFixed(4)}</span>` : ''}
+            ${rs.altitude_m != null ? `<span>⛰️ ${rs.altitude_m} m</span>` : ''}
+            ${rs.clone_count > 0 ? `<span>📋 ${window.t('rulesets.cloned_n', { n: rs.clone_count })}</span>` : ''}
+            <span>${new Date(rs.created_at).toLocaleDateString()}</span>
+          </div>
+          ${rs.description ? `<div style="margin-top:7px;font-size:0.82rem;color:#a0aec0">${esc(rs.description)}</div>` : ''}
+        </div>
+        <div class="card-actions">
+          <button class="btn btn-primary" id="clone-btn-${rs.id}" onclick="cloneRuleset('${rs.id}')">
+            ${window.t('gallery.clone_btn')}
+          </button>
+        </div>
+      </div>`;
+    }).join('');
+    console.log(`[Lenti:rulesets] gallery rendered ${sets.length} cards`);
+  }
+
+  document.getElementById('gallerySearch').addEventListener('input', e => {
+    const q = e.target.value.trim().toLowerCase();
+    console.log(`[Lenti:rulesets] gallery search: "${q}"`);
+    if (!q) { renderGallery(_allGallery); return; }
+    renderGallery(_allGallery.filter(rs =>
+      rs.name.toLowerCase().includes(q) ||
+      (rs.description && rs.description.toLowerCase().includes(q)) ||
+      (rs.owner_display_name && rs.owner_display_name.toLowerCase().includes(q))
+    ));
+  });
+
+  window.cloneRuleset = async (id) => {
+    const btn = document.getElementById(`clone-btn-${id}`);
+    if (!btn || btn.disabled) return;
+    btn.disabled = true;
+    btn.textContent = window.t('gallery.cloning');
+    console.log(`[Lenti:rulesets] cloning gallery ruleset ${id}`);
+    const t0 = performance.now();
+    try {
+      const res = await fetchAuth(`/api/rulesets/${id}/clone`, { method: 'POST' });
+      const elapsed = Math.round(performance.now() - t0);
+      if (!res.ok) {
+        console.error(`[Lenti:rulesets] clone failed for ${id} after ${elapsed}ms`, res.status);
+        btn.disabled = false;
+        btn.textContent = window.t('gallery.clone_btn');
+        return;
+      }
+      const clone = await res.json();
+      console.log(`[Lenti:rulesets] cloned ${id} → ${clone.id} in ${elapsed}ms`);
+      btn.textContent = window.t('gallery.cloned_success');
+      setTimeout(() => { window.location.href = `/ruleset-editor?id=${clone.id}`; }, 800);
+    } catch (err) {
+      console.error(`[Lenti:rulesets] clone error for ${id}`, err);
+      btn.disabled = false;
+      btn.textContent = window.t('gallery.clone_btn');
+    }
+  };
+
+  // ── Shared ─────────────────────────────────────────────────────────────────
 
   function esc(s) {
     return String(s).replace(/[&<>"']/g, c =>

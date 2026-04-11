@@ -120,6 +120,7 @@ class RuleSetOut(BaseModel):
     cloned_from_id: Optional[str]
     linked_landing_ids: list[str] = []
     notify_on: Optional[str] = None
+    owner_display_name: Optional[str] = None
     created_at: datetime
     updated_at: Optional[datetime]
 

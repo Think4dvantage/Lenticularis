@@ -412,6 +412,11 @@
       </label>
       <span class="toggle-label" id="publicLabel" data-i18n="editor.private_label">Private (only you)</span>
     </div>
+    <div id="descriptionRow" style="display:none;margin-top:12px">
+      <textarea id="rsDescription" rows="2"
+        style="width:100%;background:#0f1117;border:1px solid #2d3748;border-radius:6px;color:#e2e8f0;font-size:0.85rem;padding:8px 10px;resize:vertical;outline:none"
+        data-i18n-placeholder="editor.description_placeholder"></textarea>
+    </div>
 
     <!-- Admin-only: mark this ruleset as a system preset template -->
     <div id="adminPresetRow" style="display:none;margin-top:16px;padding-top:16px;border-top:1px solid #2d3748" class="toggle-row">
@@ -1043,6 +1048,8 @@
   function updatePublicLabel() {
     const isPublic = document.getElementById('rsPublic').checked;
     document.getElementById('publicLabel').textContent = isPublic ? window.t('editor.public_label') : window.t('editor.private_label');
+    document.getElementById('descriptionRow').style.display = isPublic ? '' : 'none';
+    console.log(`[Lenti:editor] public toggle → ${isPublic}, description row ${isPublic ? 'shown' : 'hidden'}`);
   }
 
   function updateNotifyNote() {
@@ -1115,6 +1122,7 @@
     document.getElementById('rsLon').value     = rs.lon ?? '';
     document.getElementById('rsAlt').value     = rs.altitude_m ?? '';
     document.getElementById('rsPublic').checked = rs.is_public || false;
+    document.getElementById('rsDescription').value = rs.description || '';
     updatePublicLabel();
     setSiteType(rs.site_type || 'launch');
 
@@ -1177,7 +1185,7 @@
 
     const meta = {
       name,
-      description: null,
+      description: document.getElementById('rsDescription').value.trim() || null,
       lat:         parseFloatOrNull(document.getElementById('rsLat').value),
       lon:         parseFloatOrNull(document.getElementById('rsLon').value),
       altitude_m:  parseIntOrNull(document.getElementById('rsAlt').value),

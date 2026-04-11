@@ -26,6 +26,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
 from lenticularis.collectors.ecowitt import EcowittCollector
+from lenticularis.collectors.fga import FgaCollector
 from lenticularis.collectors.foehn import FoehnCollector
 from lenticularis.collectors.forecast_grid import ForecastGridCollector
 from lenticularis.collectors.forecast_openmeteo import ForecastOpenMeteoCollector
@@ -52,6 +53,7 @@ _COLLECTOR_REGISTRY = {
     "windline": WindlineCollector,
     "ecowitt": EcowittCollector,
     "wunderground": WundergroundCollector,
+    "fga": FgaCollector,
 }
 
 # Registry: forecast collector name → class

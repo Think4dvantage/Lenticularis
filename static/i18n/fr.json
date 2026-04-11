@@ -132,7 +132,9 @@
     "badge_launch_red": "🔴 DÉCOLLAGE",
     "org_title": "Règles d'organisation",
     "org_subtitle": "Règles pour {name}",
-    "back_to_org": "← Retour au tableau de bord"
+    "back_to_org": "← Retour au tableau de bord",
+    "tab_mine": "Mes règles",
+    "tab_gallery": "Galerie"
   },
   "editor": {
     "new_title": "Nouvelle règle",
@@ -151,6 +153,7 @@
     "combination_hint": "Logique de combinaison : le pire l'emporte — si une condition déclenche ROUGE, le site est ROUGE ; si ORANGE, il est ORANGE.",
     "private_label": "Privé (vous seul)",
     "public_label": "Public (galerie)",
+    "description_placeholder": "Courte description affichée dans la galerie (optionnel)",
     "linked_landings": "Zones d'atterrissage liées",
     "linked_landings_hint": "Sélectionnez les zones d'atterrissage que les pilotes utiliseraient après avoir décollé ici. La carte affichera un halo coloré selon la meilleure décision d'atterrissage.",
     "no_landings": "Pas encore de zones d'atterrissage — créez d'abord un ensemble de règles avec le type \"Zone d'atterrissage\".",
@@ -436,6 +439,20 @@
       "col_failures": "Échecs",
       "col_interval": "Intervalle"
     }
+  },
+  "gallery": {
+    "title": "Galerie de règles",
+    "subtitle": "Parcourez et clonez les règles publiques partagées par la communauté.",
+    "search_placeholder": "Rechercher par nom ou description…",
+    "by_pilot": "par {username}",
+    "clone_btn": "Cloner",
+    "cloning": "Clonage…",
+    "cloned_success": "Cloné ! Ouverture de l'éditeur…",
+    "no_results": "Pas encore de règles publiques. Soyez le premier à partager la vôtre en la marquant comme publique dans l'éditeur.",
+    "no_matches": "Aucune règle ne correspond à votre recherche.",
+    "sign_in_prompt": "Connectez-vous pour parcourir et cloner les règles de la communauté.",
+    "conditions_count": "{n} condition",
+    "conditions_count_plural": "{n} conditions"
   },
   "auth": {
     "sign_in_title": "Connexion",

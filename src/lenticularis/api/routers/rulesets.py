@@ -88,11 +88,17 @@ def gallery(
     db: Session = Depends(get_db),
 ):
     rows = db.execute(
-        select(RuleSet)
-        .where(RuleSet.is_public == True, RuleSet.owner_id != current_user.id)
+        select(RuleSet, User.display_name)
+        .join(User, User.id == RuleSet.owner_id)
+        .where(RuleSet.is_public == True)
         .order_by(RuleSet.clone_count.desc(), RuleSet.created_at.desc())
-    ).scalars().all()
-    return rows
+    ).all()
+    result = []
+    for rs, display_name in rows:
+        out = RuleSetOut.model_validate(rs).model_copy(update={"owner_display_name": display_name})
+        result.append(out)
+    logger.info("Gallery fetched %d public rulesets for user %s", len(result), current_user.id)
+    return result
 
 
 # ---------------------------------------------------------------------------

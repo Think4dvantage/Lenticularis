@@ -132,7 +132,9 @@
     "badge_launch_red": "🔴 LAUNCH",
     "org_title": "Organisation Rules",
     "org_subtitle": "Rules for {name}",
-    "back_to_org": "← Back to dashboard"
+    "back_to_org": "← Back to dashboard",
+    "tab_mine": "My Rule Sets",
+    "tab_gallery": "Gallery"
   },
   "editor": {
     "new_title": "New Rule Set",
@@ -151,6 +153,7 @@
     "combination_hint": "Combination logic: worst wins — if any condition triggers RED the site is RED; any ORANGE and it's ORANGE.",
     "private_label": "Private (only you)",
     "public_label": "Public (gallery)",
+    "description_placeholder": "Short description shown in the gallery (optional)",
     "linked_landings": "Linked landing zones",
     "linked_landings_hint": "Select the landing zones pilots would use after launching here. The map will show a halo coloured by the best landing decision.",
     "no_landings": "No landing zones yet — create a ruleset with type \"Landing zone\" first.",
@@ -436,6 +439,20 @@
       "col_failures": "Failures",
       "col_interval": "Interval"
     }
+  },
+  "gallery": {
+    "title": "Rule Set Gallery",
+    "subtitle": "Browse and clone public rule sets shared by the community.",
+    "search_placeholder": "Search by name or description…",
+    "by_pilot": "by {username}",
+    "clone_btn": "Clone",
+    "cloning": "Cloning…",
+    "cloned_success": "Cloned! Opening editor…",
+    "no_results": "No public rule sets yet. Be the first to share one by marking your rule set as public in the editor.",
+    "no_matches": "No rule sets match your search.",
+    "sign_in_prompt": "Sign in to browse and clone rule sets from the community.",
+    "conditions_count": "{n} condition",
+    "conditions_count_plural": "{n} conditions"
   },
   "auth": {
     "sign_in_title": "Sign in",
