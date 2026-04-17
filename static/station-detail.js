@@ -9,10 +9,10 @@
 // Config
 // ---------------------------------------------------------------------------
 const CHART_COLORS = {
-  wind_speed:      '#63b3ed',
-  wind_gust:       '#fc8181',
-  wind_direction:  '#f6ad55',
-  temperature:     '#f6ad55',
+  wind_speed:      '#63b3ed',  // blue
+  wind_gust:       '#fc8181',  // red
+  wind_direction:  '#4fd1c5',  // teal (distinct from forecast amber)
+  temperature:     '#fc8181',  // salmon (distinct from forecast amber)
   humidity:        '#76e4f7',
   pressure:        '#b794f4',
   precipitation:   '#4299e1',
@@ -102,18 +102,43 @@ if (Chart.Tooltip?.positioners) {
 
 const FORECAST_COLOR = '#f6ad55'; // amber — visually distinct from all obs colors
 
-function fcDataset(label, points, baseColor) {
-  return {
-    label,
-    data: points,
-    borderColor: FORECAST_COLOR,
-    backgroundColor: hexToRgba(FORECAST_COLOR, 0.10),
-    fill: false,
-    borderWidth: 1.5,
-    borderDash: [6, 4],
-    pointRadius: 0,
-    tension: 0.3,
-  };
+/**
+ * Returns 1 or 3 Chart.js dataset objects for a forecast series.
+ *
+ * When minPts / maxPts are supplied (SwissMeteo ensemble), the function emits:
+ *   [0] invisible min line  — anchor for the fill
+ *   [1] invisible max line  — fills down to [0] with low opacity (the band)
+ *   [2] solid probable line — the main forecast value
+ *
+ * When no ensemble data is available (Open-Meteo), a single dashed line is
+ * returned, matching the original behaviour.
+ */
+function fcDatasets(label, pts, minPts, maxPts, color = FORECAST_COLOR) {
+  const hasEnsemble = minPts?.length > 0 && maxPts?.length > 0;
+  const base = { pointRadius: 0, tension: 0.3, spanGaps: true, isForecast: true };
+
+  if (hasEnsemble) {
+    return [
+      // min — invisible anchor
+      { ...base, label: `${label} (min)`, data: minPts,
+        borderColor: 'transparent', backgroundColor: 'transparent', fill: false, borderWidth: 0 },
+      // max — fills down to min with a low-opacity band
+      { ...base, label: `${label} (max)`, data: maxPts,
+        borderColor: hexToRgba(color, 0.4), backgroundColor: hexToRgba(color, 0.15),
+        fill: '-1', borderWidth: 1, borderDash: [3, 3] },
+      // probable — solid line on top
+      { ...base, label, data: pts,
+        borderColor: color, backgroundColor: 'transparent',
+        fill: false, borderWidth: 2 },
+    ];
+  }
+
+  // No ensemble data — single dashed line (Open-Meteo style)
+  return [{
+    ...base, label, data: pts,
+    borderColor: color, backgroundColor: hexToRgba(color, 0.10),
+    fill: false, borderWidth: 1.5, borderDash: [6, 4],
+  }];
 }
 
 const CHART_DEFAULTS = {
@@ -141,6 +166,11 @@ const CHART_DEFAULTS = {
         title: (items) => {
           if (!items.length) return '';
           return items.reduce((a, b) => b.parsed.x > a.parsed.x ? b : a).label;
+        },
+        label: (item) => {
+          const v = item.parsed.y;
+          if (v == null || isNaN(v)) return `${item.dataset.label}: –`;
+          return `${item.dataset.label}: ${Math.round(v * 10) / 10}`;
         },
       },
     },
@@ -217,6 +247,7 @@ async function loadHistory() {
     const histJson = await histRes.json();
     const fcJson   = fcRes?.ok ? await fcRes.json() : null;
     renderCharts(histJson.data || [], fcJson?.data || []);
+    renderForecastSourceBadge(fcJson);
     setRefreshLabel();
     setDbDot(true);
   } catch (err) {
@@ -242,6 +273,10 @@ function toggleForecast() {
   _showForecast = !_showForecast;
   const btn = document.getElementById('forecastBtn');
   btn.classList.toggle('active', _showForecast);
+  if (!_showForecast) {
+    const badge = document.getElementById('forecastSourceBadge');
+    if (badge) badge.style.display = 'none';
+  }
   // Disable/enable range buttons while in forecast mode
   document.querySelectorAll('.range-btn[data-hours]').forEach(b => {
     b.disabled = _showForecast;
@@ -281,8 +316,16 @@ function renderCharts(rows, fcRows = []) {
     : now;
 
   function buildFields(data) {
-    const f = { wind_speed:[], wind_gust:[], wind_direction:[], temperature:[],
-                humidity:[], pressure_qnh:[], precipitation:[], snow_depth:[] };
+    const f = {
+      wind_speed:[], wind_speed_min:[], wind_speed_max:[],
+      wind_gust:[], wind_gust_min:[], wind_gust_max:[],
+      wind_direction:[],
+      temperature:[], temperature_min:[], temperature_max:[],
+      humidity:[], humidity_min:[], humidity_max:[],
+      pressure_qff:[], pressure_qff_min:[], pressure_qff_max:[],
+      precipitation:[], precipitation_min:[], precipitation_max:[],
+      snow_depth:[],
+    };
     for (const row of data) {
       const t = row.timestamp;
       for (const field of Object.keys(f)) {
@@ -301,23 +344,28 @@ function renderCharts(rows, fcRows = []) {
   const hasWind = fields.wind_speed.length > 0 || fields.wind_gust.length > 0
                || fcFields.wind_speed.length > 0 || fcFields.wind_gust.length > 0;
   showCard('wind', hasWind);
-  if (hasWind) renderWindChart(fields.wind_speed, fields.wind_gust, rangeOpts, fcFields.wind_speed, fcFields.wind_gust);
+  if (hasWind) renderWindChart(
+    fields.wind_speed, fields.wind_gust, rangeOpts,
+    fcFields.wind_speed, fcFields.wind_gust,
+    fcFields.wind_speed_min, fcFields.wind_speed_max,
+    fcFields.wind_gust_min,  fcFields.wind_gust_max,
+  );
 
   // Wind direction — polar area heatmap rose + time-series line
-  renderWindRoseChart(fields.wind_direction);
+  renderWindRoseChart(fields.wind_direction, fcFields.wind_direction);
   renderWindDirLineChart(fields.wind_direction, rangeOpts, fcFields.wind_direction);
 
   // Temperature
-  renderSimpleChart('temperature', fields.temperature, rangeOpts, fcFields.temperature);
+  renderSimpleChart('temperature', fields.temperature, rangeOpts, fcFields.temperature, fcFields.temperature_min, fcFields.temperature_max);
 
   // Humidity
-  renderSimpleChart('humidity', fields.humidity, { ...rangeOpts, yMin: 0, yMax: 100 }, fcFields.humidity);
+  renderSimpleChart('humidity', fields.humidity, { ...rangeOpts, yMin: 0, yMax: 100 }, fcFields.humidity, fcFields.humidity_min, fcFields.humidity_max);
 
   // Pressure
-  renderSimpleChart('pressure', fields.pressure_qnh, rangeOpts, fcFields.pressure_qnh);
+  renderSimpleChart('pressure', fields.pressure_qff, rangeOpts, fcFields.pressure_qff, fcFields.pressure_qff_min, fcFields.pressure_qff_max);
 
   // Precipitation (bar + cumulative line)
-  renderPrecipitationChart(fields.precipitation, rangeOpts, fcFields.precipitation);
+  renderPrecipitationChart(fields.precipitation, rangeOpts, fcFields.precipitation, fcFields.precipitation_min, fcFields.precipitation_max);
 
   // Snow depth
   renderSimpleChart('snow_depth', fields.snow_depth, { ...rangeOpts, yMin: 0 }, fcFields.snow_depth);
@@ -336,50 +384,85 @@ const WIND_ROSE_LABELS = ['N','NNO','NO','ONO','O','OSO','SO','SSO','S','SSW','S
 // Rotate so N is centred at 12 o'clock: start = -90° - half-segment(11.25°)
 const WIND_ROSE_START_ANGLE = (-Math.PI / 2) - (Math.PI / 16);
 
-function renderWindRoseChart(points) {
+function renderWindRoseChart(obsPts, fcPts = []) {
   const canvasId = 'chart-wind_direction';
-  showCard('wind_direction', points.length > 0);
-  if (points.length === 0) return;
+  const hasObs = obsPts.length > 0;
+  const hasFc  = fcPts.length > 0;
+  showCard('wind_direction', hasObs || hasFc);
+  if (!hasObs && !hasFc) return;
 
   destroyChart(canvasId);
 
-  // Bucket each reading into the nearest of 16 directions (22.5° per bucket)
-  const counts = new Array(16).fill(0);
-  for (const pt of points) {
-    const deg = ((pt.y % 360) + 360) % 360;
-    const idx = Math.round(deg / 22.5) % 16;
-    counts[idx]++;
+  function bucket(pts) {
+    const counts = new Array(16).fill(0);
+    for (const pt of pts) {
+      const deg = ((pt.y % 360) + 360) % 360;
+      counts[Math.round(deg / 22.5) % 16]++;
+    }
+    return counts;
   }
 
-  const maxCount = Math.max(...counts, 1);
-  const baseHex = CHART_COLORS.wind_direction;
-  // Per-segment heatmap: opacity scales from 0.05 (no readings) to 0.90 (peak)
-  const bgColors = counts.map(c => hexToRgba(baseHex, 0.05 + (c / maxCount) * 0.85));
-  const borderColors = counts.map(c => hexToRgba(baseHex, 0.2 + (c / maxCount) * 0.8));
+  const obsCounts = bucket(obsPts);
+  const fcCounts  = bucket(fcPts);
+  const maxObs = Math.max(...obsCounts, 1);
+  const maxFc  = Math.max(...fcCounts, 1);
+
+  const obsColor = CHART_COLORS.wind_direction; // teal
+  const fcColor  = FORECAST_COLOR;              // amber
+
+  const datasets = [];
+  if (hasObs) {
+    datasets.push({
+      label: 'Observed direction',
+      data: obsCounts,
+      backgroundColor: obsCounts.map(c => hexToRgba(obsColor, 0.08 + (c / maxObs) * 0.82)),
+      borderColor:     obsCounts.map(c => hexToRgba(obsColor, 0.25 + (c / maxObs) * 0.75)),
+      borderWidth: 1.5,
+    });
+  }
+  if (hasFc) {
+    datasets.push({
+      label: 'Forecast direction',
+      data: fcCounts,
+      backgroundColor: fcCounts.map(c => hexToRgba(fcColor, 0.06 + (c / maxFc) * 0.50)),
+      borderColor:     fcCounts.map(c => hexToRgba(fcColor, 0.20 + (c / maxFc) * 0.55)),
+      borderWidth: 1,
+    });
+  }
 
   const ctx = document.getElementById(canvasId).getContext('2d');
   _charts[canvasId] = new Chart(ctx, {
     type: 'polarArea',
-    data: {
-      labels: WIND_ROSE_LABELS,
-      datasets: [{
-        label: 'Messungen',
-        data: counts,
-        backgroundColor: bgColors,
-        borderColor: borderColors,
-        borderWidth: 1.5,
-      }],
-    },
+    data: { labels: WIND_ROSE_LABELS, datasets },
     options: {
       responsive: true,
       maintainAspectRatio: false,
       animation: false,
       startAngle: WIND_ROSE_START_ANGLE,
       plugins: {
-        legend: { display: false },
+        legend: {
+          display: hasFc,
+          labels: {
+            color: '#a0aec0', boxWidth: 10, font: { size: 10 },
+            // PolarArea normally generates one entry per data label (16 sectors).
+            // Override to produce one entry per dataset instead.
+            generateLabels: (chart) => chart.data.datasets.map((ds, i) => ({
+              text: ds.label,
+              fillStyle: Array.isArray(ds.backgroundColor)
+                ? ds.backgroundColor[ds.data.indexOf(Math.max(...ds.data))]
+                : ds.backgroundColor,
+              strokeStyle: Array.isArray(ds.borderColor)
+                ? ds.borderColor[ds.data.indexOf(Math.max(...ds.data))]
+                : ds.borderColor,
+              lineWidth: ds.borderWidth,
+              hidden: !chart.isDatasetVisible(i),
+              datasetIndex: i,
+            })),
+          },
+        },
         tooltip: {
           callbacks: {
-            label: ctx => `${ctx.label}: ${ctx.parsed.r} readings`,
+            label: (item) => `${item.dataset.label} — ${item.label}: ${item.parsed.r}`,
           },
         },
       },
@@ -420,7 +503,7 @@ function renderWindDirLineChart(points, opts = {}, fcPoints = []) {
     tension: 0,
     spanGaps: false,
   }];
-  if (fcPoints.length) datasets.push({ ...fcDataset('Forecast direction (°)', fcPoints), pointRadius: 0, tension: 0 });
+  if (fcPoints.length) datasets.push(...fcDatasets('Forecast direction (°)', fcPoints, [], []).map(d => ({ ...d, tension: 0 })));
 
   const ctx = document.getElementById(canvasId).getContext('2d');
   _charts[canvasId] = new Chart(ctx, {
@@ -444,9 +527,14 @@ function renderWindDirLineChart(points, opts = {}, fcPoints = []) {
 // ---------------------------------------------------------------------------
 // Wind speed + gust — combined chart
 // ---------------------------------------------------------------------------
-function renderWindChart(speedPts, gustPts, opts = {}, fcSpeedPts = [], fcGustPts = []) {
+const FC_WIND_COLOR = '#9f7aea'; // purple — forecast wind speed
+const FC_GUST_COLOR = '#ecc94b'; // yellow — forecast gust
+
+function renderWindChart(speedPts, gustPts, opts = {}, fcSpeedPts = [], fcGustPts = [], fcSpeedMin = [], fcSpeedMax = [], fcGustMin = [], fcGustMax = []) {
   const canvasId = 'chart-wind';
   destroyChart(canvasId);
+
+  const hasForecast = fcSpeedPts.length > 0 || fcGustPts.length > 0;
 
   const datasets = [
     {
@@ -470,8 +558,8 @@ function renderWindChart(speedPts, gustPts, opts = {}, fcSpeedPts = [], fcGustPt
       tension: 0.2,
     },
   ];
-  if (fcSpeedPts.length) datasets.push({ ...fcDataset('Forecast wind (km/h)', fcSpeedPts), fill: false });
-  if (fcGustPts.length)  datasets.push({ ...fcDataset('Forecast gust (km/h)', fcGustPts), fill: false });
+  if (fcSpeedPts.length) datasets.push(...fcDatasets('Forecast wind (km/h)', fcSpeedPts, fcSpeedMin, fcSpeedMax, FC_WIND_COLOR));
+  if (fcGustPts.length)  datasets.push(...fcDatasets('Forecast gust (km/h)', fcGustPts, fcGustMin, fcGustMax, FC_GUST_COLOR));
 
   const ctx = document.getElementById(canvasId).getContext('2d');
   _charts[canvasId] = new Chart(ctx, {
@@ -481,8 +569,19 @@ function renderWindChart(speedPts, gustPts, opts = {}, fcSpeedPts = [], fcGustPt
       ...CHART_DEFAULTS,
       plugins: {
         ...CHART_DEFAULTS.plugins,
-        legend: { display: true, labels: { color: '#a0aec0', boxWidth: 12, font: { size: 11 } } },
-        tooltip: CHART_DEFAULTS.plugins.tooltip,
+        legend: { display: true, labels: {
+          color: '#a0aec0', boxWidth: 12, font: { size: 11 },
+          // Hide the invisible min-anchor datasets from the legend
+          filter: item => !item.text.endsWith('(min)'),
+        }},
+        tooltip: {
+          ...CHART_DEFAULTS.plugins.tooltip,
+          // When forecast data is present, only show forecast datasets in the tooltip
+          // (prevents obs wind/gust at a different time index from appearing alongside fc values)
+          filter: hasForecast
+            ? (item) => item.dataset.isForecast === true
+            : undefined,
+        },
         forecastZone: { enabled: !!opts.forecast },
       },
       scales: {
@@ -496,7 +595,7 @@ function renderWindChart(speedPts, gustPts, opts = {}, fcSpeedPts = [], fcGustPt
 // ---------------------------------------------------------------------------
 // Precipitation — bars for individual readings + right-axis cumulative line
 // ---------------------------------------------------------------------------
-function renderPrecipitationChart(points, opts = {}, fcPoints = []) {
+function renderPrecipitationChart(points, opts = {}, fcPoints = [], fcMinPts = [], fcMaxPts = []) {
   const canvasId = 'chart-precipitation';
   const hasData = points.length > 0 || fcPoints.length > 0;
   showCard('precipitation', hasData);
@@ -551,6 +650,17 @@ function renderPrecipitationChart(points, opts = {}, fcPoints = []) {
       yAxisID: 'y',
       order: 3,
     });
+    // Ensemble band as line overlay (bars don't support fill bands natively)
+    if (fcMinPts.length && fcMaxPts.length) {
+      datasets.push(
+        { type: 'line', label: 'Precip min', data: fcMinPts,
+          borderColor: 'transparent', backgroundColor: 'transparent', fill: false,
+          borderWidth: 0, pointRadius: 0, tension: 0.3, yAxisID: 'y', order: 4 },
+        { type: 'line', label: 'Precip max', data: fcMaxPts,
+          borderColor: hexToRgba(FORECAST_COLOR, 0.5), backgroundColor: hexToRgba(FORECAST_COLOR, 0.12),
+          fill: '-1', borderWidth: 1, borderDash: [3, 3], pointRadius: 0, tension: 0.3, yAxisID: 'y', order: 4 },
+      );
+    }
   }
 
   const ctx = document.getElementById(canvasId).getContext('2d');
@@ -576,7 +686,7 @@ function renderPrecipitationChart(points, opts = {}, fcPoints = []) {
 // ---------------------------------------------------------------------------
 // Generic simple chart renderer
 // ---------------------------------------------------------------------------
-function renderSimpleChart(fieldName, points, opts = {}, fcPoints = []) {
+function renderSimpleChart(fieldName, points, opts = {}, fcPoints = [], fcMinPts = [], fcMaxPts = []) {
   const canvasId = `chart-${fieldName}`;
   const hasData = points.length > 0 || fcPoints.length > 0;
   showCard(fieldName, hasData);
@@ -607,7 +717,8 @@ function renderSimpleChart(fieldName, points, opts = {}, fcPoints = []) {
     tension: isScatter || isBar ? 0 : 0.2,
     ...(opts.barThickness ? { barThickness: opts.barThickness } : {}),
   }];
-  if (fcPoints.length) datasets.push(fcDataset(`Forecast ${fieldName}`, fcPoints, color));
+  const fcLabel = `Forecast ${fieldName}`;
+  if (fcPoints.length) datasets.push(...fcDatasets(fcLabel, fcPoints, fcMinPts, fcMaxPts));
 
   const ctx = document.getElementById(canvasId).getContext('2d');
   _charts[canvasId] = new Chart(ctx, {
@@ -615,7 +726,15 @@ function renderSimpleChart(fieldName, points, opts = {}, fcPoints = []) {
     data: { datasets },
     options: {
       ...CHART_DEFAULTS,
-      plugins: { ...CHART_DEFAULTS.plugins, forecastZone: { enabled: !!opts.forecast } },
+      plugins: {
+        ...CHART_DEFAULTS.plugins,
+        legend: fcPoints.length ? {
+          display: true,
+          labels: { color: '#a0aec0', boxWidth: 12, font: { size: 11 },
+            filter: item => !item.text.endsWith('(min)') },
+        } : { display: false },
+        forecastZone: { enabled: !!opts.forecast },
+      },
       scales: {
         x: { ...CHART_DEFAULTS.scales.x, ...(opts.xMin !== undefined ? { min: opts.xMin, max: opts.xMax } : {}) },
         y: yScale,
@@ -661,6 +780,19 @@ function setDbDot(ok) {
 function setRefreshLabel() {
   document.getElementById('lastRefresh').textContent =
     window.t('common.updated') + ' ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+}
+
+function renderForecastSourceBadge(fcJson) {
+  const el = document.getElementById('forecastSourceBadge');
+  if (!el) return;
+  if (!fcJson || !_showForecast) {
+    el.style.display = 'none';
+    return;
+  }
+  const source = fcJson.forecast_source || '—';
+  const model  = fcJson.forecast_model  || '—';
+  el.textContent = `${model} · ${source}`;
+  el.style.display = '';
 }
 
 function openAccuracy() {

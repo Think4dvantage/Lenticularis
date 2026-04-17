@@ -436,7 +436,15 @@ async def get_station_forecast(
         row.update({k: v for k, v in fields.items() if v is not None})
         rows.append(row)
 
-    return {"station_id": station_id, "hours": hours, "data": rows}
+    # Surface which forecast source/model is active (from the first data row)
+    first = rows[0] if rows else {}
+    return {
+        "station_id": station_id,
+        "hours": hours,
+        "forecast_source": first.get("source"),
+        "forecast_model":  first.get("model"),
+        "data": rows,
+    }
 
 
 @router.get("/{station_id}", response_model=StationResponse)

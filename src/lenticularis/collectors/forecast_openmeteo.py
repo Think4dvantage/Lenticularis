@@ -115,7 +115,7 @@ class ForecastOpenMeteoCollector(BaseForecastCollector):
                 wind_direction=int(wind_dir_raw) if wind_dir_raw is not None else None,
                 temperature=_get_val("temperature_2m"),
                 humidity=_get_val("relative_humidity_2m"),
-                pressure_qnh=_get_val("pressure_msl"),
+                pressure_qff=_get_val("pressure_msl"),
                 precipitation=_get_val("precipitation"),
             ))
 

@@ -256,8 +256,8 @@ function renderCharts(data, xMin, xMax) {
     };
     for (const row of (rows || [])) {
       const ts = row.timestamp;
-      // pressure_qnh is the API field name; normalise to 'pressure' for internal lookups
-      if (row.pressure_qnh != null) f.pressure.push({ x: ts, y: row.pressure_qnh });
+      // pressure_qff is the API field name; normalise to 'pressure' for internal lookups
+      if (row.pressure_qff != null) f.pressure.push({ x: ts, y: row.pressure_qff });
       for (const field of ['wind_speed', 'wind_gust', 'wind_direction', 'temperature', 'humidity', 'precipitation', 'snow_depth']) {
         if (row[field] != null) f[field].push({ x: ts, y: row[field] });
       }

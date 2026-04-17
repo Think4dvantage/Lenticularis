@@ -212,12 +212,12 @@ class WundergroundCollector(BaseCollector):
         wind_direction: Optional[int] = None if raw_dir is None else int(raw_dir) % 360
         temperature   = _to_float(metric.get("temp"))
         humidity      = _to_float(obs.get("humidity"))
-        pressure_qnh  = _to_float(metric.get("pressure"))
+        pressure_qff  = _to_float(metric.get("pressure"))
         precipitation = _to_float(metric.get("precipRate"))  # mm/hr instantaneous rate
 
         sid = self.station_id(self.NETWORK, pws_id)
 
-        all_null = all(v is None for v in (wind_speed, wind_gust, wind_direction, temperature, humidity, pressure_qnh))
+        all_null = all(v is None for v in (wind_speed, wind_gust, wind_direction, temperature, humidity, pressure_qff))
         if all_null:
             logger.error(
                 "WundergroundCollector [%s]: observation returned but ALL metric values are None. "
@@ -231,7 +231,7 @@ class WundergroundCollector(BaseCollector):
                 wind_speed or 0.0,
                 wind_direction,
                 temperature or 0.0,
-                pressure_qnh or 0.0,
+                pressure_qff or 0.0,
             )
         return WeatherMeasurement(
             station_id=sid,
@@ -242,7 +242,7 @@ class WundergroundCollector(BaseCollector):
             wind_gust=wind_gust,
             temperature=temperature,
             humidity=humidity,
-            pressure_qnh=pressure_qnh,
+            pressure_qff=pressure_qff,
             pressure_qfe=None,
             precipitation=precipitation,
         )

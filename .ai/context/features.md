@@ -1,6 +1,34 @@
 # Feature History & Backlog
 
-## Current Version: v1.14.0 (shipped)
+## Current Version: v1.15 (shipped)
+
+### SwissMeteo Forecast Integration
+
+| Change | Detail |
+|---|---|
+| `collectors/forecast_swissmeteo.py` | New `ForecastSwissMeteoCollector(BaseForecastCollector)`: SOURCE="swissmeteo", MODEL="icon-ch". `collect_for_station()` calls `GET /api/forecast/station` on `lsmfapi-dev.lg4.ch` — fills full `ForecastPoint` including ensemble min/max. `collect_altitude_for_station()` calls `GET /api/forecast/altitude-winds` — returns `list[StationWindProfilePoint]`. Registered in `_FORECAST_REGISTRY`; companion `forecast_swissmeteo_altitude` APScheduler job fires at same interval. |
+| `models/weather.py` — ensemble fields | `ForecastPoint` extended with optional `wind_speed_min/max`, `wind_gust_min/max`, `wind_direction_min/max`, `temperature_min/max`, `humidity_min/max`, `pressure_qff_min/max`, `precipitation_min/max`. New `StationWindProfilePoint` model with `station_id`, `network`, `level_m`, `init_time`, `valid_time`, full wind ensemble fields. |
+| InfluxDB `weather_forecast` — `init_date` | Tag format changed from `YYYY-MM-DD` to `YYYY-MM-DDTHH` so each model-run hour is a distinct series (prevents afternoon run from overwriting morning's). |
+| InfluxDB `station_wind_profile` | New measurement written by SwissMeteo altitude collector. Tags: `station_id`, `network`, `level_m`, `init_date` (YYYY-MM-DDTHH). Fields: `wind_speed`, `wind_speed_min/max`, `wind_direction`, `wind_direction_min/max`, `vertical_wind`, `vertical_wind_min/max`, `init_time`. |
+| Source priority + 24h fallback | `query_forecast_for_stations()` dedup: prefer `swissmeteo` when its `init_time` is ≤24h old; if stale, fall back to latest-init-time-wins across sources. `_PREFERRED_SOURCE = "swissmeteo"`, `_PREFERRED_MAX_AGE_H = 24`. |
+| Forecast source badge | `GET /api/stations/{id}/forecast` response gains top-level `forecast_source` and `forecast_model` fields. `station-detail.js`: `renderForecastSourceBadge()` shows a pill badge next to the Forecast button. |
+| Ensemble band charts | Chart.js 3-dataset pattern: invisible min anchor → semi-transparent max fill (dashed border) → solid probable line; all three tagged `isForecast: true`. Tooltip `filter` shows only forecast items when forecast data is present. Legend hides `(min)` anchor entries. |
+| Wind rose legend fix | PolarArea `generateLabels` override produces one entry per dataset (not per sector). |
+| Chart colors | `wind_gust: '#fc8181'` (red), `wind_direction: '#4fd1c5'` (teal), `FC_WIND_COLOR = '#9f7aea'` (purple), `FC_GUST_COLOR = '#ecc94b'` (yellow). |
+
+---
+
+## Previous Version: v1.14.1 (shipped)
+
+### Hotfix / Cleanup
+
+| Change | Detail |
+|---|---|
+| QNH → QFF migration | `pressure_qnh` removed from entire stack. All pressure now stored and displayed as `pressure_qff`. Affects: `WeatherMeasurement` model, `ForecastPoint` model, all 8 collectors, `influx.py` (write + 3 query methods), `rules/evaluator.py` FIELD_MAP, `weather_stats.py`, `app.js`, `map.js`, `station-detail.js`, `forecast-accuracy.js`, `stats.html`, `stations.html`, all 4 i18n locales, `config.yml.example` (MeteoSwiss QNH URL removed). i18n key `map.popup.qnh` renamed to `map.popup.qff`. |
+
+---
+
+## Previous Version: v1.14.0 (shipped)
 
 ### Shipped Milestones
 

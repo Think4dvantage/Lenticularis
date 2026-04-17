@@ -76,7 +76,7 @@
       "pressure_delta": "ΔPressure",
       "precipitation": "Precip",
       "snow": "Snow",
-      "qnh": "QNH",
+      "qff": "QFF",
       "view_history": "View history →",
       "status": "Status",
       "foehn_dashboard": "Föhn dashboard →",
@@ -106,7 +106,7 @@
     "col_gust": "Gust (km/h)",
     "col_temp": "Temp (°C)",
     "col_humidity": "Hum (%)",
-    "col_pressure": "QNH (hPa)",
+    "col_pressure": "QFF (hPa)",
     "col_precipitation": "Precip (mm)",
     "col_last_seen": "Last seen"
   },
@@ -284,7 +284,7 @@
       "wind_direction_history": "Wind Direction — History",
       "temperature": "Temperature (°C)",
       "humidity": "Humidity (%)",
-      "pressure": "Pressure QNH (hPa)",
+      "pressure": "Pressure QFF (hPa)",
       "precipitation": "Precipitation (mm)",
       "snow": "Snow depth (cm)"
     }

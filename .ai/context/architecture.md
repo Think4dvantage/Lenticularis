@@ -22,13 +22,19 @@
 
 ### `weather_data`
 - **Tags**: `station_id`, `network`, `canton`
-- **Fields**: `wind_speed`, `wind_gust`, `wind_direction`, `temperature`, `humidity`, `pressure_qfe`, `pressure_qnh`, `pressure_qff`, `precipitation`, `snow_depth`
+- **Fields**: `wind_speed`, `wind_gust`, `wind_direction`, `temperature`, `humidity`, `pressure_qfe`, `pressure_qff`, `precipitation`, `snow_depth`
 
 ### `weather_forecast`
-- **Tags**: `station_id`, `network`, `model` (`icon-ch1` / `icon-ch2` / `open-meteo`), `init_date` (YYYY-MM-DD for same-day dedup)
+- **Tags**: `station_id`, `network`, `model` (`icon-ch1` / `icon-ch2` / `open-meteo` / `icon-ch`), `source`, `init_date` (YYYY-MM-DDTHH — one series per model run hour)
 - **Timestamp**: `valid_time` (the future moment the forecast is valid for)
-- **Fields**: `wind_speed`, `wind_gust`, `wind_direction`, `temperature`, `humidity`, `pressure_qnh`, `precipitation`
-- Kept indefinitely — enables forecast-vs-actual accuracy analysis.
+- **Fields**: `wind_speed`, `wind_gust`, `wind_direction`, `temperature`, `humidity`, `pressure_qff`, `precipitation` + optional `_min`/`_max` variants for ensemble spread (SwissMeteo only); `init_time` (ISO string, for Python-side dedup)
+- Kept indefinitely — enables forecast-vs-actual accuracy analysis per model run.
+
+### `station_wind_profile`
+- **Tags**: `station_id`, `network`, `level_m` (altitude ASL in metres), `init_date` (YYYY-MM-DDTHH)
+- **Timestamp**: `valid_time` (UTC)
+- **Fields**: `wind_speed`, `wind_speed_min`, `wind_speed_max`, `wind_direction`, `wind_direction_min`, `wind_direction_max`, `vertical_wind`, `vertical_wind_min`, `vertical_wind_max`, `init_time` (ISO string)
+- Written by `collectors/forecast_swissmeteo.py` via `influx.write_station_wind_profile()`; altitude bands: 500, 800, 1000, 1500, 2000, 2500, 3000, 4000, 5000 m ASL.
 
 ### `wind_forecast_grid`
 - **Tags**: `grid_id` (e.g. `"46.00_7.00"`), `level_hpa` (950/900/850/800/750/700/600/500), `init_date` (YYYY-MM-DD)
@@ -57,6 +63,7 @@
 - `GET /api/stations/{station_id}/latest` — most recent measurement
 - `GET /api/stations/{station_id}/history` — `?from=&to=&fields=`
 - `GET /api/stations/replay` — `?start=&end=&forecast_hours=&include_forecast=` — all stations over a time window for map replay; **server-side in-memory cache (5 min TTL)** keyed by query params; Flux query uses `aggregateWindow(30m, last)` before `pivot` to reduce row count ~3×
+- `GET /api/stations/{station_id}/forecast` — `?hours=N` — forecast points for a station; response includes top-level `forecast_source` (e.g. `"swissmeteo"`) and `forecast_model` (e.g. `"icon-ch"`) derived from the first data row
 - `GET /api/stations/{id}/forecast-accuracy` — `?from=&to=` — actuals + per-init_date forecast series
 
 ### Launch Sites

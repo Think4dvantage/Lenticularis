@@ -58,7 +58,6 @@ _ENDPOINTS: dict[str, str] = {
     "humidity":        f"{_BASE}/ch.meteoschweiz.messwerte-luftfeuchtigkeit-10min/ch.meteoschweiz.messwerte-luftfeuchtigkeit-10min_en.json",
     "pressure_qff":    f"{_BASE}/ch.meteoschweiz.messwerte-luftdruck-qff-10min/ch.meteoschweiz.messwerte-luftdruck-qff-10min_en.json",
     "pressure_qfe":    f"{_BASE}/ch.meteoschweiz.messwerte-luftdruck-qfe-10min/ch.meteoschweiz.messwerte-luftdruck-qfe-10min_en.json",
-    "pressure_qnh":    f"{_BASE}/ch.meteoschweiz.messwerte-luftdruck-qnh-10min/ch.meteoschweiz.messwerte-luftdruck-qnh-10min_en.json",
     "precipitation":   f"{_BASE}/ch.meteoschweiz.messwerte-niederschlag-10min/ch.meteoschweiz.messwerte-niederschlag-10min_en.json",
 }
 
@@ -244,7 +243,6 @@ class MeteoSwissCollector(BaseCollector):
                     temperature=fields.get("temperature"),
                     humidity=fields.get("humidity"),
                     pressure_qfe=fields.get("pressure_qfe"),
-                    pressure_qnh=fields.get("pressure_qnh"),
                     pressure_qff=fields.get("pressure_qff"),
                     precipitation=fields.get("precipitation"),
                     snow_depth=None,  # Not provided by MeteoSwiss 10-min endpoints

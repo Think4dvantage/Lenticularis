@@ -113,11 +113,12 @@ Before implementing or debugging any collector, check the winds-mobi providers r
 
 Key lessons already learned:
 - **MeteoSwiss `wind_direction`** is embedded as `properties["wind_direction"]` inside the `wind_speed` response — there is no separate windrichtung endpoint.
-- **MeteoSwiss pressure** has three endpoints: `qff`, `qfe`, `qnh`. The plain `luftdruck-10min` slug does not exist.
+- **MeteoSwiss pressure** uses two endpoints: `qff` (meteorological sea-level) and `qfe` (station pressure). The `qnh` endpoint is not used.
 - **MeteoSwiss timestamps** — use `reference_ts` (ISO 8601); fall back to `date` only if absent.
 - **Altitude strings** can arrive as floats (`'1888.00'`) or with unit suffix (`'1538.86 m'`). Always parse via `int(float(str(raw).split()[0]))`.
 - **METAR wind direction** can legitimately be missing/variable (VRB/calm). Allow nullable `wind_direction`.
 - **Holfuy API** endpoint is `https://api.holfuy.com/live/` (NOT `/measurements/`). Params: `pw=<key>&m=JSON&s=all&su=km/h&tu=C&loc&utc`. Response shape: `{"measurements": [...]}` wrapper (not a flat list). Each entry: `stationId`, `stationName`, `location: {latitude, longitude, altitude}`, `dateTime` (UTC when `utc` param present), `wind: {speed, gust, direction}`, `temperature`, `humidity`. Without `loc` flag, coordinates are absent. Without `utc` flag, timestamps are CE(S)T.
+- **Duplicate keyword trap in collector constructors** — some collectors explicitly pass `pressure_qff=None` even when the field is already optional. When renaming a field across constructors (e.g. `pressure_qnh` → `pressure_qff`), grep for *both* the old and new field name inside each constructor before editing to avoid `SyntaxError: keyword argument repeated`. The METAR collector was caught by this: it had both `pressure_qnh=…` and `pressure_qff=None` explicitly in the same call.
 
 ---
 

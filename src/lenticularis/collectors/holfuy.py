@@ -204,8 +204,6 @@ class HolfuyCollector(BaseCollector):
             temperature=_to_float(entry.get("temperature")),
             humidity=_to_float(entry.get("humidity")),
             pressure_qfe=None,
-            pressure_qnh=None,
-            pressure_qff=None,
             precipitation=None,
             snow_depth=None,
         )

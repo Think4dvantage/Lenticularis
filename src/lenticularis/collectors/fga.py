@@ -300,8 +300,6 @@ class FgaCollector(BaseCollector):
             temperature=temperature,
             humidity=humidity,
             pressure_qfe=pressure_qfe,
-            pressure_qnh=None,
-            pressure_qff=None,
             precipitation=precipitation,
             snow_depth=None,
         )

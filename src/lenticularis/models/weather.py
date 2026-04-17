@@ -51,9 +51,8 @@ class WeatherMeasurement(BaseModel):
     All fields except station_id and timestamp are optional since different stations
     may provide different measurements.
 
-    Pressure is stored as three physically distinct variants:
+    Pressure is stored as two physically distinct variants:
       - pressure_qfe: Station pressure (actual atmospheric pressure at station elevation)
-      - pressure_qnh: Altimeter setting / aviation standard (corrected to sea level via ISA)
       - pressure_qff: Meteorological sea-level pressure (corrected with local temperature & humidity)
     """
 
@@ -70,7 +69,6 @@ class WeatherMeasurement(BaseModel):
     temperature: Optional[float] = Field(None, description="Air temperature in °C")
     humidity: Optional[float] = Field(None, ge=0, le=100, description="Relative humidity in %")
     pressure_qfe: Optional[float] = Field(None, description="Station pressure (QFE) in hPa")
-    pressure_qnh: Optional[float] = Field(None, description="Altimeter setting (QNH) in hPa")
     pressure_qff: Optional[float] = Field(None, description="Sea-level pressure (QFF) in hPa")
 
     # Precipitation / snow
@@ -89,7 +87,6 @@ class WeatherMeasurement(BaseModel):
                 "temperature": 5.2,
                 "humidity": 75.0,
                 "pressure_qfe": 974.8,
-                "pressure_qnh": 1013.2,
                 "pressure_qff": 1012.9,
                 "precipitation": 0.0,
                 "snow_depth": None,
@@ -147,15 +144,57 @@ class ForecastPoint(BaseModel):
     init_time: datetime = Field(..., description="Model run initialisation time (UTC)")
     valid_time: datetime = Field(..., description="Forecast valid time (UTC) — the future moment this applies to")
 
-    # Wind
+    # Wind — probable (most likely ensemble member) + optional min/max spread
     wind_speed: Optional[float] = Field(None, description="Wind speed in km/h")
+    wind_speed_min: Optional[float] = Field(None, description="Wind speed ensemble minimum")
+    wind_speed_max: Optional[float] = Field(None, description="Wind speed ensemble maximum")
     wind_direction: Optional[int] = Field(None, ge=0, le=360, description="Wind direction in degrees")
+    wind_direction_min: Optional[int] = Field(None, description="Wind direction ensemble minimum")
+    wind_direction_max: Optional[int] = Field(None, description="Wind direction ensemble maximum")
     wind_gust: Optional[float] = Field(None, description="Wind gust in km/h")
+    wind_gust_min: Optional[float] = Field(None, description="Wind gust ensemble minimum")
+    wind_gust_max: Optional[float] = Field(None, description="Wind gust ensemble maximum")
 
-    # Atmosphere
+    # Atmosphere — probable + optional min/max spread
     temperature: Optional[float] = Field(None, description="Temperature in °C")
+    temperature_min: Optional[float] = Field(None, description="Temperature ensemble minimum")
+    temperature_max: Optional[float] = Field(None, description="Temperature ensemble maximum")
     humidity: Optional[float] = Field(None, description="Relative humidity in %")
-    pressure_qnh: Optional[float] = Field(None, description="Pressure (QNH) in hPa")
+    humidity_min: Optional[float] = Field(None, description="Humidity ensemble minimum")
+    humidity_max: Optional[float] = Field(None, description="Humidity ensemble maximum")
+    pressure_qff: Optional[float] = Field(None, description="Pressure (QFF) in hPa")
+    pressure_qff_min: Optional[float] = Field(None, description="Pressure ensemble minimum")
+    pressure_qff_max: Optional[float] = Field(None, description="Pressure ensemble maximum")
 
-    # Precipitation
+    # Precipitation — probable + optional min/max spread
     precipitation: Optional[float] = Field(None, description="Precipitation in mm")
+    precipitation_min: Optional[float] = Field(None, description="Precipitation ensemble minimum")
+    precipitation_max: Optional[float] = Field(None, description="Precipitation ensemble maximum")
+
+
+class StationWindProfilePoint(BaseModel):
+    """
+    A single hourly wind forecast at one altitude band for one station.
+
+    Written to the ``station_wind_profile`` InfluxDB measurement.
+    Stores full ensemble (probable / min / max) from the SwissMeteo forecast
+    container.  ``level_m`` is altitude ASL in metres (e.g. 500, 1000, 1500…).
+    """
+
+    station_id: str
+    network: str
+    level_m: int
+    init_time: datetime
+    valid_time: datetime
+
+    wind_speed: Optional[float] = None
+    wind_speed_min: Optional[float] = None
+    wind_speed_max: Optional[float] = None
+
+    wind_direction: Optional[int] = None
+    wind_direction_min: Optional[int] = None
+    wind_direction_max: Optional[int] = None
+
+    vertical_wind: Optional[float] = None
+    vertical_wind_min: Optional[float] = None
+    vertical_wind_max: Optional[float] = None

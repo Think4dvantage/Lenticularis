@@ -76,7 +76,7 @@
       "pressure_delta": "ΔPression",
       "precipitation": "Précip",
       "snow": "Neige",
-      "qnh": "QNH",
+      "qff": "QFF",
       "view_history": "Historique →",
       "status": "Statut",
       "foehn_dashboard": "Tableau föhn →",
@@ -106,7 +106,7 @@
     "col_gust": "Rafale (km/h)",
     "col_temp": "Temp (°C)",
     "col_humidity": "Hum (%)",
-    "col_pressure": "QNH (hPa)",
+    "col_pressure": "QFF (hPa)",
     "col_precipitation": "Précip (mm)",
     "col_last_seen": "Vu il y a"
   },
@@ -284,7 +284,7 @@
       "wind_direction_history": "Direction du vent — Historique",
       "temperature": "Température (°C)",
       "humidity": "Humidité (%)",
-      "pressure": "Pression QNH (hPa)",
+      "pressure": "Pression QFF (hPa)",
       "precipitation": "Précipitations (mm)",
       "snow": "Épaisseur de neige (cm)"
     }

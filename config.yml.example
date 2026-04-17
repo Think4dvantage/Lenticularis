@@ -34,6 +34,17 @@ forecast_collectors:
     config:
       api_key: ""  # shared with open-meteo-short — set in one place, applies to both
 
+  # SwissMeteo forecast container — surface + altitude wind profiles
+  # Fetches ICON-CH1/CH2 ensemble forecasts (probable/min/max) directly from the
+  # lsmfapi container.  Altitude winds are written to station_wind_profile measurement.
+  # Disable open-meteo entries above when switching to this source.
+  - name: "swissmeteo"
+    enabled: false
+    interval_minutes: 60
+    horizon_hours: 120
+    config:
+      base_url: "https://lsmfapi-dev.lg4.ch"
+
 # Weather Data Collectors
 collectors:
   - name: "meteoswiss"
@@ -51,7 +62,6 @@ collectors:
         humidity:       "https://data.geo.admin.ch/ch.meteoschweiz.messwerte-luftfeuchtigkeit-10min/ch.meteoschweiz.messwerte-luftfeuchtigkeit-10min_en.json"
         pressure_qff:   "https://data.geo.admin.ch/ch.meteoschweiz.messwerte-luftdruck-qff-10min/ch.meteoschweiz.messwerte-luftdruck-qff-10min_en.json"
         pressure_qfe:   "https://data.geo.admin.ch/ch.meteoschweiz.messwerte-luftdruck-10min/ch.meteoschweiz.messwerte-luftdruck-10min_en.json"
-        pressure_qnh:   "https://data.geo.admin.ch/ch.meteoschweiz.messwerte-luftdruck-qnh-10min/ch.meteoschweiz.messwerte-luftdruck-qnh-10min_en.json"
         precipitation:  "https://data.geo.admin.ch/ch.meteoschweiz.messwerte-niederschlag-10min/ch.meteoschweiz.messwerte-niederschlag-10min_en.json"
 
   - name: "holfuy"

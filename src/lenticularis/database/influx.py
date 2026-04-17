@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 # InfluxDB measurement names
 MEASUREMENT_WEATHER = "weather_data"
 MEASUREMENT_FORECAST = "weather_forecast"
+MEASUREMENT_WIND_PROFILE = "station_wind_profile"
 
 
 class InfluxClient:
@@ -80,7 +81,7 @@ class InfluxClient:
                 "temperature": m.temperature,
                 "humidity": m.humidity,
                 "pressure_qfe": m.pressure_qfe,
-                "pressure_qnh": m.pressure_qnh,
+                "pressure_qff": m.pressure_qff,
                 "pressure_qff": m.pressure_qff,
                 "precipitation": m.precipitation,
                 "snow_depth": m.snow_depth,
@@ -716,7 +717,7 @@ from(bucket: "{self._cfg.bucket}")
         """
         _FIELDS = [
             "wind_speed", "wind_gust", "temperature",
-            "pressure_qnh", "humidity", "precipitation", "snow_depth",
+            "pressure_qff", "humidity", "precipitation", "snow_depth",
         ]
         field_filter = " or ".join(f'r._field == "{f}"' for f in _FIELDS)
         start_str = start.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -799,10 +800,11 @@ from(bucket: "{self._cfg.bucket}")
         Time:   ``valid_time`` (the future moment the forecast applies to)
         Fields: weather fields + ``init_time`` (ISO string) for deduplication
 
-        ``init_date`` (YYYY-MM-DD UTC) is a tag so that each calendar day of model
-        runs forms its own InfluxDB series.  Within a day, later runs overwrite
-        earlier ones (same tags + timestamp), but runs from different days are kept
-        independently — enabling per-day forecast accuracy comparisons.
+        ``init_date`` (YYYY-MM-DDTHH UTC) is a tag so that each model run hour
+        forms its own InfluxDB series.  Runs from different hours (or different
+        days) are stored independently — enabling per-run forecast accuracy
+        comparisons.  Python-side dedup in query methods picks the latest
+        ``init_time`` per ``valid_time`` for live evaluation.
         """
         if not points:
             return
@@ -815,17 +817,31 @@ from(bucket: "{self._cfg.bucket}")
                 .tag("network", fp.network)
                 .tag("source", fp.source)
                 .tag("model", fp.model)
-                .tag("init_date", fp.init_time.astimezone(timezone.utc).strftime("%Y-%m-%d"))
+                .tag("init_date", fp.init_time.astimezone(timezone.utc).strftime("%Y-%m-%dT%H"))
                 .time(int(fp.valid_time.timestamp()), "s")
             )
             field_map = {
-                "wind_speed":     fp.wind_speed,
-                "wind_gust":      fp.wind_gust,
-                "wind_direction": fp.wind_direction,
-                "temperature":    fp.temperature,
-                "humidity":       fp.humidity,
-                "pressure_qnh":   fp.pressure_qnh,
-                "precipitation":  fp.precipitation,
+                "wind_speed":          fp.wind_speed,
+                "wind_speed_min":      fp.wind_speed_min,
+                "wind_speed_max":      fp.wind_speed_max,
+                "wind_gust":           fp.wind_gust,
+                "wind_gust_min":       fp.wind_gust_min,
+                "wind_gust_max":       fp.wind_gust_max,
+                "wind_direction":      fp.wind_direction,
+                "wind_direction_min":  fp.wind_direction_min,
+                "wind_direction_max":  fp.wind_direction_max,
+                "temperature":         fp.temperature,
+                "temperature_min":     fp.temperature_min,
+                "temperature_max":     fp.temperature_max,
+                "humidity":            fp.humidity,
+                "humidity_min":        fp.humidity_min,
+                "humidity_max":        fp.humidity_max,
+                "pressure_qff":        fp.pressure_qff,
+                "pressure_qff_min":    fp.pressure_qff_min,
+                "pressure_qff_max":    fp.pressure_qff_max,
+                "precipitation":       fp.precipitation,
+                "precipitation_min":   fp.precipitation_min,
+                "precipitation_max":   fp.precipitation_max,
             }
             for field_name, value in field_map.items():
                 if value is not None:
@@ -884,6 +900,58 @@ from(bucket: "{self._cfg.bucket}")
             logger.debug("Wrote %d wind_forecast_grid points to InfluxDB", len(influx_points))
         except Exception as exc:
             logger.error("InfluxDB wind_forecast_grid write error: %s", exc)
+            raise
+
+    # ------------------------------------------------------------------
+    # Station wind profile (altitude winds) — write
+    # ------------------------------------------------------------------
+
+    def write_station_wind_profile(self, points: list) -> None:
+        """
+        Write StationWindProfilePoint objects to ``station_wind_profile``.
+
+        Tags:   ``station_id``, ``network``, ``level_m``, ``init_date``
+        Time:   ``valid_time`` (UTC)
+        Fields: wind_speed/min/max, wind_direction/min/max, vertical_wind/min/max,
+                ``init_time`` (ISO string for Python-side dedup)
+        """
+        from lenticularis.models.weather import StationWindProfilePoint  # avoid circular
+        if not points:
+            return
+
+        influx_points: list[Point] = []
+        for p in points:
+            ip = (
+                Point(MEASUREMENT_WIND_PROFILE)
+                .tag("station_id", p.station_id)
+                .tag("network",    p.network)
+                .tag("level_m",    str(p.level_m))
+                .tag("init_date",  p.init_time.astimezone(timezone.utc).strftime("%Y-%m-%dT%H"))
+                .time(int(p.valid_time.timestamp()), "s")
+            )
+            for field_name, value in {
+                "wind_speed":          p.wind_speed,
+                "wind_speed_min":      p.wind_speed_min,
+                "wind_speed_max":      p.wind_speed_max,
+                "wind_direction":      p.wind_direction,
+                "wind_direction_min":  p.wind_direction_min,
+                "wind_direction_max":  p.wind_direction_max,
+                "vertical_wind":       p.vertical_wind,
+                "vertical_wind_min":   p.vertical_wind_min,
+                "vertical_wind_max":   p.vertical_wind_max,
+            }.items():
+                if value is not None:
+                    ip = ip.field(field_name, float(value))
+            ip = ip.field("init_time", p.init_time.astimezone(timezone.utc).isoformat())
+            influx_points.append(ip)
+
+        try:
+            self._write_api.write(
+                bucket=self._cfg.bucket, org=self._cfg.org, record=influx_points
+            )
+            logger.debug("Wrote %d station_wind_profile points to InfluxDB", len(influx_points))
+        except Exception as exc:
+            logger.error("InfluxDB station_wind_profile write error: %s", exc)
             raise
 
     def query_forecast_grid(
@@ -1050,6 +1118,8 @@ from(bucket: "{self._cfg.bucket}")
             f'r.station_id == "{sid}"' for sid in station_ids
         )
         # Limit to runs from the last 3 days so we don't pull all historical init_dates.
+        # Uses day-prefix string for the cutoff — lexicographic comparison works because
+        # new-format "YYYY-MM-DDTHH" >= "YYYY-MM-DD" is always true for that day.
         # Old-format data (no init_date tag) is included via the `not exists` branch.
         three_days_ago = (datetime.now(timezone.utc) - timedelta(days=3)).strftime("%Y-%m-%d")
 
@@ -1068,6 +1138,14 @@ from(bucket: "{self._cfg.bucket}")
             logger.error("InfluxDB forecast query error: %s", exc)
             return {}
 
+        # Staleness threshold for preferred source: if swissmeteo's newest init_time
+        # is older than this cutoff, treat it as unavailable and fall back to Open-Meteo.
+        _PREFERRED_SOURCE = "swissmeteo"
+        _PREFERRED_MAX_AGE_H = 24
+        preferred_cutoff_iso = (
+            now - timedelta(hours=_PREFERRED_MAX_AGE_H)
+        ).astimezone(timezone.utc).isoformat()
+
         # raw[station_id][valid_time_iso] = {fields..., "_init_time": str}
         raw: dict[str, dict[str, dict]] = {}
         for table in tables:
@@ -1080,15 +1158,33 @@ from(bucket: "{self._cfg.bucket}")
                     k: v
                     for k, v in record.values.items()
                     if not k.startswith("_")
-                    and k not in ("result", "table", "station_id", "network", "source", "model", "init_time", "init_date")
+                    and k not in ("result", "table", "station_id", "network", "init_time", "init_date")
                 }
+                # source / model kept intentionally — API surfaces them as forecast metadata
                 fields["_init_time"] = init_time_str
 
                 raw.setdefault(sid, {})
                 existing = raw[sid].get(valid_time_iso)
-                # Keep row with the latest init_time (lexicographic compare of ISO strings)
-                if existing is None or init_time_str > existing.get("_init_time", ""):
+                if existing is None:
                     raw[sid][valid_time_iso] = fields
+                else:
+                    in_src   = fields.get("source", "")
+                    ex_src   = existing.get("source", "")
+                    in_fresh = init_time_str >= preferred_cutoff_iso
+                    ex_fresh = existing.get("_init_time", "") >= preferred_cutoff_iso
+
+                    if in_src == _PREFERRED_SOURCE and in_fresh and ex_src != _PREFERRED_SOURCE:
+                        # Incoming is a fresh preferred run — always wins
+                        raw[sid][valid_time_iso] = fields
+                    elif ex_src == _PREFERRED_SOURCE and ex_fresh and in_src != _PREFERRED_SOURCE:
+                        # Existing is a fresh preferred run — keep it
+                        pass
+                    elif in_src == ex_src and init_time_str > existing.get("_init_time", ""):
+                        # Same source: prefer the newer model run
+                        raw[sid][valid_time_iso] = fields
+                    elif in_src != ex_src and not ex_fresh and init_time_str > existing.get("_init_time", ""):
+                        # Preferred source is stale/absent — fall back to latest init_time
+                        raw[sid][valid_time_iso] = fields
 
         # Strip internal tracking key
         return {
@@ -1162,9 +1258,9 @@ from(bucket: "{self._cfg.bucket}")
         Return actual observations and per-init_date model forecasts for the window.
 
         New-format data (written after the ``init_date`` tag was added to
-        ``write_forecast``) is grouped by init_date so each calendar day of model
-        runs is a separate series.  Legacy data (no ``init_date`` tag) is returned
-        as a single fallback series.
+        ``write_forecast``) is grouped by init_date so each model run hour is a
+        separate series.  Legacy data (no ``init_date`` tag, or day-only format
+        from before the hourly change) is returned as a single fallback series.
 
         Returns::
 
@@ -1178,7 +1274,7 @@ from(bucket: "{self._cfg.bucket}")
         """
         _WEATHER_FIELDS = {
             "wind_speed", "wind_gust", "wind_direction",
-            "temperature", "humidity", "pressure_qnh", "precipitation", "snow_depth",
+            "temperature", "humidity", "pressure_qff", "precipitation", "snow_depth",
         }
         start_str = start.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         end_str   = end.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -1216,7 +1312,7 @@ from(bucket: "{self._cfg.bucket}")
            columnKey: ["_field"], valueColumn: "_value")
   |> sort(columns: ["_time"])
 """
-        # raw_new[init_date][valid_time_iso] = fields — last written run of that day wins
+        # raw_new[init_date][valid_time_iso] = fields — each run hour is a separate series
         raw_new: dict[str, dict[str, dict]] = {}
         try:
             for table in self._query_api.query(flux_fc_new, org=self._cfg.org):

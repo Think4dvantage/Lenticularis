@@ -83,11 +83,12 @@ Frontend
 | Source | Auth | Key measurements | Interval |
 |---|---|---|---|
 | MeteoSwiss | None (open data) | wind speed/gust, temp, humidity, pressure | 10 min |
-| METAR (AviationWeather) | None (open data) | wind speed/direction/gust, temperature, altimeter (QNH) | 15 min |
+| METAR (AviationWeather) | None (open data) | wind speed/direction/gust, temperature, pressure | 15 min |
 | SLF | None (open data) | wind speed/direction/gust, snow depth, temp | 30 min |
 | Wunderground/Ecowitt | API key | all personal weather station sensors | 5–15 min |
 | Holfuy | API key (`pw=` param) | wind speed/gust/direction, temp, humidity | 5 min |
-| Open-Meteo | None | 5-day forecast (short + extended) | layered schedule |
+| Open-Meteo | None (or commercial API key) | 5-day forecast (short + extended); grid forecast for wind-forecast map | layered schedule |
+| SwissMeteo (`lsmfapi-dev.lg4.ch`) | None (internal API) | ICON-CH ensemble forecast: probable + min/max for all fields; altitude-wind profiles per station | 60 min |
 
 ---
 

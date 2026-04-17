@@ -229,7 +229,7 @@ class WindlineCollector(BaseCollector):
             temperature = _to_float(payload.get("temp1"))
             humidity = _to_float(payload.get("hum1"))
             pressure_qfe = _to_float(payload.get("airpressurestation_qfe"))
-            pressure_qnh = _to_float(payload.get("airpressure1"))
+            pressure_qff = _to_float(payload.get("airpressure1"))
             precipitation = _to_float(payload.get("rainfall1"))
 
             signature = (
@@ -240,7 +240,7 @@ class WindlineCollector(BaseCollector):
                 temperature,
                 humidity,
                 pressure_qfe,
-                pressure_qnh,
+                pressure_qff,
                 precipitation,
             )
             if self._last_signature_by_station.get(sid) == signature:
@@ -259,8 +259,7 @@ class WindlineCollector(BaseCollector):
                 temperature=temperature,
                 humidity=humidity,
                 pressure_qfe=pressure_qfe,
-                pressure_qnh=pressure_qnh,
-                pressure_qff=None,
+                pressure_qff=pressure_qff,
                 precipitation=precipitation,
                 snow_depth=None,
             )

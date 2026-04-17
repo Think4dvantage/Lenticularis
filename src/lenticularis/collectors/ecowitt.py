@@ -196,8 +196,8 @@ class EcowittCollector(BaseCollector):
         temperature = _to_float(_field_value(data, "outdoor", "temperature"))
         humidity = _to_float(_field_value(data, "outdoor", "humidity"))
 
-        # Ecowitt "relative" ≈ QNH; "absolute" ≈ QFE
-        pressure_qnh = _to_float(_field_value(data, "pressure", "relative"))
+        # Ecowitt "relative" is sea-level adjusted; map to QFF
+        pressure_qff = _to_float(_field_value(data, "pressure", "relative"))
         pressure_qfe = _to_float(_field_value(data, "pressure", "absolute"))
 
         # Use rain_daily delta so stored values are mm-per-interval (same semantics
@@ -221,7 +221,7 @@ class EcowittCollector(BaseCollector):
 
         logger.info(
             "EcowittCollector: %s — wind=%.1f km/h dir=%s°  temp=%.1f°C  pressure=%.1f hPa",
-            sid, wind_speed or 0.0, wind_direction, temperature or 0.0, pressure_qnh or 0.0,
+            sid, wind_speed or 0.0, wind_direction, temperature or 0.0, pressure_qff or 0.0,
         )
         return WeatherMeasurement(
             station_id=sid,
@@ -232,7 +232,7 @@ class EcowittCollector(BaseCollector):
             wind_gust=wind_gust,
             temperature=temperature,
             humidity=humidity,
-            pressure_qnh=pressure_qnh,
+            pressure_qff=pressure_qff,
             pressure_qfe=pressure_qfe,
             precipitation=precipitation,
         )

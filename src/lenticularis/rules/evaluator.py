@@ -48,8 +48,8 @@ wind_gust           → wind_gust
 wind_direction      → wind_direction
 temperature         → temperature
 humidity            → humidity
-pressure            → pressure_qnh   (default to QNH)
-pressure_delta      → pressure_qnh   (delta between two stations, QNH-based)
+pressure            → pressure_qff
+pressure_delta      → pressure_qff   (delta between two stations, QFF-based)
 precipitation       → precipitation
 snow_depth          → snow_depth
 """
@@ -75,8 +75,8 @@ FIELD_MAP: dict[str, str] = {
     "wind_direction": "wind_direction",
     "temperature":    "temperature",
     "humidity":       "humidity",
-    "pressure":       "pressure_qnh",
-    "pressure_delta": "pressure_qnh",
+    "pressure":       "pressure_qff",
+    "pressure_delta": "pressure_qff",
     "precipitation":  "precipitation",
     "snow_depth":     "snow_depth",
     # Föhn virtual stations (station_id = "foehn-<region>", e.g. "foehn-haslital").
@@ -160,7 +160,7 @@ def _eval_condition(
         return False, None
 
     if cond.field == "pressure_delta":
-        # Compare QNH pressure between two stations
+        # Compare QFF pressure between two stations
         data_b = station_data.get(cond.station_b_id or "")
         if data_b is None:
             return False, None

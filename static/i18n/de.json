@@ -76,7 +76,7 @@
       "pressure_delta": "ΔDruck",
       "precipitation": "Niederschl.",
       "snow": "Schnee",
-      "qnh": "QNH",
+      "qff": "QFF",
       "view_history": "Verlauf →",
       "status": "Status",
       "foehn_dashboard": "Föhn-Dashboard →",
@@ -106,7 +106,7 @@
     "col_gust": "Böen (km/h)",
     "col_temp": "Temp. (°C)",
     "col_humidity": "Feuchte (%)",
-    "col_pressure": "QNH (hPa)",
+    "col_pressure": "QFF (hPa)",
     "col_precipitation": "Niederschl. (mm)",
     "col_last_seen": "Zuletzt gesehen"
   },
@@ -284,7 +284,7 @@
       "wind_direction_history": "Windrichtung — Verlauf",
       "temperature": "Temperatur (°C)",
       "humidity": "Luftfeuchtigkeit (%)",
-      "pressure": "Luftdruck QNH (hPa)",
+      "pressure": "Luftdruck QFF (hPa)",
       "precipitation": "Niederschlag (mm)",
       "snow": "Schneehöhe (cm)"
     }

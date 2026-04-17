@@ -217,7 +217,7 @@ function buildPopup(s) {
     [window.t('map.popup.gust'),        `${_fmt(m.wind_gust, 1)} km/h`],
     [window.t('map.popup.temperature'), `${_fmt(m.temperature, 1)} °C`],
     [window.t('map.popup.humidity'),    `${_fmt(m.humidity, 0)} %`],
-    [window.t('map.popup.qnh'),         `${_fmt(m.pressure_qnh, 1)} hPa`],
+    [window.t('map.popup.qff'),         `${_fmt(m.pressure_qff, 1)} hPa`],
   ].map(([label, val]) =>
     `<div class="popup-row"><span>${label}</span><span>${val}</span></div>`
   ).join('');

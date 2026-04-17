@@ -108,7 +108,7 @@ function renderRow(s) {
   const gust    = _fmt(m.wind_gust, 1);
   const temp    = _fmt(m.temperature, 1);
   const hum     = _fmt(m.humidity, 0);
-  const qnh     = _fmt(m.pressure_qnh, 1);
+  const qff     = _fmt(m.pressure_qff, 1);
   const precip  = _fmt(m.precipitation, 1);
   const dirArrow = _windArrow(m.wind_direction);
   const age     = s.latest?.timestamp ? _ageLabel(s.latest.timestamp) : null;
@@ -125,7 +125,7 @@ function renderRow(s) {
     <td>${gust}</td>
     <td>${temp}</td>
     <td>${hum}</td>
-    <td>${qnh}</td>
+    <td>${qff}</td>
     <td>${precip}</td>
     <td><span class="freshness ${ageCls}">${age || '<span class="value-missing">—</span>'}</span></td>
   </tr>`;

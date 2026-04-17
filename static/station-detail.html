@@ -257,6 +257,7 @@
   <button class="range-btn" data-hours="720" onclick="setRange(720)" data-i18n="station_detail.ranges.30days">30 days</button>
   <span style="width:1px;height:20px;background:#2d3748;flex-shrink:0;margin:0 4px"></span>
   <button class="range-btn" id="forecastBtn" onclick="toggleForecast()" data-i18n="station_detail.forecast_button">📡 Forecast</button>
+  <span id="forecastSourceBadge" style="display:none;font-size:0.75rem;color:#a0aec0;background:#1e2a3a;border:1px solid #2d4a6e;border-radius:4px;padding:3px 8px;white-space:nowrap"></span>
   <span style="width:1px;height:20px;background:#2d3748;flex-shrink:0;margin:0 4px"></span>
   <button class="range-btn" id="accuracyBtn" onclick="openAccuracy()" data-i18n="station_detail.accuracy_button">📊 Accuracy</button>
 </div>
@@ -299,7 +300,7 @@
 
   <!-- Pressure -->
   <div class="chart-card" id="card-pressure" style="display:none">
-    <h2 data-i18n="station_detail.charts.pressure">Pressure QNH (hPa)</h2>
+    <h2 data-i18n="station_detail.charts.pressure">Pressure QFF (hPa)</h2>
     <div class="chart-wrapper"><canvas id="chart-pressure"></canvas></div>
   </div>
 

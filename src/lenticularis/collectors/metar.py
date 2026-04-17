@@ -170,8 +170,7 @@ class MetarCollector(BaseCollector):
                     temperature=_to_float(row.get("temp")),
                     humidity=None,
                     pressure_qfe=None,
-                    pressure_qnh=_to_float(row.get("altim")),
-                    pressure_qff=None,
+                    pressure_qff=_to_float(row.get("altim")),
                     precipitation=None,
                     snow_depth=None,
                 )

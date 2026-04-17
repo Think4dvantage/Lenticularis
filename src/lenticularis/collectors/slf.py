@@ -172,8 +172,6 @@ class SlfCollector(BaseCollector):
                     temperature=values.get("temperature"),
                     humidity=None,
                     pressure_qfe=None,
-                    pressure_qnh=None,
-                    pressure_qff=None,
                     precipitation=None,
                     snow_depth=values.get("snow_depth"),
                 )
