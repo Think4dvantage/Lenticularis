@@ -1,5 +1,11 @@
 # Constraints — What NOT to Do
 
+## AI Files
+
+**All AI-related content lives exclusively in `.ai/`.** Never create tool-specific instruction files such as `CLAUDE.md`, `.cursorrules`, `.github/copilot-instructions.md`, `.windsurfrules`, or any equivalent — not even as thin pointers. Instructions, context, prompts, and plans all go in `.ai/` and nowhere else.
+
+---
+
 ## Production
 
 **Never touch prod directly.** All production changes go through the `lg4` IaC repo. No direct SSH, no direct `docker-compose` on the prod host.

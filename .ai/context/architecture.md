@@ -39,7 +39,7 @@
 ### `wind_forecast_grid`
 - **Tags**: `grid_id` (e.g. `"46.00_7.00"`), `level_hpa` (950/900/850/800/750/700/600/500), `init_date` (YYYY-MM-DD)
 - **Timestamp**: `valid_time` (UTC)
-- **Fields**: `wind_speed` (km/h), `wind_direction` (degrees int), `lat`, `lon`
+- **Fields**: `wind_speed` (km/h), `wind_direction` (degrees int), `humidity` (% relative humidity), `lat`, `lon`
 - Altitude → hPa mapping: 500m→950, 1000m→900, 1500m→850, 2000m→800, 2500m→750, 3000m→700, 4000m→600, 5000m→500 (550hPa is not available in ICON-seamless)
 - Written by `collectors/forecast_grid.py` via `influx.write_forecast_grid()`; queried by `influx.query_forecast_grid(start_dt, end_dt, level_hpa)` which deduplicates to latest `init_date` per (`grid_id`, `valid_time`)
 
@@ -123,7 +123,7 @@ All time-range endpoints accept `?from=&to=`. Best-windows also accepts `?top_n=
 - `DELETE /api/admin/station-dedup/{id}` — remove pair; calls `rebuild_display_registry` immediately
 
 ### Wind Forecast Grid
-- `GET /api/wind-forecast/grid?date=YYYY-MM-DD&level_m=1500` — requires `require_pilot`; maps `level_m` → `level_hpa` via `ALTITUDE_TO_HPA`; returns `{date, level_m, level_hpa, grid:[{lat,lon},...], frames:[{t, ws:[...], wd:[...]},...]}`; `grid` order is canonical (lat desc, lon asc, 171 points); `ws`/`wd` are parallel arrays indexed to `grid`; `null` for missing data
+- `GET /api/wind-forecast/grid?date=YYYY-MM-DD&level_m=1500` — requires `require_pilot`; maps `level_m` → `level_hpa` via `ALTITUDE_TO_HPA`; returns `{date, level_m, level_hpa, grid:[{lat,lon},...], frames:[{t, ws:[...], wd:[...], rh:[...]},...]}`; `grid` order is canonical (lat desc, lon asc, 171 points); `ws`/`wd`/`rh` are parallel arrays indexed to `grid`; `null` for missing data; `rh` is relative humidity %; grid arrows show cloud icon when `rh >= 90`; arrows are clickable (popup shows ws/wd/rh)
 
 ### AI
 - `POST /api/ai/suggest-conditions` — Ollama-powered natural-language → condition JSON

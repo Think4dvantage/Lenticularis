@@ -891,6 +891,8 @@ from(bucket: "{self._cfg.bucket}")
                 p = p.field("wind_speed", float(fp.wind_speed))
             if fp.wind_direction is not None:
                 p = p.field("wind_direction", float(fp.wind_direction))
+            if fp.humidity is not None:
+                p = p.field("humidity", float(fp.humidity))
             influx_points.append(p)
 
         try:
@@ -1000,12 +1002,14 @@ from(bucket: "{self._cfg.bucket}")
                         "valid_time":     vt_iso,
                         "wind_speed":     record.values.get("wind_speed"),
                         "wind_direction": record.values.get("wind_direction"),
+                        "humidity":       record.values.get("humidity"),
                         "_init_date":     init_date,
                     }
 
         result = []
         for row in raw.values():
             wd = row.get("wind_direction")
+            rh = row.get("humidity")
             result.append({
                 "grid_id":        row["grid_id"],
                 "lat":            row["lat"],
@@ -1013,6 +1017,7 @@ from(bucket: "{self._cfg.bucket}")
                 "valid_time":     row["valid_time"],
                 "wind_speed":     row.get("wind_speed"),
                 "wind_direction": int(wd) if wd is not None else None,
+                "humidity":       round(rh, 1) if rh is not None else None,
             })
         result.sort(key=lambda r: r["valid_time"])
         logger.debug(

@@ -123,11 +123,11 @@ async def get_wind_forecast_grid(
     # Group rows by valid_time; build parallel ws/wd arrays per canonical grid index
     n_grid = len(_CANONICAL_GRID)
 
-    by_time: dict[str, tuple[list, list]] = {}
+    by_time: dict[str, tuple[list, list, list]] = {}
     for row in rows:
         vt = row["valid_time"]
         if vt not in by_time:
-            by_time[vt] = ([None] * n_grid, [None] * n_grid)
+            by_time[vt] = ([None] * n_grid, [None] * n_grid, [None] * n_grid)
         lat = row.get("lat")
         lon = row.get("lon")
         if lat is None or lon is None:
@@ -137,12 +137,14 @@ async def get_wind_forecast_grid(
             continue
         ws = row.get("wind_speed")
         wd = row.get("wind_direction")
+        rh = row.get("humidity")
         by_time[vt][0][idx] = round(ws, 1) if ws is not None else None
-        by_time[vt][1][idx] = wd  # already int|None from query layer
+        by_time[vt][1][idx] = wd   # already int|None from query layer
+        by_time[vt][2][idx] = rh   # already float|None from query layer
 
     frames = [
-        {"t": vt, "ws": ws_arr, "wd": wd_arr}
-        for vt, (ws_arr, wd_arr) in sorted(by_time.items())
+        {"t": vt, "ws": ws_arr, "wd": wd_arr, "rh": rh_arr}
+        for vt, (ws_arr, wd_arr, rh_arr) in sorted(by_time.items())
     ]
 
     elapsed_ms = (datetime.now(timezone.utc) - t0).total_seconds() * 1000

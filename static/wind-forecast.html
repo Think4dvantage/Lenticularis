@@ -272,6 +272,18 @@ console.log('[Lenti:wind-forecast] Leaflet map created, center CH');
 let _markerLayer = L.layerGroup().addTo(map);
 
 // ── Arrow rendering ───────────────────────────────────────────────────────────
+// Cloud shape identical to map.js — three overlapping circles, flat base.
+function _cloudSvg(yTop) {
+  const cY = yTop + 8;
+  return `<g opacity="0.92">
+    <circle cx="11" cy="${cY - 1}" r="4"   fill="white" stroke="#90cdf4" stroke-width="1.2"/>
+    <circle cx="17" cy="${cY - 4}" r="4.8" fill="white" stroke="#90cdf4" stroke-width="1.2"/>
+    <circle cx="23" cy="${cY - 1}" r="3.5" fill="white" stroke="#90cdf4" stroke-width="1.2"/>
+    <rect   x="7"  y="${cY + 1}"  width="18" height="5" fill="white"/>
+    <line   x1="7" y1="${cY + 6}" x2="25" y2="${cY + 6}" stroke="#90cdf4" stroke-width="1.2"/>
+  </g>`;
+}
+
 // Colour scale: 0–15 km/h blue → 15–30 purple → 30–50 red → 50+ solid red
 function windSpeedColor(speed) {
   if (speed == null) return '#a0aec0';
@@ -293,11 +305,13 @@ function markerSize(speed) {
   return Math.round(20 + (s / 70) * 24); // 20–44 px (slightly smaller than station arrows)
 }
 
-function gridMarkerIcon(ws, wd) {
-  const color  = windSpeedColor(ws);
-  const size   = markerSize(ws);
-  const hasDir = wd != null;
-  const dir    = wd ?? 0;
+function gridMarkerIcon(ws, wd, rh) {
+  const color    = windSpeedColor(ws);
+  const size     = markerSize(ws);
+  const hasDir   = wd != null;
+  const dir      = wd ?? 0;
+  const hasCloud = rh != null && rh >= 90;
+  const extraH   = hasCloud ? 14 : 0;
 
   const arrow = hasDir
     ? `<g transform="rotate(${dir},16,16)">
@@ -308,16 +322,19 @@ function gridMarkerIcon(ws, wd) {
        </g>`
     : `<circle cx="16" cy="16" r="5" fill="${color}" stroke="white" stroke-width="1.5"/>`;
 
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 32 32">
+  const iconW = size;
+  const iconH = size + Math.round(extraH * size / 32);
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${iconW}" height="${iconH}" viewBox="0 0 32 ${32 + extraH}">
     ${arrow}
     <circle cx="16" cy="16" r="3" fill="white" stroke="rgba(0,0,0,0.4)" stroke-width="1"/>
+    ${hasCloud ? _cloudSvg(33) : ''}
   </svg>`;
 
   return L.divIcon({
     html: svg,
     className: '',
-    iconSize:   [size, size],
-    iconAnchor: [size / 2, size / 2],
+    iconSize:   [iconW, iconH],
+    iconAnchor: [iconW / 2, iconW / 2],
   });
 }
 
@@ -363,7 +380,7 @@ function buildHourFrames(apiData) {
   for (const frame of (apiData.frames || [])) {
     const localH = utcToChHour(frame.t);
     if (localH >= 7 && localH <= 19) {
-      frames.push({ localHour: localH, utc: frame.t, ws: frame.ws, wd: frame.wd });
+      frames.push({ localHour: localH, utc: frame.t, ws: frame.ws, wd: frame.wd, rh: frame.rh ?? null });
     }
   }
   // Sort by UTC time (should already be sorted but let's be safe)
@@ -392,13 +409,26 @@ function renderFrame(frameIdx) {
     const { lat, lon } = _grid[i];
     const ws  = frame.ws[i];
     const wd  = frame.wd != null ? frame.wd[i] : null;
+    const rh  = frame.rh != null ? frame.rh[i] : null;
     if (ws == null && wd == null) continue; // skip null grid cells
-    const icon   = gridMarkerIcon(ws, wd);
+    const icon   = gridMarkerIcon(ws, wd, rh);
     const marker = L.marker([lat, lon], { icon, keyboard: false, alt: '' });
+    // Popup: wind direction + speed + humidity
+    const dirStr = wd != null ? `${wd}°` : '—';
+    const wsStr  = ws  != null ? `${ws.toFixed(1)} km/h` : '—';
+    const rhStr  = rh  != null ? `${rh.toFixed(0)}%` : '—';
+    marker.bindPopup(
+      `<div style="font-size:0.8rem;line-height:1.6">` +
+      `<b>${lat.toFixed(2)}° N, ${lon.toFixed(2)}° E</b><br>` +
+      `💨 ${wsStr} · ${dirStr}<br>` +
+      `💧 ${rhStr}` +
+      `</div>`,
+      { maxWidth: 180 }
+    );
     _markerLayer.addLayer(marker);
     rendered++;
     if (rendered <= 10) {
-      console.log(`[Lenti:wind-forecast]   grid[${i}] lat=${lat} lon=${lon} ws=${ws} wd=${wd}`);
+      console.log(`[Lenti:wind-forecast]   grid[${i}] lat=${lat} lon=${lon} ws=${ws} wd=${wd} rh=${rh}`);
     }
   }
   const elapsed = (performance.now() - t0).toFixed(1);

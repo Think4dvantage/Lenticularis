@@ -1,6 +1,19 @@
 # Feature History & Backlog
 
-## Current Version: v1.15 (shipped)
+## Current Version: v1.15.1 (shipped)
+
+### Incremental improvements
+
+| Change | Detail |
+|---|---|
+| Wind forecast grid — humidity | `GridForecastPoint` gains `humidity: Optional[float]`. Collector fetches `relative_humidity_<N>hPa` from Open-Meteo alongside wind vars. InfluxDB `wind_forecast_grid` stores `humidity` field. API frames include `rh` parallel array. Frontend: cloud icon on arrows when `rh ≥ 90` (same `_cloudSvg` pattern as station markers); arrows clickable with popup showing lat/lon, ws, wd, rh. |
+| Station-detail tooltip — zone-aware filter | Replaced `mode: 'index'` with `mode: 'x'` in `CHART_DEFAULTS` — eliminates cross-dataset index bleeding between obs (10-min) and forecast (1-hour) arrays. `makeForecastFilter` hides obs items in the forecast zone and forecast items in the obs zone. Precipitation forecast datasets tagged `isForecast: true`. |
+| Station-detail tooltip — ensemble min/max | `(min)` and `(max)` band anchor datasets filtered out of tooltip; their values appended inline on the probable line: `Forecast QFF: 1012.1  [1008.2 – 1015.8]`. Lookup uses timestamp matching (`new Date(p.x).getTime() === item.parsed.x`) rather than `dataIndex` — necessary because `buildFields` skips null rows so min/max arrays are shorter than the probable array. |
+| `.ai/` blueprint sync | Added `instructions/00-ai-usage.md`, `05-user-profile.md`, `06-testing-conventions.md`, `07-api-conventions.md`, `08-operability.md`; added 13 prompt files (`specify`, `clarify`, `plan`, `checklist`, `tasks`, `analyze`, `implement`, `fix-bug`, `architect`, `sync`, `taskstoissues`, `update-readme`, `update-blueprint`). `04-constraints.md` gains "AI Files" section. `CLAUDE.md` removed. |
+
+---
+
+## Previous Version: v1.15 (shipped)
 
 ### SwissMeteo Forecast Integration
 

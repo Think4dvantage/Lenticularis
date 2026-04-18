@@ -126,6 +126,7 @@ class GridForecastPoint(BaseModel):
     valid_time: datetime
     wind_speed: Optional[float] = None
     wind_direction: Optional[int] = None
+    humidity: Optional[float] = None
 
 
 class ForecastPoint(BaseModel):

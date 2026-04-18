@@ -19,7 +19,13 @@ from lenticularis.api.routers import widgets as widgets_router
 app.include_router(widgets_router.router)
 ```
 
-Add a page route in the same router file if a new HTML page is needed.
+Add a page route in the same router file if a new HTML page is needed:
+
+```python
+@router.get("/widgets-page", include_in_schema=False)
+async def widgets_page():
+    return FileResponse("static/widgets.html")
+```
 
 ---
 
@@ -93,6 +99,14 @@ Add to `CollectorScheduler` in `scheduler.py`. Use `AsyncIOScheduler` + `Interva
 
 ---
 
+## Testing Conventions
+
+See `06-testing-conventions.md` for the full strategy.
+- **Backend**: Pytest in `tests/backend/`. Use `httpx.AsyncClient`.
+- **Frontend**: Playwright in `tests/frontend/`.
+
+---
+
 ## Coding Standards
 
 - **Always use type hints** on function signatures and class attributes.
@@ -101,8 +115,16 @@ Add to `CollectorScheduler` in `scheduler.py`. Use `AsyncIOScheduler` + `Interva
 - **SQLAlchemy 2.0 style** — use `select()`, not legacy `query()`.
 - **One router per domain** — never put all routes in `main.py`.
 - **Abstract base classes** (ABC + `@abstractmethod`) for collectors.
-- **Log** all collection events, rule evaluations, and errors with the standard `logging` module.
-- **No print statements** in production code.
+- **Log extensively** — startup sequence, every request, every job run, every config value loaded. See `08-operability.md` for the full doctrine.
+- **No print statements** in production code — always use the `logging` module.
+
+---
+
+## Frontend Tooltip Pattern (forecast + ensemble)
+
+`station-detail.js` uses `mode: 'x'` (not `mode: 'index'`) for Chart.js tooltips. **Never revert to `mode: 'index'`** — obs data is at 10-min resolution and forecast at 1-hour; index N in forecast does not correspond to index N in obs.
+
+`buildFields()` skips null values, so ensemble `_min`/`_max` arrays are shorter than the probable array. When looking up a min/max value from within a tooltip `label` callback, **always match by timestamp** (`new Date(p.x).getTime() === item.parsed.x`), never by `item.dataIndex`.
 
 ---
 

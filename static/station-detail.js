@@ -102,6 +102,19 @@ if (Chart.Tooltip?.positioners) {
 
 const FORECAST_COLOR = '#f6ad55'; // amber — visually distinct from all obs colors
 
+// Zone-aware tooltip filter: show obs items only in the past zone, forecast items only
+// in the future zone. Prevents index-mismatched values from appearing in the wrong region.
+function makeForecastFilter(hasForecast) {
+  if (!hasForecast) return undefined;
+  return (item) => {
+    // Ensemble band anchors are folded into the probable line's label — hide them here
+    const lbl = item.dataset.label ?? '';
+    if (lbl.endsWith('(min)') || lbl.endsWith('(max)')) return false;
+    const isFc = item.dataset.isForecast === true;
+    return isFc ? item.parsed.x > Date.now() : item.parsed.x <= Date.now();
+  };
+}
+
 /**
  * Returns 1 or 3 Chart.js dataset objects for a forecast series.
  *
@@ -148,7 +161,7 @@ const CHART_DEFAULTS = {
   plugins: {
     legend: { display: false },
     tooltip: {
-      mode: 'index',
+      mode: 'x',
       intersect: false,
       position: 'topCursor',
       backgroundColor: '#1a1f2e',
@@ -168,9 +181,25 @@ const CHART_DEFAULTS = {
           return items.reduce((a, b) => b.parsed.x > a.parsed.x ? b : a).label;
         },
         label: (item) => {
+          const dsLabel = item.dataset.label ?? '';
           const v = item.parsed.y;
-          if (v == null || isNaN(v)) return `${item.dataset.label}: –`;
-          return `${item.dataset.label}: ${Math.round(v * 10) / 10}`;
+          if (v == null || isNaN(v)) return `${dsLabel}: –`;
+          const base = Math.round(v * 10) / 10;
+          // If ensemble min/max sibling datasets exist, append the range inline.
+          // Match by timestamp (not dataIndex) — min/max arrays may be shorter
+          // than the probable array when some rows lack ensemble fields.
+          const datasets = item.chart?.data?.datasets ?? [];
+          const minDs = datasets.find(d => d.label === `${dsLabel} (min)`);
+          const maxDs = datasets.find(d => d.label === `${dsLabel} (max)`);
+          const ts    = item.parsed.x;
+          const minPt = minDs?.data?.find(p => new Date(p.x).getTime() === ts);
+          const maxPt = maxDs?.data?.find(p => new Date(p.x).getTime() === ts);
+          const minV  = minPt?.y;
+          const maxV  = maxPt?.y;
+          if (minV != null && !isNaN(minV) && maxV != null && !isNaN(maxV)) {
+            return `${dsLabel}: ${base}  [${Math.round(minV * 10) / 10} – ${Math.round(maxV * 10) / 10}]`;
+          }
+          return `${dsLabel}: ${base}`;
         },
       },
     },
@@ -576,11 +605,7 @@ function renderWindChart(speedPts, gustPts, opts = {}, fcSpeedPts = [], fcGustPt
         }},
         tooltip: {
           ...CHART_DEFAULTS.plugins.tooltip,
-          // When forecast data is present, only show forecast datasets in the tooltip
-          // (prevents obs wind/gust at a different time index from appearing alongside fc values)
-          filter: hasForecast
-            ? (item) => item.dataset.isForecast === true
-            : undefined,
+          filter: makeForecastFilter(hasForecast),
         },
         forecastZone: { enabled: !!opts.forecast },
       },
@@ -649,16 +674,17 @@ function renderPrecipitationChart(points, opts = {}, fcPoints = [], fcMinPts = [
       barThickness: 'flex',
       yAxisID: 'y',
       order: 3,
+      isForecast: true,
     });
     // Ensemble band as line overlay (bars don't support fill bands natively)
     if (fcMinPts.length && fcMaxPts.length) {
       datasets.push(
-        { type: 'line', label: 'Precip min', data: fcMinPts,
+        { type: 'line', label: 'Forecast precip min', data: fcMinPts,
           borderColor: 'transparent', backgroundColor: 'transparent', fill: false,
-          borderWidth: 0, pointRadius: 0, tension: 0.3, yAxisID: 'y', order: 4 },
-        { type: 'line', label: 'Precip max', data: fcMaxPts,
+          borderWidth: 0, pointRadius: 0, tension: 0.3, yAxisID: 'y', order: 4, isForecast: true },
+        { type: 'line', label: 'Forecast precip max', data: fcMaxPts,
           borderColor: hexToRgba(FORECAST_COLOR, 0.5), backgroundColor: hexToRgba(FORECAST_COLOR, 0.12),
-          fill: '-1', borderWidth: 1, borderDash: [3, 3], pointRadius: 0, tension: 0.3, yAxisID: 'y', order: 4 },
+          fill: '-1', borderWidth: 1, borderDash: [3, 3], pointRadius: 0, tension: 0.3, yAxisID: 'y', order: 4, isForecast: true },
       );
     }
   }
@@ -671,7 +697,10 @@ function renderPrecipitationChart(points, opts = {}, fcPoints = [], fcMinPts = [
       plugins: {
         ...CHART_DEFAULTS.plugins,
         legend: { display: true, labels: { color: '#a0aec0', boxWidth: 12, font: { size: 11 } } },
-        tooltip: CHART_DEFAULTS.plugins.tooltip,
+        tooltip: {
+          ...CHART_DEFAULTS.plugins.tooltip,
+          filter: makeForecastFilter(fcPoints.length > 0),
+        },
         forecastZone: { enabled: !!opts.forecast },
       },
       scales: {
@@ -733,6 +762,10 @@ function renderSimpleChart(fieldName, points, opts = {}, fcPoints = [], fcMinPts
           labels: { color: '#a0aec0', boxWidth: 12, font: { size: 11 },
             filter: item => !item.text.endsWith('(min)') },
         } : { display: false },
+        tooltip: {
+          ...CHART_DEFAULTS.plugins.tooltip,
+          filter: makeForecastFilter(fcPoints.length > 0),
+        },
         forecastZone: { enabled: !!opts.forecast },
       },
       scales: {

@@ -39,19 +39,19 @@ GRID_POINTS: list[tuple[float, float]] = [
     (lat, lon) for lat in _GRID_LATS for lon in _GRID_LONS
 ]  # 171 points
 
-# Pressure-level variable pairs requested from Open-Meteo
-_LEVEL_VARS: list[tuple[int, int, str, str]] = [
-    # (level_hpa, level_m, speed_var, dir_var)
-    (950, 500,  "wind_speed_950hPa", "wind_direction_950hPa"),
-    (900, 1000, "wind_speed_900hPa", "wind_direction_900hPa"),
-    (850, 1500, "wind_speed_850hPa", "wind_direction_850hPa"),
-    (800, 2000, "wind_speed_800hPa", "wind_direction_800hPa"),
-    (750, 2500, "wind_speed_750hPa", "wind_direction_750hPa"),
-    (700, 3000, "wind_speed_700hPa", "wind_direction_700hPa"),
-    (600, 4000, "wind_speed_600hPa", "wind_direction_600hPa"),
-    (500, 5000, "wind_speed_500hPa", "wind_direction_500hPa"),
+# Pressure-level variable tuples requested from Open-Meteo
+_LEVEL_VARS: list[tuple[int, int, str, str, str]] = [
+    # (level_hpa, level_m, speed_var, dir_var, rh_var)
+    (950, 500,  "wind_speed_950hPa", "wind_direction_950hPa", "relative_humidity_950hPa"),
+    (900, 1000, "wind_speed_900hPa", "wind_direction_900hPa", "relative_humidity_900hPa"),
+    (850, 1500, "wind_speed_850hPa", "wind_direction_850hPa", "relative_humidity_850hPa"),
+    (800, 2000, "wind_speed_800hPa", "wind_direction_800hPa", "relative_humidity_800hPa"),
+    (750, 2500, "wind_speed_750hPa", "wind_direction_750hPa", "relative_humidity_750hPa"),
+    (700, 3000, "wind_speed_700hPa", "wind_direction_700hPa", "relative_humidity_700hPa"),
+    (600, 4000, "wind_speed_600hPa", "wind_direction_600hPa", "relative_humidity_600hPa"),
+    (500, 5000, "wind_speed_500hPa", "wind_direction_500hPa", "relative_humidity_500hPa"),
 ]
-_ALL_HOURLY_VARS = [v for _, _, sv, dv in _LEVEL_VARS for v in (sv, dv)]
+_ALL_HOURLY_VARS = [v for _, _, sv, dv, rhv in _LEVEL_VARS for v in (sv, dv, rhv)]
 
 # Open-Meteo batch API limit: max 50 lat/lon pairs per request (server-side, not rate-limit based)
 _BATCH_SIZE = 50
@@ -170,12 +170,14 @@ class ForecastGridCollector:
                     if valid_time > cutoff:
                         break
 
-                    for level_hpa, level_m, speed_var, dir_var in _LEVEL_VARS:
+                    for level_hpa, level_m, speed_var, dir_var, rh_var in _LEVEL_VARS:
                         speed_vals = hourly.get(speed_var, [])
                         dir_vals   = hourly.get(dir_var, [])
-                        ws  = speed_vals[i] if i < len(speed_vals) else None
-                        wd_raw = dir_vals[i] if i < len(dir_vals) else None
-                        wd  = int(wd_raw) if wd_raw is not None else None
+                        rh_vals    = hourly.get(rh_var, [])
+                        ws     = speed_vals[i] if i < len(speed_vals) else None
+                        wd_raw = dir_vals[i]   if i < len(dir_vals)   else None
+                        rh_raw = rh_vals[i]    if i < len(rh_vals)    else None
+                        wd     = int(wd_raw)   if wd_raw is not None  else None
 
                         all_points.append(GridForecastPoint(
                             grid_id=grid_id,
@@ -185,8 +187,9 @@ class ForecastGridCollector:
                             level_m=level_m,
                             init_time=init_time,
                             valid_time=valid_time,
-                            wind_speed=float(ws) if ws is not None else None,
+                            wind_speed=float(ws)   if ws   is not None else None,
                             wind_direction=wd,
+                            humidity=float(rh_raw) if rh_raw is not None else None,
                         ))
                         batch_points += 1
 
