@@ -29,6 +29,7 @@ from lenticularis.collectors.ecowitt import EcowittCollector
 from lenticularis.collectors.fga import FgaCollector
 from lenticularis.collectors.foehn import FoehnCollector
 from lenticularis.collectors.forecast_grid import ForecastGridCollector
+from lenticularis.collectors.forecast_grid_swissmeteo import ForecastGridSwissMeteoCollector
 from lenticularis.collectors.forecast_openmeteo import ForecastOpenMeteoCollector
 from lenticularis.collectors.forecast_swissmeteo import ForecastSwissMeteoCollector
 from lenticularis.collectors.holfuy import HolfuyCollector
@@ -660,13 +661,13 @@ class CollectorScheduler:
 
             finished_at = datetime.now(timezone.utc)
             health.update({
-                "status": "ok" if total_points > 0 else "ok_no_data",
+                "status": "ok" if total_points > 0 else ("error" if errors > 0 else "ok_no_data"),
                 "last_finished_at": finished_at,
-                "last_success_at": finished_at,
-                "last_error_at": None,
-                "last_error": None,
+                "last_success_at": finished_at if total_points > 0 else health.get("last_success_at"),
+                "last_error_at": None if total_points > 0 else finished_at,
+                "last_error": None if total_points > 0 else f"0 points written, {errors} station errors",
                 "last_measurement_count": total_points,
-                "consecutive_failures": 0,
+                "consecutive_failures": 0 if total_points > 0 else int(health.get("consecutive_failures", 0)) + 1,
             })
             logger.info("%s: wrote %d forecast points total (%d station errors)", name, total_points, errors)
         except Exception as exc:
@@ -702,7 +703,14 @@ class CollectorScheduler:
         health["last_started_at"] = started_at
         logger.info("[Lenti:grid-collector] Starting grid forecast collector run")
 
-        # Inherit the Open-Meteo API key from whichever forecast collector has one
+        # lsmfapi base_url — reuse the swissmeteo forecast collector config
+        base_url = "https://lsmfapi-dev.lg4.ch"
+        for fc_cfg in self._cfg.forecast_collectors:
+            if fc_cfg.name == "swissmeteo":
+                base_url = (fc_cfg.config or {}).get("base_url", base_url)
+                break
+
+        # Open-Meteo API key — fallback only
         api_key: str | None = None
         for fc_cfg in self._cfg.forecast_collectors:
             k = (fc_cfg.config or {}).get("api_key")
@@ -710,27 +718,57 @@ class CollectorScheduler:
                 api_key = k
                 break
 
-        collector = ForecastGridCollector(api_key=api_key)
-        if api_key:
-            logger.info("[Lenti:grid-collector] Using commercial Open-Meteo API key")
+        points: list = []
+        source = "none"
+        last_error: str | None = None
+
+        # Primary: SwissMeteo (lsmfapi)
+        sm_collector = ForecastGridSwissMeteoCollector(base_url=base_url)
         try:
-            points = await collector.collect_all(horizon_hours=120)
+            points = await sm_collector.collect_all(horizon_hours=120)
+            if points:
+                source = "swissmeteo"
+            else:
+                logger.warning("[Lenti:grid-collector] SwissMeteo grid returned 0 points — trying Open-Meteo fallback")
+        except Exception as exc:
+            last_error = str(exc)
+            logger.warning("[Lenti:grid-collector] SwissMeteo grid failed: %s — trying Open-Meteo fallback", exc)
+        finally:
+            await sm_collector.close()
+
+        # Fallback: Open-Meteo
+        if not points:
+            om_collector = ForecastGridCollector(api_key=api_key)
+            if api_key:
+                logger.info("[Lenti:grid-collector] Using commercial Open-Meteo API key")
+            try:
+                points = await om_collector.collect_all(horizon_hours=120)
+                if points:
+                    source = "open-meteo"
+                    last_error = None
+            except Exception as exc:
+                last_error = str(exc)
+                logger.error("[Lenti:grid-collector] Open-Meteo fallback also failed: %s", exc, exc_info=True)
+            finally:
+                await om_collector.close()
+
+        try:
             if points:
                 self._influx.write_forecast_grid(points)
 
             finished_at = datetime.now(timezone.utc)
             health.update({
-                "status": "ok" if points else "ok_no_data",
+                "status": "ok" if points else "error",
                 "last_finished_at": finished_at,
-                "last_success_at": finished_at,
-                "last_error_at": None,
-                "last_error": None,
+                "last_success_at": finished_at if points else health.get("last_success_at"),
+                "last_error_at": None if points else finished_at,
+                "last_error": last_error if not points else None,
                 "last_measurement_count": len(points),
-                "consecutive_failures": 0,
+                "consecutive_failures": 0 if points else int(health.get("consecutive_failures", 0)) + 1,
             })
             logger.info(
-                "[Lenti:grid-collector] Run complete — wrote %d grid forecast points",
-                len(points),
+                "[Lenti:grid-collector] Run complete — wrote %d grid forecast points (source: %s)",
+                len(points), source,
             )
         except Exception as exc:
             finished_at = datetime.now(timezone.utc)
@@ -741,9 +779,7 @@ class CollectorScheduler:
                 "last_error": str(exc),
                 "consecutive_failures": int(health.get("consecutive_failures", 0)) + 1,
             })
-            logger.error("[Lenti:grid-collector] Run failed: %s", exc, exc_info=True)
-        finally:
-            await collector.close()
+            logger.error("[Lenti:grid-collector] InfluxDB write failed: %s", exc, exc_info=True)
 
     async def _run_swissmeteo_altitude_collector(
         self,

@@ -30,7 +30,8 @@
       "Bash(npm show:*)",
       "WebFetch(domain:vkpi.ch)",
       "Bash(curl:*)",
-      "WebFetch(domain:lsmfapi-dev.lg4.ch)"
+      "WebFetch(domain:lsmfapi-dev.lg4.ch)",
+      "Bash(ssh xpsex *)"
     ]
   }
 }

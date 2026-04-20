@@ -4,8 +4,8 @@ SwissMeteo forecast container collector.
 Fetches ICON-CH1/CH2 ensemble forecasts from the Lenticularis SwissMeteo
 forecast container (lsmfapi).  The container exposes two endpoints:
 
-  - /api/forecast/station   → surface forecast (all fields as EnsembleValue)
-  - /api/forecast/altitude-winds → per-level wind profile (EnsembleValue)
+  - /api/forecast/station   → surface forecast (flat fields with _min/_max)
+  - /api/forecast/altitude-winds → per-level wind profile (flat fields with _min/_max)
 
 Surface forecast is stored in the existing ``weather_forecast`` InfluxDB
 measurement (``probable`` values only, matching the Open-Meteo convention).
@@ -29,22 +29,14 @@ def _parse_dt(s: str) -> datetime:
     return dt.astimezone(timezone.utc)
 
 
-def _probable(d) -> Optional[float]:
-    """Extract the ``probable`` value from an EnsembleValue dict or scalar."""
-    if d is None:
-        return None
-    if isinstance(d, dict):
-        v = d.get("probable")
-    else:
-        v = d
-    return float(v) if v is not None else None
-
-
-def _ens(d, key: str) -> Optional[float]:
-    if not isinstance(d, dict):
-        return None
+def _f(d: dict, key: str) -> Optional[float]:
     v = d.get(key)
     return float(v) if v is not None else None
+
+
+def _i(d: dict, key: str) -> Optional[int]:
+    v = d.get(key)
+    return int(round(float(v))) if v is not None else None
 
 
 class ForecastSwissMeteoCollector(BaseForecastCollector):
@@ -81,31 +73,19 @@ class ForecastSwissMeteoCollector(BaseForecastCollector):
             params={"station_id": station_id, "hours": horizon_hours},
         )
 
-        generated_at = data.get("generated_at")
-        if not generated_at:
-            self.logger.warning("No generated_at in surface response for %s", station_id)
+        init_time_str = data.get("init_time")
+        if not init_time_str:
+            self.logger.warning("No init_time in surface response for %s", station_id)
             return []
 
-        init_time = _parse_dt(generated_at)
+        init_time = _parse_dt(init_time_str)
         points: list[ForecastPoint] = []
 
-        for hour in data.get("hours", []):
+        for hour in data.get("forecast", []):
             vt_str = hour.get("valid_time")
             if not vt_str:
                 continue
             valid_time = _parse_dt(vt_str)
-
-            ws = hour.get("wind_speed")
-            wg = hour.get("wind_gusts")
-            wd = hour.get("wind_direction")
-            tmp = hour.get("temperature")
-            hum = hour.get("humidity")
-            pqff = hour.get("pressure_qff")
-            prec = hour.get("precipitation")
-
-            wd_prob = _probable(wd)
-            wd_min  = _ens(wd, "min")
-            wd_max  = _ens(wd, "max")
 
             points.append(ForecastPoint(
                 station_id=station_id,
@@ -114,27 +94,27 @@ class ForecastSwissMeteoCollector(BaseForecastCollector):
                 model=self.MODEL,
                 init_time=init_time,
                 valid_time=valid_time,
-                wind_speed=_probable(ws),
-                wind_speed_min=_ens(ws, "min"),
-                wind_speed_max=_ens(ws, "max"),
-                wind_gust=_probable(wg),
-                wind_gust_min=_ens(wg, "min"),
-                wind_gust_max=_ens(wg, "max"),
-                wind_direction=int(wd_prob) if wd_prob is not None else None,
-                wind_direction_min=int(wd_min) if wd_min is not None else None,
-                wind_direction_max=int(wd_max) if wd_max is not None else None,
-                temperature=_probable(tmp),
-                temperature_min=_ens(tmp, "min"),
-                temperature_max=_ens(tmp, "max"),
-                humidity=_probable(hum),
-                humidity_min=_ens(hum, "min"),
-                humidity_max=_ens(hum, "max"),
-                pressure_qff=_probable(pqff),
-                pressure_qff_min=_ens(pqff, "min"),
-                pressure_qff_max=_ens(pqff, "max"),
-                precipitation=_probable(prec),
-                precipitation_min=_ens(prec, "min"),
-                precipitation_max=_ens(prec, "max"),
+                wind_speed=_f(hour, "wind_speed"),
+                wind_speed_min=_f(hour, "wind_speed_min"),
+                wind_speed_max=_f(hour, "wind_speed_max"),
+                wind_gust=_f(hour, "wind_gust"),
+                wind_gust_min=_f(hour, "wind_gust_min"),
+                wind_gust_max=_f(hour, "wind_gust_max"),
+                wind_direction=_i(hour, "wind_direction"),
+                wind_direction_min=_i(hour, "wind_direction_min"),
+                wind_direction_max=_i(hour, "wind_direction_max"),
+                temperature=_f(hour, "temperature"),
+                temperature_min=_f(hour, "temperature_min"),
+                temperature_max=_f(hour, "temperature_max"),
+                humidity=_f(hour, "humidity"),
+                humidity_min=_f(hour, "humidity_min"),
+                humidity_max=_f(hour, "humidity_max"),
+                pressure_qff=_f(hour, "pressure_qff"),
+                pressure_qff_min=_f(hour, "pressure_qff_min"),
+                pressure_qff_max=_f(hour, "pressure_qff_max"),
+                precipitation=_f(hour, "precipitation"),
+                precipitation_min=_f(hour, "precipitation_min"),
+                precipitation_max=_f(hour, "precipitation_max"),
             ))
 
         self.logger.debug(
@@ -158,32 +138,24 @@ class ForecastSwissMeteoCollector(BaseForecastCollector):
             params={"station_id": station_id, "hours": horizon_hours},
         )
 
-        generated_at = data.get("generated_at")
-        if not generated_at:
-            self.logger.warning("No generated_at in altitude response for %s", station_id)
+        init_time_str = data.get("init_time")
+        if not init_time_str:
+            self.logger.warning("No init_time in altitude response for %s", station_id)
             return []
 
-        init_time = _parse_dt(generated_at)
+        init_time = _parse_dt(init_time_str)
         points: list[StationWindProfilePoint] = []
 
-        for hour in data.get("hours", []):
-            vt_str = hour.get("valid_time")
+        for profile in data.get("profiles", []):
+            vt_str = profile.get("valid_time")
             if not vt_str:
                 continue
             valid_time = _parse_dt(vt_str)
 
-            for level in hour.get("levels", []):
-                altitude_m = level.get("altitude_m")
+            for level in profile.get("levels", []):
+                altitude_m = level.get("level_m")
                 if altitude_m is None:
                     continue
-
-                ws = level.get("wind_speed")
-                wd = level.get("wind_direction")
-                vw = level.get("vertical_wind")
-
-                wd_prob = _probable(wd)
-                wd_min = _ens(wd, "min")
-                wd_max = _ens(wd, "max")
 
                 points.append(StationWindProfilePoint(
                     station_id=station_id,
@@ -191,15 +163,15 @@ class ForecastSwissMeteoCollector(BaseForecastCollector):
                     level_m=int(altitude_m),
                     init_time=init_time,
                     valid_time=valid_time,
-                    wind_speed=_probable(ws),
-                    wind_speed_min=_ens(ws, "min"),
-                    wind_speed_max=_ens(ws, "max"),
-                    wind_direction=int(wd_prob) if wd_prob is not None else None,
-                    wind_direction_min=int(wd_min) if wd_min is not None else None,
-                    wind_direction_max=int(wd_max) if wd_max is not None else None,
-                    vertical_wind=_probable(vw),
-                    vertical_wind_min=_ens(vw, "min"),
-                    vertical_wind_max=_ens(vw, "max"),
+                    wind_speed=_f(level, "wind_speed"),
+                    wind_speed_min=_f(level, "wind_speed_min"),
+                    wind_speed_max=_f(level, "wind_speed_max"),
+                    wind_direction=_i(level, "wind_direction"),
+                    wind_direction_min=_i(level, "wind_direction_min"),
+                    wind_direction_max=_i(level, "wind_direction_max"),
+                    vertical_wind=_f(level, "vertical_wind"),
+                    vertical_wind_min=_f(level, "vertical_wind_min"),
+                    vertical_wind_max=_f(level, "vertical_wind_max"),
                 ))
 
         self.logger.debug(
