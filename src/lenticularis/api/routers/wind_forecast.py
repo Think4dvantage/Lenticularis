@@ -1,7 +1,7 @@
 """
 Wind forecast grid router — /api/wind-forecast
 
-Serves the 0.25° Switzerland grid wind forecast at 8 altitude levels
+Serves the Switzerland wind forecast grid at 8 altitude levels
 (500 m – 5 000 m ASL) for the wind-forecast map page.
 
 Endpoint
@@ -13,17 +13,18 @@ Returns a compact payload:
     "date": "2026-04-12",
     "level_m": 1500,
     "level_hpa": 850,
-    "grid": [{"lat": 45.8, "lon": 5.9}, ...],      # 171 canonical grid points
+    "grid": [{"lat": 45.8, "lon": 5.9}, ...],
     "frames": [
-      {"t": "2026-04-12T05:00:00+00:00", "ws": [...], "wd": [...]},
+      {"t": "2026-04-12T05:00:00+00:00", "ws": [...], "wd": [...], "rh": [...]},
       ...
     ]
   }
 
-The ``grid`` array is ordered by lat descending, lon ascending (north-to-south,
-west-to-east) — matching the visual layout of the map. Each frame has parallel
-``ws`` (wind_speed km/h) and ``wd`` (wind_direction °) arrays indexed to
-``grid``.  Missing values are ``null``.
+The ``grid`` array is sorted lat-descending, lon-ascending (north-to-south,
+west-to-east) and is built dynamically from whatever grid points are stored in
+InfluxDB.  This makes the endpoint source-agnostic: it works for both the
+Open-Meteo 0.25° grid (171 points) and the lsmfapi ICON-CH1 ~10 km grid
+(1 272 points) without any router changes.
 """
 from __future__ import annotations
 
@@ -32,19 +33,10 @@ from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
-from lenticularis.collectors.forecast_grid import GRID_POINTS
 from lenticularis.models.weather import ALTITUDE_TO_HPA
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/wind-forecast", tags=["wind-forecast"])
-
-# Canonical grid order (lat desc, lon asc) — same order every response
-_CANONICAL_GRID = sorted(GRID_POINTS, key=lambda p: (-p[0], p[1]))
-_CANONICAL_GRID_DICTS = [{"lat": lat, "lon": lon} for lat, lon in _CANONICAL_GRID]
-# Lookup: (lat, lon) → position index
-_GRID_INDEX: dict[tuple[float, float], int] = {
-    (lat, lon): i for i, (lat, lon) in enumerate(_CANONICAL_GRID)
-}
 
 _VALID_LEVEL_M = sorted(ALTITUDE_TO_HPA.keys())
 
@@ -65,8 +57,9 @@ async def get_wind_forecast_grid(
     """
     Return hourly grid wind forecasts for one day at one altitude level.
 
-    Data is sourced from the ``wind_forecast_grid`` InfluxDB measurement,
-    written by the ForecastGridCollector every 60 minutes.
+    Data is sourced from the ``wind_forecast_grid`` InfluxDB measurement.
+    The grid is built dynamically from whatever points are present — no
+    hardcoded grid assumption.
     """
     t0 = datetime.now(timezone.utc)
     logger.info(
@@ -74,7 +67,6 @@ async def get_wind_forecast_grid(
         date_str, level_m,
     )
 
-    # --- validate level_m ---------------------------------------------------
     if level_m not in ALTITUDE_TO_HPA:
         raise HTTPException(
             status_code=422,
@@ -82,7 +74,6 @@ async def get_wind_forecast_grid(
         )
     level_hpa = ALTITUDE_TO_HPA[level_m]
 
-    # --- resolve date -------------------------------------------------------
     try:
         if date_str:
             target_date = date.fromisoformat(date_str)
@@ -95,7 +86,6 @@ async def get_wind_forecast_grid(
                         tzinfo=timezone.utc)
     end_dt   = start_dt + timedelta(days=1)
 
-    # --- query InfluxDB -----------------------------------------------------
     influx = request.app.state.influx
     rows = influx.query_forecast_grid(start_dt, end_dt, level_hpa)
 
@@ -107,40 +97,50 @@ async def get_wind_forecast_grid(
 
     if not rows:
         logger.warning(
-            "[Lenti:wind-forecast] No grid data found for %s @ %dm — "
-            "grid collector may not have run yet",
+            "[Lenti:wind-forecast] No grid data found for %s @ %dm",
             target_date.isoformat(), level_m,
         )
         return {
-            "date":     target_date.isoformat(),
-            "level_m":  level_m,
+            "date":      target_date.isoformat(),
+            "level_m":   level_m,
             "level_hpa": level_hpa,
-            "grid":     _CANONICAL_GRID_DICTS,
-            "frames":   [],
+            "grid":      [],
+            "frames":    [],
         }
 
-    # --- build compact frame structure --------------------------------------
-    # Group rows by valid_time; build parallel ws/wd arrays per canonical grid index
-    n_grid = len(_CANONICAL_GRID)
+    # Build canonical grid from whatever points are in InfluxDB.
+    # Keyed by grid_id (string tag) to avoid float-precision issues on lat/lon.
+    grid_by_id: dict[str, tuple[float, float]] = {}
+    for row in rows:
+        gid = row.get("grid_id")
+        lat = row.get("lat")
+        lon = row.get("lon")
+        if gid and lat is not None and lon is not None:
+            grid_by_id[gid] = (lat, lon)
+
+    # lat desc, lon asc — canonical visual order (north-to-south, west-to-east)
+    canonical = sorted(grid_by_id.items(), key=lambda kv: (-kv[1][0], kv[1][1]))
+    grid_dicts = [{"lat": lat, "lon": lon} for _, (lat, lon) in canonical]
+    grid_id_index = {gid: i for i, (gid, _) in enumerate(canonical)}
+    n_grid = len(canonical)
 
     by_time: dict[str, tuple[list, list, list]] = {}
     for row in rows:
+        gid = row.get("grid_id")
+        if not gid:
+            continue
+        idx = grid_id_index.get(gid)
+        if idx is None:
+            continue
         vt = row["valid_time"]
         if vt not in by_time:
             by_time[vt] = ([None] * n_grid, [None] * n_grid, [None] * n_grid)
-        lat = row.get("lat")
-        lon = row.get("lon")
-        if lat is None or lon is None:
-            continue
-        idx = _GRID_INDEX.get((round(lat, 2), round(lon, 2)))
-        if idx is None:
-            continue
         ws = row.get("wind_speed")
         wd = row.get("wind_direction")
         rh = row.get("humidity")
         by_time[vt][0][idx] = round(ws, 1) if ws is not None else None
-        by_time[vt][1][idx] = wd   # already int|None from query layer
-        by_time[vt][2][idx] = rh   # already float|None from query layer
+        by_time[vt][1][idx] = wd
+        by_time[vt][2][idx] = rh
 
     frames = [
         {"t": vt, "ws": ws_arr, "wd": wd_arr, "rh": rh_arr}
@@ -149,14 +149,14 @@ async def get_wind_forecast_grid(
 
     elapsed_ms = (datetime.now(timezone.utc) - t0).total_seconds() * 1000
     logger.info(
-        "[Lenti:wind-forecast] Built %d frames for %s @ %dm in %.0f ms total",
-        len(frames), target_date.isoformat(), level_m, elapsed_ms,
+        "[Lenti:wind-forecast] Built %d frames × %d grid points for %s @ %dm in %.0f ms",
+        len(frames), n_grid, target_date.isoformat(), level_m, elapsed_ms,
     )
 
     return {
         "date":      target_date.isoformat(),
         "level_m":   level_m,
         "level_hpa": level_hpa,
-        "grid":      _CANONICAL_GRID_DICTS,
+        "grid":      grid_dicts,
         "frames":    frames,
     }

@@ -2,16 +2,13 @@
 SwissMeteo forecast container collector.
 
 Fetches ICON-CH1/CH2 ensemble forecasts from the Lenticularis SwissMeteo
-forecast container (lsmfapi).  The container exposes two endpoints:
+forecast container (lsmfapi) via the per-station endpoint:
 
-  - /api/forecast/station   → surface forecast (flat fields with _min/_max)
-  - /api/forecast/altitude-winds → per-level wind profile (flat fields with _min/_max)
+  /api/forecast/station → surface forecast (flat fields with _min/_max)
 
-Surface forecast is stored in the existing ``weather_forecast`` InfluxDB
-measurement (``probable`` values only, matching the Open-Meteo convention).
-
-Altitude wind profiles are stored in the new ``station_wind_profile``
-measurement (full ensemble: probable / min / max).
+Results are stored in the ``weather_forecast`` InfluxDB measurement.
+Altitude wind data is served by the grid map (``/api/forecast/grid``), not
+collected per station.
 """
 from __future__ import annotations
 
@@ -19,7 +16,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from lenticularis.collectors.forecast_base import BaseForecastCollector
-from lenticularis.models.weather import ForecastPoint, StationWindProfilePoint
+from lenticularis.models.weather import ForecastPoint
 
 
 def _parse_dt(s: str) -> datetime:
@@ -123,59 +120,3 @@ class ForecastSwissMeteoCollector(BaseForecastCollector):
         )
         return points
 
-    # ------------------------------------------------------------------
-    # Altitude wind profile — separate method, not part of BaseForecastCollector
-    # ------------------------------------------------------------------
-
-    async def collect_altitude_for_station(
-        self,
-        station_id: str,
-        network: str,
-        horizon_hours: int = 120,
-    ) -> list[StationWindProfilePoint]:
-        data = await self._get(
-            f"{self._base_url}/api/forecast/altitude-winds",
-            params={"station_id": station_id, "hours": horizon_hours},
-        )
-
-        init_time_str = data.get("init_time")
-        if not init_time_str:
-            self.logger.warning("No init_time in altitude response for %s", station_id)
-            return []
-
-        init_time = _parse_dt(init_time_str)
-        points: list[StationWindProfilePoint] = []
-
-        for profile in data.get("profiles", []):
-            vt_str = profile.get("valid_time")
-            if not vt_str:
-                continue
-            valid_time = _parse_dt(vt_str)
-
-            for level in profile.get("levels", []):
-                altitude_m = level.get("level_m")
-                if altitude_m is None:
-                    continue
-
-                points.append(StationWindProfilePoint(
-                    station_id=station_id,
-                    network=network,
-                    level_m=int(altitude_m),
-                    init_time=init_time,
-                    valid_time=valid_time,
-                    wind_speed=_f(level, "wind_speed"),
-                    wind_speed_min=_f(level, "wind_speed_min"),
-                    wind_speed_max=_f(level, "wind_speed_max"),
-                    wind_direction=_i(level, "wind_direction"),
-                    wind_direction_min=_i(level, "wind_direction_min"),
-                    wind_direction_max=_i(level, "wind_direction_max"),
-                    vertical_wind=_f(level, "vertical_wind"),
-                    vertical_wind_min=_f(level, "vertical_wind_min"),
-                    vertical_wind_max=_f(level, "vertical_wind_max"),
-                ))
-
-        self.logger.debug(
-            "SwissMeteo altitude: %d points for %s (init %s)",
-            len(points), station_id, init_time.isoformat(),
-        )
-        return points

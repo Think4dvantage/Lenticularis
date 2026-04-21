@@ -25,7 +25,6 @@ logger = logging.getLogger(__name__)
 # InfluxDB measurement names
 MEASUREMENT_WEATHER = "weather_data"
 MEASUREMENT_FORECAST = "weather_forecast"
-MEASUREMENT_WIND_PROFILE = "station_wind_profile"
 
 
 class InfluxClient:
@@ -47,8 +46,15 @@ class InfluxClient:
             org=cfg.org,
             timeout=cfg.timeout,
         )
+        self._slow_client = InfluxDBClient(
+            url=cfg.url,
+            token=cfg.token,
+            org=cfg.org,
+            timeout=cfg.slow_query_timeout,
+        )
         self._write_api = self._client.write_api(write_options=SYNCHRONOUS)
         self._query_api = self._client.query_api()
+        self._slow_query_api = self._slow_client.query_api()
         logger.info("InfluxDB client initialised — %s / %s", cfg.url, cfg.bucket)
 
     # ------------------------------------------------------------------
@@ -283,7 +289,7 @@ from(bucket: "{self._cfg.bucket}")
   |> filter(fn: (r) => r._measurement == "{MEASUREMENT_FORECAST}")
   |> filter(fn: (r) => contains(value: r.station_id, set: {ids_literal}))
   |> last()
-  |> pivot(rowKey: ["_time", "station_id", "network", "model"],
+  |> pivot(rowKey: ["_time", "station_id", "network", "source", "model", "init_date"],
            columnKey: ["_field"], valueColumn: "_value")
 """
         try:
@@ -904,58 +910,6 @@ from(bucket: "{self._cfg.bucket}")
             logger.error("InfluxDB wind_forecast_grid write error: %s", exc)
             raise
 
-    # ------------------------------------------------------------------
-    # Station wind profile (altitude winds) — write
-    # ------------------------------------------------------------------
-
-    def write_station_wind_profile(self, points: list) -> None:
-        """
-        Write StationWindProfilePoint objects to ``station_wind_profile``.
-
-        Tags:   ``station_id``, ``network``, ``level_m``, ``init_date``
-        Time:   ``valid_time`` (UTC)
-        Fields: wind_speed/min/max, wind_direction/min/max, vertical_wind/min/max,
-                ``init_time`` (ISO string for Python-side dedup)
-        """
-        from lenticularis.models.weather import StationWindProfilePoint  # avoid circular
-        if not points:
-            return
-
-        influx_points: list[Point] = []
-        for p in points:
-            ip = (
-                Point(MEASUREMENT_WIND_PROFILE)
-                .tag("station_id", p.station_id)
-                .tag("network",    p.network)
-                .tag("level_m",    str(p.level_m))
-                .tag("init_date",  p.init_time.astimezone(timezone.utc).strftime("%Y-%m-%dT%H"))
-                .time(int(p.valid_time.timestamp()), "s")
-            )
-            for field_name, value in {
-                "wind_speed":          p.wind_speed,
-                "wind_speed_min":      p.wind_speed_min,
-                "wind_speed_max":      p.wind_speed_max,
-                "wind_direction":      p.wind_direction,
-                "wind_direction_min":  p.wind_direction_min,
-                "wind_direction_max":  p.wind_direction_max,
-                "vertical_wind":       p.vertical_wind,
-                "vertical_wind_min":   p.vertical_wind_min,
-                "vertical_wind_max":   p.vertical_wind_max,
-            }.items():
-                if value is not None:
-                    ip = ip.field(field_name, float(value))
-            ip = ip.field("init_time", p.init_time.astimezone(timezone.utc).isoformat())
-            influx_points.append(ip)
-
-        try:
-            self._write_api.write(
-                bucket=self._cfg.bucket, org=self._cfg.org, record=influx_points
-            )
-            logger.debug("Wrote %d station_wind_profile points to InfluxDB", len(influx_points))
-        except Exception as exc:
-            logger.error("InfluxDB station_wind_profile write error: %s", exc)
-            raise
-
     def query_forecast_grid(
         self, start_dt: datetime, end_dt: datetime, level_hpa: int
     ) -> list[dict]:
@@ -1030,62 +984,104 @@ from(bucket: "{self._cfg.bucket}")
     # Forecast — query
     # ------------------------------------------------------------------
 
-    def query_forecast_replay(
-        self, start_dt: datetime, end_dt: datetime
-    ) -> dict[str, list[dict]]:
-        """
-        Return forecast data for **all** stations between ``start_dt`` and ``end_dt``,
-        in the same shape as ``query_history_all_stations``:
-
-            { station_id: [ {"timestamp": ISO_str, field: value, ...}, ... ] }
-
-        Deduplicates to the latest ``init_time`` per ``valid_time`` per station.
-        Timestamps are returned as ISO strings (matching the observation replay format).
-        """
-        start_str = start_dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-        end_str = end_dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
+    def _latest_forecast_init_dates(self) -> dict[str, str]:
+        """Return {source: latest_init_date} from recent forecast data (fast lookup)."""
         flux = f"""
 from(bucket: "{self._cfg.bucket}")
-  |> range(start: {start_str}, stop: {end_str})
+  |> range(start: -12h, stop: now())
   |> filter(fn: (r) => r._measurement == "{MEASUREMENT_FORECAST}")
-  |> pivot(rowKey: ["_time", "station_id", "network", "source", "model"], columnKey: ["_field"], valueColumn: "_value")
+  |> filter(fn: (r) => r._field == "wind_speed")
+  |> keep(columns: ["source", "init_date"])
+  |> group()
 """
         try:
             tables = self._query_api.query(flux, org=self._cfg.org)
         except Exception as exc:
+            logger.error("InfluxDB _latest_forecast_init_dates error: %s", exc)
+            return {}
+
+        latest: dict[str, str] = {}
+        for table in tables:
+            for record in table.records:
+                src = record.values.get("source", "")
+                idate = record.values.get("init_date", "")
+                if src and idate and idate > latest.get(src, ""):
+                    latest[src] = idate
+        logger.debug("Latest forecast init_dates: %s", latest)
+        return latest
+
+    def query_forecast_replay(
+        self, start_dt: datetime, end_dt: datetime
+    ) -> dict[str, list[dict]]:
+        """
+        Return forecast data for all stations between ``start_dt`` and ``end_dt``.
+
+        Two-step approach for performance:
+        1. Fast lookup of the latest init_date per source (one field, narrow range).
+        2. Main query filtered to only those init_dates — minimal data, fast pivot.
+
+        Returns { station_id: [ {"timestamp": ISO_str, field: value, ...}, ... ] }
+        """
+        start_str = start_dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        end_str = end_dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        # Step 1: find the latest init_date per source
+        latest = self._latest_forecast_init_dates()
+        if latest:
+            init_date_clauses = " or ".join(
+                f'r.init_date == "{d}"' for d in set(latest.values())
+            )
+            init_date_filter = f"({init_date_clauses})"
+        else:
+            # Fallback: last 3 days (slower but safe)
+            three_days_ago = (datetime.now(timezone.utc) - timedelta(days=3)).strftime("%Y-%m-%d")
+            init_date_filter = f'not exists r.init_date or r.init_date >= "{three_days_ago}"'
+            logger.warning("query_forecast_replay: no recent init_dates found, using 3-day fallback")
+
+        # Step 2: query only the latest model run(s) — central values only
+        flux = f"""
+from(bucket: "{self._cfg.bucket}")
+  |> range(start: {start_str}, stop: {end_str})
+  |> filter(fn: (r) => r._measurement == "{MEASUREMENT_FORECAST}")
+  |> filter(fn: (r) => {init_date_filter})
+  |> filter(fn: (r) => not (r._field =~ /_min$/ or r._field =~ /_max$/ or r._field == "init_time"))
+  |> pivot(rowKey: ["_time", "station_id", "network", "source", "model", "init_date"], columnKey: ["_field"], valueColumn: "_value")
+"""
+        try:
+            tables = self._slow_query_api.query(flux, org=self._cfg.org)
+        except Exception as exc:
             logger.error("InfluxDB forecast_replay query error: %s", exc)
             return {}
 
-        # raw[station_id][valid_time_iso] = {fields..., "_init_time": str}
+        # Python dedup: prefer swissmeteo over open-meteo for same (station, valid_time)
+        _PREFERRED = "swissmeteo"
         raw: dict[str, dict[str, dict]] = {}
         for table in tables:
             for record in table.records:
                 sid = record.values.get("station_id", "")
                 vt_iso = record.get_time().isoformat()
-                init_time_str = record.values.get("init_time", "")
+                in_src = record.values.get("source", "")
 
                 fields = {
                     k: v
                     for k, v in record.values.items()
                     if not k.startswith("_")
-                    and k not in ("result", "table", "station_id", "network", "source", "model", "init_time", "init_date")
+                    and k not in ("result", "table", "station_id", "network", "source", "model", "init_date")
                 }
-                fields["_init_time"] = init_time_str
 
                 raw.setdefault(sid, {})
                 existing = raw[sid].get(vt_iso)
-                if existing is None or init_time_str > existing.get("_init_time", ""):
+                if existing is None:
+                    raw[sid][vt_iso] = fields
+                elif in_src == _PREFERRED and existing.get("_source") != _PREFERRED:
                     raw[sid][vt_iso] = fields
 
-        # Convert to sorted measurement lists, stripping internal key
         result: dict[str, list[dict]] = {}
         for sid, by_vt in raw.items():
-            measurements = [
-                {"timestamp": vt_iso, **{k: v for k, v in row.items() if k != "_init_time"}}
+            result[sid] = [
+                {"timestamp": vt_iso, **{k: v for k, v in row.items()}}
                 for vt_iso, row in sorted(by_vt.items())
             ]
-            result[sid] = measurements
 
         return result
 

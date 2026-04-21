@@ -12,6 +12,7 @@ class InfluxDBConfig(BaseModel):
     org: Optional[str] = None
     bucket: Optional[str] = None
     timeout: int = 10000
+    slow_query_timeout: int = 60000
 
 class CollectorConfig(BaseModel):
     enabled: bool = True

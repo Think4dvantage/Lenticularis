@@ -214,39 +214,6 @@ class CollectorScheduler:
                 fc_cfg.horizon_hours,
             )
 
-            # SwissMeteo also provides altitude wind profiles — register a companion job
-            if fc_cfg.name == "swissmeteo" and isinstance(fc, ForecastSwissMeteoCollector):
-                alt_health_key = "forecast_swissmeteo_altitude"
-                self._collector_health[alt_health_key] = {
-                    "collector": "swissmeteo_altitude",
-                    "type": "forecast",
-                    "enabled": True,
-                    "interval_minutes": fc_cfg.interval_minutes,
-                    "horizon_hours": fc_cfg.horizon_hours,
-                    "status": "scheduled",
-                    "last_started_at": None,
-                    "last_finished_at": None,
-                    "last_success_at": None,
-                    "last_error_at": None,
-                    "last_error": None,
-                    "last_measurement_count": None,
-                    "consecutive_failures": 0,
-                }
-                self._scheduler.add_job(
-                    func=self._run_swissmeteo_altitude_collector,
-                    trigger=IntervalTrigger(minutes=fc_cfg.interval_minutes),
-                    args=[fc, fc_cfg.horizon_hours],
-                    id="forecast_swissmeteo_altitude",
-                    name="swissmeteo altitude wind profile collector",
-                    misfire_grace_time=300,
-                    coalesce=True,
-                    max_instances=1,
-                    next_run_time=None,
-                )
-                logger.info(
-                    "Registered swissmeteo altitude wind profile collector (%d-minute interval)",
-                    fc_cfg.interval_minutes,
-                )
 
         # ---- föhn status collector -----------------------------------------
         self._foehn_collector = FoehnCollector()
@@ -726,10 +693,12 @@ class CollectorScheduler:
         sm_collector = ForecastGridSwissMeteoCollector(base_url=base_url)
         try:
             points = await sm_collector.collect_all(horizon_hours=120)
-            if points:
+            has_wind = any(p.wind_speed is not None or p.wind_direction is not None for p in points)
+            if has_wind:
                 source = "swissmeteo"
             else:
-                logger.warning("[Lenti:grid-collector] SwissMeteo grid returned 0 points — trying Open-Meteo fallback")
+                points = []
+                logger.warning("[Lenti:grid-collector] SwissMeteo grid has no wind data yet — trying Open-Meteo fallback")
         except Exception as exc:
             last_error = str(exc)
             logger.warning("[Lenti:grid-collector] SwissMeteo grid failed: %s — trying Open-Meteo fallback", exc)
@@ -780,70 +749,6 @@ class CollectorScheduler:
                 "consecutive_failures": int(health.get("consecutive_failures", 0)) + 1,
             })
             logger.error("[Lenti:grid-collector] InfluxDB write failed: %s", exc, exc_info=True)
-
-    async def _run_swissmeteo_altitude_collector(
-        self,
-        collector: ForecastSwissMeteoCollector,
-        horizon_hours: int,
-    ) -> None:
-        """Collect altitude wind profiles from the SwissMeteo container and write to InfluxDB."""
-        health = self._collector_health.setdefault("forecast_swissmeteo_altitude", {
-            "collector": "swissmeteo_altitude",
-            "type": "forecast",
-            "enabled": True,
-            "interval_minutes": None,
-            "status": "pending",
-            "last_started_at": None,
-            "last_finished_at": None,
-            "last_success_at": None,
-            "last_error_at": None,
-            "last_error": None,
-            "last_measurement_count": None,
-            "consecutive_failures": 0,
-        })
-
-        started_at = datetime.now(timezone.utc)
-        health["status"] = "running"
-        health["last_started_at"] = started_at
-
-        stations = [
-            s for s in self._station_registry.values()
-            if getattr(s, "latitude", None) is not None
-            and getattr(s, "longitude", None) is not None
-        ]
-        if not stations:
-            health.update({"status": "ok_no_stations", "last_finished_at": datetime.now(timezone.utc), "last_measurement_count": 0})
-            return
-
-        logger.info("Running SwissMeteo altitude collector for %d stations, horizon %dh", len(stations), horizon_hours)
-
-        total_points = 0
-        errors = 0
-        for station in stations:
-            try:
-                pts = await collector.collect_altitude_for_station(
-                    station.station_id, station.network, horizon_hours
-                )
-                if pts:
-                    self._influx.write_station_wind_profile(pts)
-                    total_points += len(pts)
-                else:
-                    errors += 1
-            except Exception as exc:
-                errors += 1
-                logger.error("Altitude collection failed for %s: %s", station.station_id, exc)
-
-        finished_at = datetime.now(timezone.utc)
-        health.update({
-            "status": "ok" if total_points > 0 else "ok_no_data",
-            "last_finished_at": finished_at,
-            "last_success_at": finished_at,
-            "last_error_at": None,
-            "last_error": None,
-            "last_measurement_count": total_points,
-            "consecutive_failures": 0,
-        })
-        logger.info("SwissMeteo altitude: wrote %d points total (%d station errors)", total_points, errors)
 
     def update_collector_runtime(
         self,

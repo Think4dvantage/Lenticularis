@@ -173,29 +173,3 @@ class ForecastPoint(BaseModel):
     precipitation_max: Optional[float] = Field(None, description="Precipitation ensemble maximum")
 
 
-class StationWindProfilePoint(BaseModel):
-    """
-    A single hourly wind forecast at one altitude band for one station.
-
-    Written to the ``station_wind_profile`` InfluxDB measurement.
-    Stores full ensemble (probable / min / max) from the SwissMeteo forecast
-    container.  ``level_m`` is altitude ASL in metres (e.g. 500, 1000, 1500…).
-    """
-
-    station_id: str
-    network: str
-    level_m: int
-    init_time: datetime
-    valid_time: datetime
-
-    wind_speed: Optional[float] = None
-    wind_speed_min: Optional[float] = None
-    wind_speed_max: Optional[float] = None
-
-    wind_direction: Optional[int] = None
-    wind_direction_min: Optional[int] = None
-    wind_direction_max: Optional[int] = None
-
-    vertical_wind: Optional[float] = None
-    vertical_wind_min: Optional[float] = None
-    vertical_wind_max: Optional[float] = None
