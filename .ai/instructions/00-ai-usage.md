@@ -96,7 +96,7 @@ Update the relevant files whenever the `.ai/` context changes:
 
 ### Staying in Sync with the Blueprint
 
-If you want to pull in the latest framework improvements, new prompts, or updated instructions from the central AI Blueprint, run:
+If you want to pull in the latest framework improvements, new prompts, or updated instructions from the central [AI Blueprint](https://github.com/Think4dvantage/ai-blueprint), run:
 
 `/prompt .ai/prompts/update-blueprint.md`
 
@@ -105,6 +105,7 @@ This will sync the project's framework files with the central repository while k
 ---
 
 ## File Map
+
 
 ```
 .ai/
@@ -121,7 +122,6 @@ This will sync the project's framework files with the central repository while k
   context/
     architecture.md             ← SQLite tables, InfluxDB measurements, API contracts
     features.md                 ← Shipped milestones + backlog
-    flutter-app-plan.md         ← Flutter mobile app plan (project-specific)
   prompts/
     new-feature.md              ← End-to-end implementation checklist
     fix-bug.md                  ← Bug-fixing workflow (Reproduction First)

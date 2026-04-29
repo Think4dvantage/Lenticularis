@@ -7,8 +7,8 @@ Use this prompt as a checklist when implementing any non-trivial feature end-to-
 ## Backend Checklist
 
 - [ ] New SQLite table(s) → add ORM model in `models.py`, migration in `db.py:_run_column_migrations()` if adding columns to existing tables
-- [ ] New Pydantic schemas in `src/lenticularis/models/`
-- [ ] New router at `src/lenticularis/api/routers/{domain}.py` → register in `main.py`
+- [ ] New Pydantic schemas in `src/[package]/models/`
+- [ ] New router at `src/[package]/api/routers/{domain}.py` → register in `main.py`
 - [ ] Auth dependencies applied correctly (see `.ai/instructions/02-backend-conventions.md`)
 - [ ] New InfluxDB queries → add methods to `InfluxClient` in `influx.py`
 - [ ] Config keys for anything configurable → add to `config.py` Pydantic models AND `config.yml.example`
@@ -18,19 +18,12 @@ Use this prompt as a checklist when implementing any non-trivial feature end-to-
 
 - [ ] New `.html` page file in `static/`
 - [ ] One `<script type="module">` block per page; imports `initI18n` from `i18n.js` and `renderNavAuth` from `auth.js`
-- [ ] All user-visible strings have i18n keys in all four locale files
+- [ ] All user-visible strings have i18n keys in all locale files
 - [ ] Dark theme colors used: `#0f1117` body, `#1a1f2e` cards, `#2d3748` borders, `#e2e8f0` text, `#90cdf4` accent
 - [ ] `fetchAuth()` used for all authenticated API calls
 - [ ] `shared.css` linked in `<head>`
-- [ ] Nav includes Help link (`data-i18n="nav.help"`) and lang picker mount point (`#navLangPicker`)
 - [ ] Mobile-responsive (test at ≤640 px width)
-
-## If Org-Scoped
-
-- [ ] Page supports `?org={slug}` query param
-- [ ] `applyOrgNav(slug, personalPath)` called when org context detected
-- [ ] Org-specific API endpoints used (`/api/org/{slug}/...`)
-- [ ] Opportunity button and Public/Private toggle hidden in editor org mode
+- [ ] Console logging added to every new/modified function (see frontend conventions)
 
 ## Quality
 

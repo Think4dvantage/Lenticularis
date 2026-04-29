@@ -417,6 +417,7 @@ function tnGoLive() {
   document.getElementById('tnCustomBtn').classList.remove('active');
   document.getElementById('tnCustomDate').style.display = 'none';
   document.getElementById('tnNowBtn').classList.add('active');
+  tnUpdateHourButtons();
   document.getElementById('tnHourRow').style.display = 'none';
   _mapReplay.pause();
   loadStations();
@@ -455,6 +456,7 @@ async function tnSelectDay(offset) {
   console.log(`[Lenti:index] day button clicked offset=${offset} fh=${fh}`, loadParams);
   try { await _mapReplay.load(loadParams); } catch(err) { console.error('[Lenti:index] Time nav load error:', err); }
 
+  tnUpdateHourButtons();
   tnSeekToHour(12);
 }
 
@@ -511,6 +513,18 @@ function tnDayBounds(offset, dateStr) {
 }
 
 // -- Hour navigation ---------------------------------------------------------
+function tnPlayHours() {
+  return (_tnOffset != null && _tnOffset >= 2)
+    ? [8, 11, 14, 17]
+    : [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19];
+}
+
+function tnUpdateHourButtons() {
+  const active = new Set(tnPlayHours());
+  document.querySelectorAll('.tn-hour-btn').forEach(b =>
+    b.style.display = active.has(+b.dataset.hour) ? '' : 'none');
+}
+
 function tnSeekToHour(hour) {
   const ts = _mapReplay._timestamps;
   if (!ts || ts.length === 0) return;
@@ -559,11 +573,14 @@ function tnStartPlay() {
   const btn = document.getElementById('tnPlayDayBtn');
   btn.textContent = window.t('map.time_nav.stop');
   btn.classList.add('playing');
-  let h = (_tnPlayHour >= 7 && _tnPlayHour < 19) ? _tnPlayHour : 7;
+  const hours = tnPlayHours();
+  const frameMs = hours.length <= 4 ? 1000 : 600;
+  let i = hours.findIndex(h => h >= _tnPlayHour);
+  if (i < 0) i = 0;
   function step() {
-    if (!_tnPlayActive || h > 19) { tnStopPlay(); return; }
-    tnSelectHour(h++);
-    _tnPlayTimer = setTimeout(step, 600);
+    if (!_tnPlayActive || i >= hours.length) { tnStopPlay(); return; }
+    tnSelectHour(hours[i++]);
+    _tnPlayTimer = setTimeout(step, frameMs);
   }
   step();
 }

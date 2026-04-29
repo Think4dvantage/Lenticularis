@@ -6,16 +6,16 @@ Use this prompt when you need to add a new domain to the API.
 
 Add a new FastAPI router for `{domain}` following the project conventions:
 
-1. Create `src/lenticularis/api/routers/{domain}.py` with:
+1. Create `src/[package]/api/routers/{domain}.py` with:
    - `router = APIRouter(prefix="/api/{domain}", tags=["{domain}"])`
-   - All endpoints using appropriate auth dependencies (`get_current_user`, `require_pilot`, `require_admin`, etc.)
+   - All endpoints using appropriate auth dependencies (`get_current_user`, `require_admin`, etc.)
    - `db: Session = Depends(get_db)` on any endpoint that touches SQLite
    - Type hints on all function signatures
    - Async handlers for all I/O
 
-2. Register the router in `src/lenticularis/api/main.py`:
+2. Register the router in `src/[package]/api/main.py`:
    ```python
-   from lenticularis.api.routers import {domain} as {domain}_router
+   from [package].api.routers import {domain} as {domain}_router
    app.include_router({domain}_router.router)
    ```
 
@@ -26,8 +26,9 @@ Add a new FastAPI router for `{domain}` following the project conventions:
        return FileResponse("static/{page_name}.html")
    ```
 
-4. Add any new Pydantic schemas to `src/lenticularis/models/`.
+4. Add any new Pydantic schemas to `src/[package]/models/`.
 
-5. If new user-visible strings are needed in the frontend, add i18n keys to all four locale files: `static/i18n/en.json`, `de.json`, `fr.json`, `it.json`.
+5. If new user-visible strings are needed, add i18n keys to all locale files simultaneously.
 
-Refer to `.ai/instructions/02-backend-conventions.md` for auth dependency selection and `.ai/context/architecture.md` for the full API contract list.
+Refer to `.ai/instructions/02-backend-conventions.md` for auth dependency selection.
+Refer to `.ai/context/architecture.md` for the full API contract list.

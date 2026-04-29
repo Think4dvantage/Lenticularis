@@ -28,8 +28,8 @@ logger = logging.getLogger(__name__)
 Configure the root logger at startup in `main.py` lifespan with level, format, and handler. Log format must include timestamp, level, logger name, and message:
 
 ```
-2025-01-15 14:32:01,234 INFO     [lenticularis.api.main] Service starting — version 1.2.0
-2025-01-15 14:32:01,891 INFO     [lenticularis.database.db] Migrations applied: 3 (skipped: 1)
+2025-01-15 14:32:01,234 INFO     [package.api.main] Service starting — version 1.2.0
+2025-01-15 14:32:01,891 INFO     [package.database.db] Migrations applied: 3 (skipped: 1)
 ```
 
 ### Startup Sequence
@@ -50,8 +50,8 @@ Log every step of the startup sequence at `INFO`. An operator reading cold logs 
 Every API request must produce at least one log line. Use FastAPI middleware or a dependency to log at `INFO`:
 
 ```
-INFO  [lenticularis.api.middleware] POST /api/widgets → 201 (34ms) user=alice
-INFO  [lenticularis.api.middleware] GET  /api/widgets → 200 (12ms) user=bob  count=42
+INFO  [package.api.middleware] POST /api/widgets → 201 (34ms) user=alice
+INFO  [package.api.middleware] GET  /api/widgets → 200 (12ms) user=bob  count=42
 ```
 
 Log at `WARNING` for 4xx, `ERROR` for 5xx. Include request ID if available.
@@ -96,8 +96,8 @@ Every service must expose a `GET /health` endpoint. It must:
 ```json
 {
   "status": "ok",
-  "service": "lenticularis",
-  "version": "1.15.0",
+  "service": "my-service",
+  "version": "1.2.0",
   "uptime_seconds": 3621,
   "checks": {
     "sqlite": "ok",
@@ -141,4 +141,4 @@ Never catch-and-ignore exceptions. If an exception cannot be re-raised, log it a
 
 ## Frontend
 
-See `03-frontend-conventions.md` — Browser Console Logging Policy. The same philosophy applies: log everything at the browser console so any engineer can diagnose frontend behaviour without source-diving. Use the `[Lenti:<page>]` prefix convention on every `console.*` call.
+See `03-frontend-conventions.md` — Browser Console Logging Policy. The same philosophy applies: log everything at the browser console so any engineer can diagnose frontend behaviour without source-diving. Use the bracketed prefix convention (`[App:<page>]`) on every `console.*` call.

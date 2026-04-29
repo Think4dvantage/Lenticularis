@@ -123,10 +123,10 @@ Report the checklist result. If any item is incomplete, complete it before finis
 
 ## After This Prompt
 
-The session is ready to clear. Run `/clear` when ready.
+The session is ready to clear. Run `/clear` when ready. 
 
 > **Tip**: If you want to pull in the latest framework improvements or new prompts from the central AI Blueprint repository, run the update prompt:
->
+> 
 > `/prompt .ai/prompts/update-blueprint.md`
 
 The next session should start by reading `.ai/` — everything needed to continue will be there.

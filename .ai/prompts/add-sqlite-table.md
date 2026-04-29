@@ -1,35 +1,39 @@
-# Prompt: Add a New SQLite Table or Column
+# Prompt: Add a New SQLite Table
 
-## New Table
+Use this prompt when you need to persist new structured data.
 
-Add a new SQLAlchemy ORM model in `src/lenticularis/database/models.py`:
+---
 
-```python
-class {ModelName}(Base):
-    __tablename__ = "{table_name}"
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    created_at = Column(DateTime, default=datetime.utcnow)
-    # ... other columns
-```
+Add a new SQLite table for `{entity}` following the project conventions:
 
-New tables are created automatically by `Base.metadata.create_all()` in `db.py:init_db()`. No migration block needed.
+1. **Define the ORM model** in `src/[package]/database/models.py`:
+   ```python
+   class Entity(Base):
+       __tablename__ = "entities"
+       id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+       name = Column(String, nullable=False)
+       created_at = Column(DateTime, default=datetime.utcnow)
+   ```
 
-## New Column on Existing Table
+2. **Create a migration script** in `src/[package]/database/migrations/`:
+   Use the next sequential prefix (e.g., `0002_add_entities.sql`).
+   ```sql
+   CREATE TABLE IF NOT EXISTS entities (
+       id TEXT PRIMARY KEY,
+       name TEXT NOT NULL,
+       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+   );
+   ```
+   If adding a **column to an existing table**, use an `ALTER TABLE` statement instead:
+   ```sql
+   ALTER TABLE entities ADD COLUMN new_col TEXT;
+   ```
+   Always ensure migration SQL is as idempotent as possible (`IF NOT EXISTS`).
 
-Add the column to the ORM model in `models.py`, then add an **idempotent** migration block to `_run_column_migrations()` in `src/lenticularis/database/db.py`:
+3. **Add the Pydantic schemas** (Create / Update / Out) in `src/[package]/models/`.
 
-```python
-# {table_name} migrations
-cols = {c["name"] for c in conn.execute(text("PRAGMA table_info({table_name})")).fetchall()}
-if "{new_column}" not in cols:
-    conn.execute(text("ALTER TABLE {table_name} ADD COLUMN {new_column} {TYPE} {DEFAULT}"))
-    conn.commit()
-```
+4. **Add CRUD endpoints** in the appropriate router (or create a new one — see `add-api-router.md`).
 
-Always check `PRAGMA table_info` first to make migrations idempotent. Never use Alembic.
+5. **Update `.ai/context/architecture.md`** to document the new table or column in the "SQLite Tables" section.
 
-## Pydantic Schemas
-
-Add corresponding request/response schemas to `src/lenticularis/models/`. Follow Pydantic v2 conventions.
-
-Refer to `.ai/context/architecture.md` for the full SQLite schema reference.
+6. **Sync**: Run `.ai/prompts/sync.md` to ensure human-readable docs are updated.

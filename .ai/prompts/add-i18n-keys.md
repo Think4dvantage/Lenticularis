@@ -1,43 +1,38 @@
-# Prompt: Add Translated Strings
+# Prompt: Add i18n Keys
 
-When adding any user-visible text, update all four locale files simultaneously.
+Use this prompt whenever new user-visible strings are introduced in the frontend.
 
-## Steps
+---
 
-1. Add the key + English text to `static/i18n/en.json`
-2. Add the translated string to `static/i18n/de.json`
-3. Add the translated string to `static/i18n/fr.json`
-4. Add the translated string to `static/i18n/it.json`
+Add i18n keys for `{feature}` following the project conventions:
 
-Use the same nested key structure as existing keys (e.g. `"admin.users.col_trusted"`, `"nav.help"`).
+1. Add the key to **all locale files simultaneously**:
+   - `static/i18n/en.json` — English (source of truth)
+   - `static/i18n/de.json` — German
+   - `static/i18n/fr.json` — French
+   - `static/i18n/it.json` — Italian
 
-## In HTML (static text)
+   [Adjust locale list to match the project's supported languages.]
 
-```html
-<span data-i18n="your.key">Fallback text</span>
-<input data-i18n-placeholder="your.placeholder_key">
-```
+2. Use the existing nested key structure. Example:
+   ```json
+   {
+     "feature_name": {
+       "title": "...",
+       "description": "...",
+       "btn_save": "..."
+     }
+   }
+   ```
 
-## In JavaScript (dynamic text)
+3. Reference in HTML:
+   ```html
+   <span data-i18n="feature_name.title">Fallback text</span>
+   ```
 
-```javascript
-// In module scripts (after await initI18n()):
-el.textContent = window.t('your.key');
-el.textContent = window.t('your.key.with_var', { varName: value });
+4. Reference in JavaScript (after `await initI18n()`):
+   ```javascript
+   el.textContent = window.t('feature_name.title');
+   ```
 
-// In non-module scripts (before initI18n() may complete):
-const t = typeof window.t === 'function' ? window.t : k => k;
-el.textContent = t('your.key');
-```
-
-## Key Naming Convention
-
-- `nav.*` — navigation links
-- `admin.*` — admin panel
-- `editor.*` — ruleset editor
-- `map.*` — map page
-- `stats.*` — statistics page
-- `foehn.*` — Föhn monitor
-- `common.*` — shared across pages
-- `auth.*` — login/register pages
-- `org.*` — org dashboard / org mode
+**Never hardcode a user-visible string directly in HTML or JS without a corresponding i18n key.**

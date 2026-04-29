@@ -2,10 +2,10 @@
 
 ## New API Router
 
-Create `src/lenticularis/api/routers/<domain>.py`, register it in `main.py`.
+Create `src/[package]/api/routers/<domain>.py`, register it in `main.py`.
 
 ```python
-# src/lenticularis/api/routers/widgets.py
+# src/[package]/api/routers/widgets.py
 router = APIRouter(prefix="/api/widgets", tags=["widgets"])
 
 @router.get("")
@@ -15,7 +15,7 @@ def list_widgets(current_user: User = Depends(get_current_user), db: Session = D
 
 ```python
 # main.py
-from lenticularis.api.routers import widgets as widgets_router
+from [package].api.routers import widgets as widgets_router
 app.include_router(widgets_router.router)
 ```
 
@@ -29,9 +29,10 @@ async def widgets_page():
 
 ---
 
-## New SQLite Table
+## New SQLite Table & Migrations
 
-Add ORM model in `models.py`:
+### 1. Define ORM Model
+Add the ORM model in `models.py`:
 
 ```python
 class Widget(Base):
@@ -40,17 +41,54 @@ class Widget(Base):
     ...
 ```
 
-New tables are created automatically by `Base.metadata.create_all()` in `db.py`. No migration needed.
+### 2. Create Migration Script
+Create a new `.sql` file in `src/[package]/database/migrations/` using a sequential prefix:
 
-For **new columns on existing tables**, add to `_run_column_migrations()` in `db.py`:
+`0001_initial_schema.sql` → `0002_add_widgets.sql` → `0003_add_user_bio.sql`
+
+Example migration:
+```sql
+CREATE TABLE IF NOT EXISTS widgets (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+### 3. Implementation Logic (db.py)
+The `init_db()` function in `db.py` must track and apply these scripts using a `_migrations` table. Never skip migrations — SQLAlchemy's `Base.metadata.create_all()` is only for initial bootstrap and does not handle schema drift.
+
+#### SQLite WAL Mode
+To support concurrent writes from collectors and reads from the API, always enable **Write-Ahead Logging (WAL)** mode on the SQLite connection:
 
 ```python
-if "new_col" not in cols:
-    conn.execute(text("ALTER TABLE existing_table ADD COLUMN new_col TEXT"))
+def init_db(engine):
+    with engine.connect() as conn:
+        conn.execute(text("PRAGMA journal_mode=WAL;"))
+        run_migrations(conn)
+```
+
+```python
+def run_migrations(conn):
+    conn.execute(text("CREATE TABLE IF NOT EXISTS _migrations (filename TEXT PRIMARY KEY)"))
+    applied = {row[0] for row in conn.execute(text("SELECT filename FROM _migrations"))}
+    
+    migration_dir = Path(__file__).parent / "migrations"
+    for sql_file in sorted(migration_dir.glob("*.sql")):
+        if sql_file.name not in applied:
+            with open(sql_file) as f:
+                conn.execute(text(f.read()))
+            conn.execute(text("INSERT INTO _migrations (filename) VALUES (:f)"), {"f": sql_file.name})
     conn.commit()
 ```
 
-**Always make migrations idempotent** — check `PRAGMA table_info` first. Never skip `_run_column_migrations` when adding columns; SQLAlchemy's `create_all` does not alter existing tables.
+---
+
+## Testing Conventions
+
+See `06-testing-conventions.md` for the full strategy.
+- **Backend**: Pytest in `tests/backend/`. Use `httpx.AsyncClient`.
+- **Frontend**: Playwright in `tests/frontend/`.
 
 ---
 
@@ -62,17 +100,14 @@ Add a method to `InfluxClient` in `influx.py`. Keep Flux query strings inside th
 
 ## Auth Dependencies
 
-Import from `lenticularis.api.dependencies`:
+Import from `[package].api.dependencies`:
 
 | Dependency | Who passes |
 |---|---|
 | `get_current_user` | Any logged-in user |
-| `require_pilot` | `pilot` or `admin` (blocks `customer` + `org_pilot`) |
 | `require_admin` | `admin` only |
-| `require_org_member` | `org_pilot` / `org_admin` / `admin` |
-| `require_org_admin` | `org_admin` / `admin` |
 
-Enforce `owner_id == current_user.id` for pilots reading/writing their own resources.
+[Add additional role-based dependencies here as they are introduced.]
 
 ---
 
@@ -88,25 +123,6 @@ Add to `CollectorScheduler` in `scheduler.py`. Use `AsyncIOScheduler` + `Interva
 
 ---
 
-## Org Multi-Tenancy
-
-- `Organization` model: `slug` (unique), `name`.
-- `org_id` nullable FK on `User` and `RuleSet`.
-- Subdomain routing in `main.py` reads `Host` header — any unknown subdomain serves `org-dashboard.html`.
-- Pass `org_slug` in `RuleSetCreate` to scope a new ruleset to an org (admin or org_admin only).
-- `GET /api/rulesets` filters `org_id IS NULL` — org-scoped rulesets never appear on the personal map.
-- Org-scoped pages use `?org={slug}` query param.
-
----
-
-## Testing Conventions
-
-See `06-testing-conventions.md` for the full strategy.
-- **Backend**: Pytest in `tests/backend/`. Use `httpx.AsyncClient`.
-- **Frontend**: Playwright in `tests/frontend/`.
-
----
-
 ## Coding Standards
 
 - **Always use type hints** on function signatures and class attributes.
@@ -117,39 +133,3 @@ See `06-testing-conventions.md` for the full strategy.
 - **Abstract base classes** (ABC + `@abstractmethod`) for collectors.
 - **Log extensively** — startup sequence, every request, every job run, every config value loaded. See `08-operability.md` for the full doctrine.
 - **No print statements** in production code — always use the `logging` module.
-
----
-
-## Frontend Tooltip Pattern (forecast + ensemble)
-
-`station-detail.js` uses `mode: 'x'` (not `mode: 'index'`) for Chart.js tooltips. **Never revert to `mode: 'index'`** — obs data is at 10-min resolution and forecast at 1-hour; index N in forecast does not correspond to index N in obs.
-
-`buildFields()` skips null values, so ensemble `_min`/`_max` arrays are shorter than the probable array. When looking up a min/max value from within a tooltip `label` callback, **always match by timestamp** (`new Date(p.x).getTime() === item.parsed.x`), never by `item.dataIndex`.
-
----
-
-## Collector Reference
-
-Before implementing or debugging any collector, check the winds-mobi providers repo:
-**https://github.com/winds-mobi/winds-mobi-providers**
-
-Key lessons already learned:
-- **MeteoSwiss `wind_direction`** is embedded as `properties["wind_direction"]` inside the `wind_speed` response — there is no separate windrichtung endpoint.
-- **MeteoSwiss pressure** uses two endpoints: `qff` (meteorological sea-level) and `qfe` (station pressure). The `qnh` endpoint is not used.
-- **MeteoSwiss timestamps** — use `reference_ts` (ISO 8601); fall back to `date` only if absent.
-- **Altitude strings** can arrive as floats (`'1888.00'`) or with unit suffix (`'1538.86 m'`). Always parse via `int(float(str(raw).split()[0]))`.
-- **METAR wind direction** can legitimately be missing/variable (VRB/calm). Allow nullable `wind_direction`.
-- **Holfuy API** endpoint is `https://api.holfuy.com/live/` (NOT `/measurements/`). Params: `pw=<key>&m=JSON&s=all&su=km/h&tu=C&loc&utc`. Response shape: `{"measurements": [...]}` wrapper (not a flat list). Each entry: `stationId`, `stationName`, `location: {latitude, longitude, altitude}`, `dateTime` (UTC when `utc` param present), `wind: {speed, gust, direction}`, `temperature`, `humidity`. Without `loc` flag, coordinates are absent. Without `utc` flag, timestamps are CE(S)T.
-- **Duplicate keyword trap in collector constructors** — some collectors explicitly pass `pressure_qff=None` even when the field is already optional. When renaming a field across constructors (e.g. `pressure_qnh` → `pressure_qff`), grep for *both* the old and new field name inside each constructor before editing to avoid `SyntaxError: keyword argument repeated`. The METAR collector was caught by this: it had both `pressure_qnh=…` and `pressure_qff=None` explicitly in the same call.
-
----
-
-## AI Rule Suggestions (`routers/ai.py`)
-
-Single Ollama call with three layers of Python pre-processing:
-
-1. **`_normalize_description()`** — regex pipeline that annotates natural-language wind terms with explicit degrees. Add new patterns to `_DIR_PATTERNS` / `_SPEED_PATTERNS`.
-2. **`_fuzzy_station_hints()`** — prefix/substring match of description words against station names.
-3. **`_geo_station_hints()`** — detects Swiss location names (`_KNOWN_LOCATIONS`), returns nearest stations by haversine distance within `_GEO_RADIUS_KM` (20 km). Extend `_KNOWN_LOCATIONS` to add more sites.
-
-`StationHint` carries `latitude`, `longitude`, `elevation` (sent by the frontend from `allStations`). `_validate_conditions()` is the hard guard — rejects any condition with invalid field/operator/colour. User input is wrapped in `<input>…</input>` delimiters as prompt injection mitigation.

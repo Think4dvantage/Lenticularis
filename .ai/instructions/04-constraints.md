@@ -8,7 +8,7 @@
 
 ## Production
 
-**Never touch prod directly.** All production changes go through the `lg4` IaC repo. No direct SSH, no direct `docker-compose` on the prod host.
+**Never touch prod directly.** All production changes go through the IaC repo. No direct SSH, no direct `docker-compose` on the prod host.
 
 ---
 
@@ -26,13 +26,13 @@
 
 ## Database Migrations
 
-**Never skip `_run_column_migrations`** when adding columns to existing tables. SQLAlchemy's `create_all` does not alter existing tables — new columns on existing tables require an explicit `ALTER TABLE` in `_run_column_migrations()` in `db.py`. Always make migrations idempotent by checking `PRAGMA table_info` first.
+**Never skip creating a migration script** when adding tables or columns. SQLAlchemy's `create_all` does not handle schema drift — all changes require a new `.sql` file in `src/[package]/database/migrations/` with a sequential prefix (e.g., `0002_add_widgets.sql`). Migrations are tracked via the `_migrations` table in SQLite. Always make SQL statements idempotent using `IF NOT EXISTS` where possible.
 
 ---
 
 ## i18n
 
-**Never hardcode user-visible strings in JS** without a corresponding key in all four locale files (`en.json`, `de.json`, `fr.json`, `it.json`). All four must be updated simultaneously.
+**Never hardcode user-visible strings in JS** without a corresponding key in all locale files. All locales must be updated simultaneously.
 
 ---
 

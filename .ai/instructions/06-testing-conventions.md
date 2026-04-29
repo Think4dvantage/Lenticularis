@@ -24,7 +24,7 @@ All backend tests live in `tests/backend/`.
 ```python
 import pytest
 from httpx import AsyncClient
-from lenticularis.api.main import app
+from [package].api.main import app
 
 @pytest.mark.asyncio
 async def test_get_users():
