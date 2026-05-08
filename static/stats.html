@@ -825,8 +825,13 @@ function renderCollectorTable(collectors) {
   }
 
   el.innerHTML = `<table class="data-table">
-    <thead><tr><th>${window.t('stats.service.col_collector')}</th><th>${window.t('stats.service.col_type')}</th><th>${window.t('stats.service.col_status')}</th><th>${window.t('stats.service.col_last_success')}</th><th>${window.t('stats.service.col_last_error')}</th><th>${window.t('stats.service.col_failures')}</th><th>${window.t('stats.service.col_interval')}</th></tr></thead>
-    <tbody>${collectors.map(c => `<tr>
+    <thead><tr><th>${window.t('stats.service.col_collector')}</th><th>${window.t('stats.service.col_type')}</th><th>${window.t('stats.service.col_status')}</th><th>${window.t('stats.service.col_last_success')}</th><th>${window.t('stats.service.col_last_error')}</th><th>${window.t('stats.service.col_failures')}</th><th>${window.t('stats.service.col_interval')}</th><th>${window.t('stats.service.col_records')}</th></tr></thead>
+    <tbody>${collectors.map(c => {
+      const schedule = c.cron_hours
+        ? c.cron_hours.map(h => String(h).padStart(2,'0')).join('/') + 'Z'
+        : (c.interval_minutes != null ? c.interval_minutes + ' min' : '—');
+      const records = c.last_measurement_count != null ? c.last_measurement_count + ' pts' : '—';
+      return `<tr>
       <td><span class="dot ${dotCls(c.status)}"></span>${esc(c.collector)}</td>
       <td style="color:#718096">${c.type ?? '—'}</td>
       <td>${esc(c.status)}</td>
@@ -834,8 +839,10 @@ function renderCollectorTable(collectors) {
       <td style="color:${c.last_error ? '#fc8181':'#718096'};font-size:0.75rem;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
           title="${esc(c.last_error ?? '')}">${c.last_error ? esc(c.last_error.slice(0,50)) + (c.last_error.length > 50 ? '…' : '') : '—'}</td>
       <td style="color:${(c.consecutive_failures??0)>0?'#fc8181':'#718096'}">${c.consecutive_failures ?? 0}</td>
-      <td style="color:#718096">${c.interval_minutes} min</td>
-    </tr>`).join('')}</tbody>
+      <td style="color:#718096">${schedule}</td>
+      <td style="color:#718096">${records}</td>
+    </tr>`;
+    }).join('')}</tbody>
   </table>`;
 }
 

@@ -49,16 +49,18 @@
 
 ## Forecast Collectors
 
-| Collector | File | Endpoint | Notes |
-|---|---|---|---|
-| SwissMeteo surface | `forecast_swissmeteo.py` | lsmfapi `/api/forecast/station?station_id=X` | Primary; all stations; flat fields + `_min`/`_max`; `init_time` + `forecast[]` schema |
-| Open-Meteo surface | `forecast_openmeteo.py` | Open-Meteo API | Fallback; 60-min interval; serial (concurrency=1); 429 retry |
-| SwissMeteo grid | `forecast_grid_swissmeteo.py` | lsmfapi `/api/forecast/grid?level_m=X` | Primary; 8 levels in parallel; 1272 pts; `ws`/`wd`/`rh` arrays |
-| Open-Meteo grid | `forecast_grid.py` | Open-Meteo API | Fallback; 4 batches of 50 pts; runs every 3h |
+| Collector | File | Endpoint | Schedule | Notes |
+|---|---|---|---|---|
+| SwissMeteo surface | `forecast_swissmeteo.py` | lsmfapi `/api/forecast/station?station_id=X` | every 60 min | Primary; all stations fetched in parallel (`asyncio.gather`); flat fields + `_min`/`_max`; `init_time` + `forecast[]` schema |
+| Open-Meteo surface | `forecast_openmeteo.py` | Open-Meteo API | **disabled** | Fallback only; re-enable in config if lsmfapi is unavailable for an extended period |
+| SwissMeteo grid | `forecast_grid_swissmeteo.py` | lsmfapi `/api/forecast/grid?level_m=X` | every 60 min | Primary; 8 levels in parallel; 1272 pts; `ws`/`wd`/`rh` arrays |
+| Open-Meteo grid | `forecast_grid.py` | Open-Meteo API | fallback only | Runs when SwissMeteo grid returns 0 wind pts |
 
-**lsmfapi** (`lsmfapi-dev.lg4.ch`) is user-owned, same Docker network, no rate limiting. Serves ALL station networks (not just FGA). Response schema: `init_time`, `forecast[]` (surface) or `grid` + `frames[]` (grid). No per-station altitude wind endpoint — altitude data comes from the grid only.
+**lsmfapi** (`lsmfapi-dev.lg4.ch`) is user-owned, same Docker network, no rate limiting. Serves ALL station networks. Response schema: `init_time`, `forecast[]` (surface) or `grid` + `frames[]` (grid). No per-station altitude wind endpoint — altitude data comes from the grid only. Updates ~4×/day (~04Z, 10Z, 16Z, 22Z); hourly collector runs are no-ops on most ticks.
 
 **Scheduler status**: `ok_no_data` only when there were 0 eligible stations. When all stations fail with errors, status is `error`.
+
+**`cron_hours`**: `ForecastCollectorConfig` supports optional `cron_hours: list[int]`. When set, scheduler uses `CronTrigger`; otherwise `IntervalTrigger(minutes=interval_minutes)`. Not currently used in production configs (hourly interval preferred).
 
 ---
 
@@ -69,6 +71,8 @@ Two clients in `InfluxClient.__init__()`:
 - `_slow_query_api` — `slow_query_timeout` from config (default 60s) — used only by `query_forecast_replay`
 
 Config keys: `influxdb.timeout` (ms, default 10000), `influxdb.slow_query_timeout` (ms, default 60000).
+
+**`write_forecast_grid` — chunked writes**: Grid data (~1.17M points per run) is written in chunks of 5000 pts per InfluxDB call. A single bulk write caused read-timeout failures (~8.75 s) against the default 10s timeout.
 
 ---
 

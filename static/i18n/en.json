@@ -437,7 +437,8 @@
       "col_last_success": "Last success",
       "col_last_error": "Last error",
       "col_failures": "Failures",
-      "col_interval": "Interval"
+      "col_interval": "Schedule",
+      "col_records": "Last run"
     }
   },
   "gallery": {

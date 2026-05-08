@@ -23,6 +23,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Optional
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
 from lenticularis.collectors.ecowitt import EcowittCollector
@@ -195,9 +196,16 @@ class CollectorScheduler:
             fc = cls(config=fc_cfg.config)
             self._forecast_collectors.append((fc, fc_cfg))
 
+            if fc_cfg.cron_hours:
+                trigger = CronTrigger(hour=",".join(str(h) for h in fc_cfg.cron_hours), minute=0)
+                schedule_desc = f"cron hours={fc_cfg.cron_hours}"
+            else:
+                trigger = IntervalTrigger(minutes=fc_cfg.interval_minutes)
+                schedule_desc = f"{fc_cfg.interval_minutes}-minute interval"
+
             self._scheduler.add_job(
                 func=self._run_forecast_collector,
-                trigger=IntervalTrigger(minutes=fc_cfg.interval_minutes),
+                trigger=trigger,
                 args=[fc, fc_cfg.horizon_hours],
                 id=f"forecast_{fc_cfg.name}",
                 name=f"{fc_cfg.name} forecast collector",
@@ -208,9 +216,9 @@ class CollectorScheduler:
             )
             self._collector_health[health_key]["status"] = "scheduled"
             logger.info(
-                "Registered forecast collector '%s' with %d-minute interval, %dh horizon",
+                "Registered forecast collector '%s' with %s, %dh horizon",
                 fc_cfg.name,
-                fc_cfg.interval_minutes,
+                schedule_desc,
                 fc_cfg.horizon_hours,
             )
 
@@ -244,11 +252,13 @@ class CollectorScheduler:
         logger.info("Registered foehn status collector with 10-minute interval")
 
         # ---- wind forecast grid collector -----------------------------------
+        # Aligned with lsmfapi update cadence: 04Z/10Z/16Z/22Z
         self._collector_health["forecast_grid"] = {
             "collector": "grid",
             "type": "forecast",
             "enabled": True,
-            "interval_minutes": 180,
+            "cron_hours": None,
+            "interval_minutes": 60,
             "status": "scheduled",
             "last_started_at": None,
             "last_finished_at": None,
@@ -260,7 +270,7 @@ class CollectorScheduler:
         }
         self._scheduler.add_job(
             func=self._run_grid_forecast_collector,
-            trigger=IntervalTrigger(minutes=180),
+            trigger=IntervalTrigger(minutes=60),
             id="forecast_grid",
             name="wind forecast grid collector",
             misfire_grace_time=600,
@@ -268,7 +278,7 @@ class CollectorScheduler:
             max_instances=1,
             next_run_time=None,
         )
-        logger.info("Registered wind forecast grid collector with 180-minute interval")
+        logger.info("Registered wind forecast grid collector (every 60 min)")
 
         # ---- ruleset evaluator (writes rule_decisions to InfluxDB) ----------
         if self._session_factory is not None:

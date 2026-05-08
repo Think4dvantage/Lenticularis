@@ -26,6 +26,9 @@ class ForecastCollectorConfig(BaseModel):
     enabled: bool = True
     interval_minutes: int = 60
     horizon_hours: int = 120
+    # If set, run at these specific UTC hours (CronTrigger) instead of an interval.
+    # Example: [4, 10, 16, 22] runs at 04:00, 10:00, 16:00, 22:00 UTC.
+    cron_hours: Optional[list[int]] = None
     config: Optional[dict] = None
 
 

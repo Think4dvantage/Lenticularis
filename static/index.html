@@ -514,9 +514,7 @@ function tnDayBounds(offset, dateStr) {
 
 // -- Hour navigation ---------------------------------------------------------
 function tnPlayHours() {
-  return (_tnOffset != null && _tnOffset >= 2)
-    ? [8, 11, 14, 17]
-    : [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19];
+  return [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19];
 }
 
 function tnUpdateHourButtons() {
@@ -574,9 +572,8 @@ function tnStartPlay() {
   btn.textContent = window.t('map.time_nav.stop');
   btn.classList.add('playing');
   const hours = tnPlayHours();
-  const frameMs = hours.length <= 4 ? 1000 : 600;
-  let i = hours.findIndex(h => h >= _tnPlayHour);
-  if (i < 0) i = 0;
+  const frameMs = 600;
+  let i = 0;
   function step() {
     if (!_tnPlayActive || i >= hours.length) { tnStopPlay(); return; }
     tnSelectHour(hours[i++]);

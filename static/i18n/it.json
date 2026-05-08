@@ -438,7 +438,8 @@
       "col_last_success": "Ultimo successo",
       "col_last_error": "Ultimo errore",
       "col_failures": "Fallimenti",
-      "col_interval": "Intervallo"
+      "col_interval": "Pianificazione",
+      "col_records": "Ultima esecuzione"
     }
   },
   "gallery": {

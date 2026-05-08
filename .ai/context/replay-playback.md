@@ -2,53 +2,40 @@
 
 ## How the replay works
 
-The time navigation bar has day buttons (offset -3 to +5) and an hour row (07:00–19:00 or 08/11/14/17).
+The time navigation bar has day buttons (offset -3 to +5) and an hour row (07:00–19:00).
 When a day is selected, `tnSelectDay(offset)` loads data via `_mapReplay.load(params)` which hits
 `GET /api/stations/replay?start=...&end=...&forecast_hours=N`. The engine caches results for 10 min.
 
-Playback (`▶ Play day`) is driven by `tnStartPlay()` in `static/index.html`, which iterates a list of
-local hours and calls `tnSelectHour(h)` → `tnSeekToHour(h)` → `_mapReplay.seekTo(bestIdx)` per frame.
-`tnSeekToHour` converts local hour to UTC, computes the target epoch for the selected day, then finds
-the nearest frame index in `_mapReplay._timestamps`.
+Playback (`▶ Play day`) is driven by `tnStartPlay()` in `static/index.html`, which iterates all
+13 local hours (07–19) and calls `tnSelectHour(h)` → `tnSeekToHour(h)` → `_mapReplay.seekTo(bestIdx)`
+per frame. `tnSeekToHour` converts local hour to UTC, computes the target epoch for the selected day,
+then finds the nearest frame index in `_mapReplay._timestamps`.
 
-## Data resolution — ICON-CH model tiers
+## Data resolution — lsmfapi (swissmeteo)
 
-| Source | Horizon | Native resolution |
-|--------|---------|-------------------|
-| ICON-CH1 (lsmfapi) | 0–30 h | **hourly** |
-| ICON-CH2 (lsmfapi) | 30–120 h | **3-hourly** (06, 09, 12, 15, 18 UTC = 08, 11, 14, 17 CEST) |
+| Source | Horizon | Resolution |
+|--------|---------|------------|
+| lsmfapi (ICON-CH1 + CH2 blended) | 0–120 h | **hourly** |
 
-CH1 collection was broken for a period — only CH2 data was available. When CH1 is restored,
-today and tomorrow will have genuine hourly variation again.
+lsmfapi delivers a single blended hourly time series for the full 0–120 h window.
+No frontend distinction between CH1 and CH2 tiers is needed or applied.
 
-lsmfapi currently returns hourly `valid_time` timestamps even for CH2 data, but with
-**forward-filled values** (intermediate hours carry the same values as the 3-hourly boundary).
-The Lenticularis collector (`forecast_swissmeteo.py`) is fully transparent — it stores whatever
-`valid_time`/value pairs lsmfapi returns. No resampling or rounding on the Lenticularis side.
+The Lenticularis collector (`forecast_swissmeteo.py`) stores whatever `valid_time`/value
+pairs lsmfapi returns. No resampling on the Lenticularis side.
 
-## Frontend adaptations (implemented)
+## Collector scheduling
 
-**`tnPlayHours()` — `static/index.html`**
-Returns the hour list for the current `_tnOffset`:
-- offset ≥ 2: `[8, 11, 14, 17]` (CH2 change points only)
-- otherwise: `[7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]`
+Both the swissmeteo station collector and the wind forecast grid collector run every 60 minutes.
+lsmfapi updates ~4×/day (~04Z, 10Z, 16Z, 22Z); most hourly runs are no-ops but that's fine —
+lsmfapi is co-located and the cost is negligible.
 
-**`tnUpdateHourButtons()`**
-Hides/shows `.tn-hour-btn` elements to match `tnPlayHours()`. Called on every day selection
-(`tnSelectDay`) and when returning to live mode (`tnGoLive`).
+Open-Meteo collectors are disabled. They can be re-enabled manually as a temporary fallback
+if lsmfapi is unavailable for an extended period.
 
-**`tnStartPlay()` — speed**
-- 4 frames (3-hourly days): 1000 ms/frame
-- 13 frames (hourly days): 600 ms/frame
+## Frontend — hour navigation
 
-## Future work
-
-When CH1 collection is restored in lsmfapi:
-- Today and tomorrow will automatically get genuine hourly values — no Lenticularis changes needed.
-- Consider adding lsmfapi-side linear interpolation for CH2 (30–120 h) to smooth far-range days.
-  Wind direction requires circular (shortest-arc) interpolation; scalars are plain linear.
-- The `tnPlayHours()` split at offset ≥ 2 will remain correct: CH1 covers ~30 h which always
-  includes today and tomorrow; CH2 takes over from +30 h onward.
+`tnPlayHours()` always returns all 13 hours `[7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]`
+for every day offset. `tnStartPlay()` runs at 600 ms/frame for all days.
 
 ## Replay backend — key files
 

@@ -449,5 +449,7 @@ function applyReplaySnapshot(stations) {
       .bindPopup(() => isFoehn ? buildFoehnPopup(s) : buildPopup(s), { maxWidth: 260 });
     placed++;
   }
+  if (placed === 0 && stations.length > 0)
+    console.warn(`[Lenti:map] applyReplaySnapshot: ${stations.length} stations in snapshot but 0 placed (all missing lat/lon?)`);
   return placed;
 }

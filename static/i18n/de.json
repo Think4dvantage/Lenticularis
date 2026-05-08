@@ -437,7 +437,8 @@
       "col_last_success": "Letzter Erfolg",
       "col_last_error": "Letzter Fehler",
       "col_failures": "Fehler",
-      "col_interval": "Intervall"
+      "col_interval": "Zeitplan",
+      "col_records": "Letzter Lauf"
     }
   },
   "gallery": {

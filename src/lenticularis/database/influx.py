@@ -901,10 +901,13 @@ from(bucket: "{self._cfg.bucket}")
                 p = p.field("humidity", float(fp.humidity))
             influx_points.append(p)
 
+        chunk_size = 5000
         try:
-            self._write_api.write(
-                bucket=self._cfg.bucket, org=self._cfg.org, record=influx_points
-            )
+            for i in range(0, len(influx_points), chunk_size):
+                self._write_api.write(
+                    bucket=self._cfg.bucket, org=self._cfg.org,
+                    record=influx_points[i : i + chunk_size],
+                )
             logger.debug("Wrote %d wind_forecast_grid points to InfluxDB", len(influx_points))
         except Exception as exc:
             logger.error("InfluxDB wind_forecast_grid write error: %s", exc)

@@ -37,7 +37,8 @@ class ReplayEngine {
     this._speed = 10;
     this._timer = null;
     this._state = 'idle';
-    this._cache = new Map();  // url → { json, fetchedAt }
+    this._cache = new Map();     // url → { json, fetchedAt }
+    this._inflight = new Map();  // url → Promise<json|null>
   }
 
   /** Build the replay API URL for a set of load params (shared by load + prefetch). */
@@ -67,21 +68,33 @@ class ReplayEngine {
       console.log(`[Lenti:replay] prefetch SKIP (cache fresh, age=${((Date.now()-cached.fetchedAt)/1000).toFixed(0)}s): ${url}`);
       return;
     }
+    if (this._inflight.has(url)) {
+      console.log(`[Lenti:replay] prefetch SKIP (in-flight): ${url}`);
+      return;
+    }
     console.log(`[Lenti:replay] prefetch START: ${url}`);
     const t0 = performance.now();
-    try {
-      const res = await fetch(url, { signal });
-      if (!res.ok) { console.warn(`[Lenti:replay] prefetch HTTP ${res.status}: ${url}`); return; }
-      const json = await res.json();
-      this._cache.set(url, { json, fetchedAt: Date.now() });
-      console.log(`[Lenti:replay] prefetch DONE in ${(performance.now()-t0).toFixed(0)}ms: ${url}`);
-    } catch (err) {
-      if (err.name === 'AbortError') {
-        console.log(`[Lenti:replay] prefetch ABORTED (page unload): ${url}`);
-      } else {
-        console.warn(`[Lenti:replay] prefetch ERROR: ${url}`, err);
+    const promise = (async () => {
+      try {
+        const res = await fetch(url, { signal });
+        if (!res.ok) { console.warn(`[Lenti:replay] prefetch HTTP ${res.status}: ${url}`); return null; }
+        const json = await res.json();
+        this._cache.set(url, { json, fetchedAt: Date.now() });
+        console.log(`[Lenti:replay] prefetch DONE in ${(performance.now()-t0).toFixed(0)}ms: ${url}`);
+        return json;
+      } catch (err) {
+        if (err.name === 'AbortError') {
+          console.log(`[Lenti:replay] prefetch ABORTED (page unload): ${url}`);
+        } else {
+          console.warn(`[Lenti:replay] prefetch ERROR: ${url}`, err);
+        }
+        return null;
+      } finally {
+        this._inflight.delete(url);
       }
-    }
+    })();
+    this._inflight.set(url, promise);
+    await promise;
   }
 
   /** Load replay data. Serves from cache when available and fresh. */
@@ -98,6 +111,24 @@ class ReplayEngine {
       if (this._timestamps.length > 0) this._emitFrame();
       console.log(`[Lenti:replay] load applied ${this._timestamps.length} frames from cache`);
       return this._timestamps.length;
+    }
+
+    // Await an in-flight prefetch for the same URL rather than firing a duplicate request
+    const inflight = this._inflight.get(url);
+    if (inflight) {
+      console.log(`[Lenti:replay] load AWAITING in-flight prefetch: ${url}`);
+      this._setState('loading');
+      this.pause();
+      await inflight;
+      const nowCached = this._cache.get(url);
+      if (nowCached) {
+        this._applyJson(nowCached.json);
+        this._setState('paused');
+        if (this._timestamps.length > 0) this._emitFrame();
+        console.log(`[Lenti:replay] load applied ${this._timestamps.length} frames from prefetch`);
+        return this._timestamps.length;
+      }
+      // Prefetch failed (aborted/error) — fall through to own fetch
     }
 
     // Cache miss — show loading state and fetch
@@ -192,7 +223,7 @@ class ReplayEngine {
     return ts != null && ts >= this._forecastFrom;
   }
 
-  destroy() { this.pause(); this._data = null; this._timestamps = []; this._setState('idle'); }
+  destroy() { this.pause(); this._data = null; this._timestamps = []; this._inflight.clear(); this._setState('idle'); }
 
   // ── private ───────────────────────────────────────────────────────────────
 

@@ -39,6 +39,11 @@ class BaseForecastCollector(ABC):
         self.config: dict = config or {}
         self.logger: logging.Logger = logger or logging.getLogger(self.__class__.__name__)
         self._http_client: Optional[httpx.AsyncClient] = None
+        # Allow per-instance source override so that the same collector class can be
+        # registered under different names (e.g. "open-meteo-short" vs "open-meteo")
+        # without polluting each other's init_date in InfluxDB.
+        if "source" in self.config:
+            self.SOURCE = self.config["source"]
 
     # ------------------------------------------------------------------
     # Abstract interface

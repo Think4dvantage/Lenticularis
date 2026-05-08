@@ -12,34 +12,31 @@ influxdb:
   timeout: 10000  # milliseconds
 
 # Forecast Collectors
-# Layered approach: short-horizon runs every 3 h for the next ~30 h (where fresh data matters),
-# extended run once per day for the full 5-day window.
-# Within the same calendar day (init_date), later writes overwrite earlier ones in InfluxDB,
-# so the most recent model run always wins for any given valid_time.
+# Primary source: SwissMeteo (lsmfapi) — ICON-CH1/CH2 ensemble, hourly 0–120 h.
+# Runs at 04Z/10Z/16Z/22Z, aligned with lsmfapi's fresh-data availability window.
+# Open-Meteo collectors are disabled; re-enable as a manual fallback if lsmfapi is
+# unavailable for an extended period.
 forecast_collectors:
   - name: "open-meteo-short"
-    enabled: true
-    interval_minutes: 180   # every 3 h — aligns with ICON-seamless update cadence
-    horizon_hours: 30       # covers the next ~30 h where forecast freshness is most important
+    enabled: false
+    interval_minutes: 180
+    horizon_hours: 30
     config:
-      # Commercial API key from open-meteo.com — enables the customer endpoint
-      # (no rate limits). Also used automatically by the wind forecast grid collector.
-      # Remove or leave blank to use the free public endpoint.
       api_key: ""
 
   - name: "open-meteo"
-    enabled: true
-    interval_minutes: 1440  # once per day — extended window changes slowly
-    horizon_hours: 120      # full 5-day horizon
+    enabled: false
+    interval_minutes: 1440
+    horizon_hours: 120
     config:
-      api_key: ""  # shared with open-meteo-short — set in one place, applies to both
+      api_key: ""
 
   # SwissMeteo forecast container — surface + altitude wind profiles
   # Fetches ICON-CH1/CH2 ensemble forecasts (probable/min/max) directly from the
-  # lsmfapi container.  Altitude winds are written to station_wind_profile measurement.
-  # Disable open-meteo entries above when switching to this source.
+  # lsmfapi container.  Delivers hourly valid_time for the full 0–120 h horizon.
+  # Runs every hour; lsmfapi updates ~4×/day so most runs are no-ops.
   - name: "swissmeteo"
-    enabled: false
+    enabled: true
     interval_minutes: 60
     horizon_hours: 120
     config:

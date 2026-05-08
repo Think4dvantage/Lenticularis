@@ -1,6 +1,24 @@
 # Feature History & Backlog
 
-## Current Version: v1.16 (shipped)
+## Current Version: v1.17 (shipped)
+
+### Replay fix, collector scheduling overhaul, stats table improvements
+
+| Change | Detail |
+|---|---|
+| `static/index.html` — `tnPlayHours()` | Always returns all 13 hours `[7…19]` for every day offset. Previously returned only `[8,11,14,17]` for offset ≥ 2 (CH2 3-hourly mode). Removed now that lsmfapi delivers hourly 120h. |
+| `static/index.html` — `tnStartPlay()` | Frame speed fixed at 600 ms for all days (was 1000 ms for 4-hour mode). |
+| `collectors/forecast_swissmeteo.py` — parallel collect | Added `collect_all_iter` override using `asyncio.gather` — all stations fetched in parallel. lsmfapi is co-located, no rate limits. Replaces serial `BaseForecastCollector.collect_all_iter`. |
+| `collectors/forecast_base.py` — source override | `__init__` reads optional `source` key from config dict and overrides class-level `SOURCE` tag. Useful if two instances of the same collector class need distinct source tags. |
+| `scheduler.py` + `config.py` — `cron_hours` | Added optional `cron_hours: list[int]` to `ForecastCollectorConfig`. When set, uses `CronTrigger(hour=...)` instead of `IntervalTrigger`. Kept as a supported feature but not used in production (hourly interval preferred). |
+| Collector scheduling — hourly | Both swissmeteo station collector and wind forecast grid collector changed from cron `04/10/16/22Z` to `IntervalTrigger(minutes=60)`. lsmfapi updates ~4×/day; no-op runs are harmless. |
+| `config.yml` / `config.yml.example` | `open-meteo` and `open-meteo-short` set `enabled: false`. `swissmeteo` uses `interval_minutes: 60`, `cron_hours` removed. |
+| `database/influx.py` — `write_forecast_grid` chunked | Grid write now batches at 5000 pts per InfluxDB call (was one call for all points). Fixes read-timeout crash when writing 1.17M points (~234 chunks × 5k pts). |
+| `static/stats.html` — collector table | Added "Records" column (`last_measurement_count` — points written in last run, e.g. `243 pts`). Fixed "Schedule" column: shows `04/10/16/22Z` for cron collectors, `N min` for interval. i18n keys `col_interval` renamed to "Schedule"/"Zeitplan"/etc.; `col_records` added to all 4 locales. |
+
+---
+
+## Previous Version: v1.16 (shipped)
 
 ### SwissMeteo lsmfapi Integration — Full Stack Fix
 

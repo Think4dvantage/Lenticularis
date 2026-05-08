@@ -12,11 +12,12 @@ collected per station.
 """
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timezone
 from typing import Optional
 
 from lenticularis.collectors.forecast_base import BaseForecastCollector
-from lenticularis.models.weather import ForecastPoint
+from lenticularis.models.weather import ForecastPoint, WeatherStation
 
 
 def _parse_dt(s: str) -> datetime:
@@ -52,6 +53,44 @@ class ForecastSwissMeteoCollector(BaseForecastCollector):
         self._base_url: str = (config or {}).get(
             "base_url", "https://lsmfapi-dev.lg4.ch"
         ).rstrip("/")
+
+    # ------------------------------------------------------------------
+    # Parallel collection — lsmfapi is co-located, no rate limits.
+    # Semaphore caps concurrent in-flight requests: individually responses
+    # arrive in 10–130 ms, but firing 100+ at once overwhelms the server
+    # and causes timeouts for most of the batch.
+    # ------------------------------------------------------------------
+
+    _MAX_CONCURRENT = 20
+
+    async def collect_all_iter(
+        self,
+        stations: list[WeatherStation],
+        horizon_hours: int = 120,
+        spread_seconds: float = 0.0,
+        concurrency: int = 1,
+    ):
+        eligible = [s for s in stations if s.latitude is not None and s.longitude is not None]
+        if not eligible:
+            return
+
+        sem = asyncio.Semaphore(self._MAX_CONCURRENT)
+
+        async def _fetch(station: WeatherStation):
+            async with sem:
+                try:
+                    pts = await self.collect_for_station(
+                        station.station_id, station.network,
+                        station.latitude, station.longitude, horizon_hours,
+                    )
+                    return station, pts
+                except Exception as exc:
+                    self.logger.error("SwissMeteo forecast failed for %s: %s", station.station_id, exc)
+                    return station, []
+
+        results = await asyncio.gather(*[_fetch(s) for s in eligible])
+        for item in results:
+            yield item
 
     # ------------------------------------------------------------------
     # BaseForecastCollector interface — surface forecast
