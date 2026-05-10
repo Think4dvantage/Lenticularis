@@ -267,7 +267,7 @@
         <ul>
           <li><span class="tl-green">GREEN</span> — all conditions pass. Conditions at this site look favourable according to your rules.</li>
           <li><span class="tl-orange">ORANGE</span> — at least one condition returned ORANGE. Caution; monitor closely.</li>
-          <li><span class="tl-red">RED</span> — at least one condition returned RED. Flying not recommended by your rules.</li>
+          <li><span class="tl-red">RED</span> — at least one condition returned RED. Activity not recommended by your rules.</li>
         </ul>
         <div class="tip-box"><strong>Remember:</strong> traffic lights reflect your rule set only. Always apply your own judgement and check official forecasts before making any go/no-go decision.</div>
       </div>
@@ -300,7 +300,7 @@
     <details>
       <summary>What is a rule set?</summary>
       <div class="faq-answer">
-        <p>A rule set is a named collection of weather conditions attached to one launch site, landing zone, or opportunity area. Each rule set evaluates to a single traffic-light colour based on live (and forecast) station data.</p>
+        <p>A rule set is a named collection of weather conditions attached to a site, an activity zone, or an opportunity area. Each rule set evaluates to a single traffic-light colour based on live (and forecast) station data.</p>
         <p>Rule sets are pilot-owned and private by default. You can publish them to the public gallery for others to clone and adapt.</p>
       </div>
     </details>
@@ -367,7 +367,7 @@
             <tr><td><strong>= equals</strong></td><td>Exact match (rarely useful for continuous values).</td></tr>
             <tr><td><strong>between A and B</strong></td><td>Value is within [A, B] inclusive. Use for safe ranges (e.g. temperature between 5 and 25).</td></tr>
             <tr><td><strong>not between A and B</strong></td><td>Value is outside [A, B]. Use to flag dangerous ranges.</td></tr>
-            <tr><td><strong>in direction A–B°</strong></td><td>Wind direction falls within the arc from A to B (clockwise). Shows a compass graphic. Use for directional flying windows.</td></tr>
+            <tr><td><strong>in direction A–B°</strong></td><td>Wind direction falls within the arc from A to B (clockwise). Shows a compass graphic. Use for directional activity windows.</td></tr>
           </tbody>
         </table>
         <div class="tip-box"><strong>Direction tip:</strong> N = 0°, NE = 45°, E = 90°, SE = 135°, S = 180°, SW = 225°, W = 270°, NW = 315°. For a range that crosses North (e.g. 330°–30°), enter A = 330, B = 30.</div>
@@ -430,16 +430,16 @@
     <h2><span class="section-icon">📍</span> Site Types</h2>
 
     <details>
-      <summary>What is a Launch site?</summary>
+      <summary>What is a Site?</summary>
       <div class="faq-answer">
-        <p>A <strong>Launch site</strong> (<span class="pill pill-blue">▲ Launch</span>) represents your primary point of interest — a takeoff, a harbour, a departure point. It appears on the map as a circle with a traffic-light colour. You can link one or more landing zones to it — the map then shows a coloured ring around the launch marker based on the best available decision for the linked zones.</p>
+        <p>A <strong>Site</strong> (<span class="pill pill-blue">▲ Launch</span>) represents your primary point of interest — a harbour, a mountain location, a departure point, or any place you want to monitor. It appears on the map as a circle with a traffic-light colour. You can link one or more activity zones to it — the map then shows a coloured ring around the site marker based on the best available decision for the linked zones.</p>
       </div>
     </details>
 
     <details>
-      <summary>What is a Landing zone?</summary>
+      <summary>What is an Activity zone?</summary>
       <div class="faq-answer">
-        <p>A <strong>Landing zone</strong> (<span class="pill pill-gray">⚑ Landing</span>) is a secondary point — typically an arrival or destination location. It shows its own traffic-light badge and can be linked from any number of launch sites. Conditions on a landing zone might monitor local wind, visibility, or any other relevant threshold.</p>
+        <p>An <strong>Activity zone</strong> (<span class="pill pill-gray">⚑ Landing</span>) is a secondary point — typically a destination, an activity area, or an arrival location. It shows its own traffic-light badge and can be linked from any number of sites. Conditions on an activity zone might monitor local wind, visibility, or any other relevant threshold.</p>
       </div>
     </details>
 
@@ -527,10 +527,10 @@
     <details>
       <summary>How far ahead does the forecast go?</summary>
       <div class="faq-answer">
-        <p>The system runs two forecast collectors from <strong>Open-Meteo (ICON seamless)</strong>:</p>
+        <p>The forecast is sourced from <strong>SwissMeteo (ICON-CH1/CH2 blended)</strong>, updated approximately 4× per day:</p>
         <ul>
-          <li><strong>Short-range:</strong> 30-hour horizon, refreshed every 3 hours — best for today and tomorrow.</li>
-          <li><strong>Extended:</strong> 5-day (120-hour) horizon, refreshed once per day — useful for planning trips.</li>
+          <li><strong>Horizon:</strong> up to 120 hours (5 days), hourly resolution.</li>
+          <li><strong>Coverage:</strong> all active stations in Switzerland.</li>
         </ul>
         <p>On the map you can use the day/hour slider to replay both past observations and the forecast window.</p>
       </div>
@@ -589,7 +589,7 @@
             <tr><td><strong>SLF</strong></td><td>30 min</td><td>Wind, snow depth, temp</td><td>High-alpine sites, often near passes</td></tr>
             <tr><td><strong>METAR / AviationWeather</strong></td><td>15 min</td><td>Wind, pressure, temperature</td><td>Swiss airports and airfields</td></tr>
             <tr><td><strong>Wunderground / Ecovitt</strong></td><td>15 min</td><td>Full sensor data from personal stations</td><td>User-submitted PWS; shown as personal stations on map</td></tr>
-            <tr><td><strong>Open-Meteo (ICON)</strong></td><td>3 h / 24 h</td><td>All fields (forecast)</td><td>All active stations; 5-day horizon</td></tr>
+            <tr><td><strong>SwissMeteo (ICON-CH)</strong></td><td>~4×/day</td><td>All fields (forecast)</td><td>All active stations; up to 120 h horizon</td></tr>
           </tbody>
         </table>
       </div>
@@ -619,7 +619,7 @@
         <table class="faq-table">
           <thead><tr><th>Role</th><th>Can do</th></tr></thead>
           <tbody>
-            <tr><td><strong>Pilot</strong></td><td>Full access: create sites, build rule sets, view stats, publish to gallery. Default role after registration.</td></tr>
+            <tr><td><strong>Pilot</strong></td><td>Full access: create sites and activity zones, build rule sets, view stats, publish to gallery. Default role after registration.</td></tr>
             <tr><td><strong>Customer</strong></td><td>Read-only: sees only rule sets assigned by an admin. Cannot create or edit rules.</td></tr>
             <tr><td><strong>Org Pilot</strong></td><td>Member of an organisation: can view org dashboard and condition details. Cannot edit org rules.</td></tr>
             <tr><td><strong>Org Admin</strong></td><td>Manages rule sets for their organisation. Cannot access other pilots' personal rules.</td></tr>
@@ -632,7 +632,7 @@
     <details>
       <summary>What is an Organisation?</summary>
       <div class="faq-answer">
-        <p>An <strong>Organisation</strong> is a shared workspace for commercial operators or clubs — for example a sailing club, an outdoor activity operator, or a flight school. Each org gets:</p>
+        <p>An <strong>Organisation</strong> is a shared workspace for commercial operators or clubs — for example a sailing club, a sports association, or an outdoor activity operator. Each org gets:</p>
         <ul>
           <li>Its own subdomain (e.g. <code>vkpi.lenti.cloud</code>) with a public traffic-light dashboard.</li>
           <li>A set of org-owned rule sets managed by org admins.</li>
@@ -645,7 +645,7 @@
     <details>
       <summary>The org dashboard shows a single traffic light. How is it computed?</summary>
       <div class="faq-answer">
-        <p>The org dashboard aggregates the latest evaluation results from all rule sets belonging to that organisation and picks the <strong>worst colour</strong> (worst wins). If any launch site is RED, the overall org status is RED.</p>
+        <p>The org dashboard aggregates the latest evaluation results from all rule sets belonging to that organisation and picks the <strong>worst colour</strong> (worst wins). If any site is RED, the overall org status is RED.</p>
         <p>Logged-in org members can see the per-rule-set breakdown and condition details below the main traffic light.</p>
       </div>
     </details>
