@@ -249,6 +249,38 @@
     "notify_red": "Rosso",
     "notify_sending_to": "Le e-mail verranno inviate a {email}"
   },
+  "forecast_analysis": {
+    "title": "Analisi precisione previsioni",
+    "subtitle": "Classifica delle stazioni per precisione delle previsioni per campo e anticipo.",
+    "lead_time": "Anticipo previsione",
+    "d1": "D+1 (0–24 h)",
+    "d2": "D+2 (24–48 h)",
+    "d3": "D+3 (48–72 h)",
+    "based_on": "Basato sugli ultimi {days} giorni",
+    "refresh": "↻ Aggiorna",
+    "loading": "Calcolo classifica…",
+    "no_data": "Nessuna coppia previsione/osservazione trovata per questo campo.",
+    "col_rank": "#",
+    "col_station": "Stazione",
+    "col_network": "Rete",
+    "col_canton": "Cantone",
+    "col_mae": "EAM",
+    "col_bias": "Bias medio",
+    "col_samples": "Campioni",
+    "col_correction": "Suggerimento correzione",
+    "correction_high": "Previsione di +{val} troppo alta — sottrarre per correggere",
+    "correction_low": "Previsione di {val} troppo bassa — aggiungere per correggere",
+    "correction_neutral": "Nessun bias sistematico",
+    "fields": {
+      "wind_speed": "Velocità vento (km/h)",
+      "wind_gust": "Raffiche (km/h)",
+      "wind_direction": "Direzione vento (°)",
+      "temperature": "Temperatura (°C)",
+      "humidity": "Umidità (%)",
+      "pressure_qff": "Pressione QFF (hPa)",
+      "precipitation": "Precipitazioni (mm)"
+    }
+  },
   "forecast_accuracy": {
     "title": "Precisione previsioni",
     "subtitle": "Confronto tra previsioni passate e valori osservati.",

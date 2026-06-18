@@ -187,6 +187,7 @@
     <a href="/stats" class="nav-link" data-i18n="nav.stats">Statistics</a>
     <a href="/foehn" class="nav-link" data-i18n="nav.foehn">Föhn</a>
     <a href="/wind-forecast" class="nav-link" data-i18n="nav.wind_forecast">Wind Forecast</a>
+    <a href="/forecast-analysis" class="nav-link" data-i18n="forecast_analysis.title">Forecast Analysis</a>
     <a href="/help" class="nav-link" data-i18n="nav.help">Help</a>
   </div>
   <div id="navLangPicker"></div>
@@ -374,6 +375,11 @@ function esc(s) {
     ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
 }
 
+function safeUrl(u) {
+  const s = String(u || '').trim();
+  return /^https?:\/\//i.test(s) ? s : '#';
+}
+
 function condThreshold(cr) {
   const u = FIELD_UNIT[cr.field] || '';
   const op = cr.operator ?? _condDefs[cr.condition_id]?.operator;
@@ -422,7 +428,7 @@ function renderWebcams(webcams) {
     try { domain = new URL(w.url).hostname; } catch { /* keep raw */ }
     const label = w.label || domain;
     const badge = isRoundshot ? `<span class="webcam-badge">Roundshot</span>` : '';
-    return `<a class="webcam-card" href="${esc(w.url)}" target="_blank" rel="noopener noreferrer">
+    return `<a class="webcam-card" href="${safeUrl(w.url)}" target="_blank" rel="noopener noreferrer">
       <div class="webcam-card-top">
         <span class="webcam-card-label">${esc(label)}</span>${badge}
       </div>

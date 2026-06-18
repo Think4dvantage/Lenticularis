@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lenticularis — Forecast Accuracy Analysis</title>
+  <link rel="stylesheet" href="/static/shared.css" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: #0f1117;
+      color: #e2e8f0;
+      min-height: 100vh;
+    }
+
+    /* ── Nav ─────────────────────────────────── */
+    .top-nav {
+      background: #1a1f2e;
+      border-bottom: 1px solid #2d3748;
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      height: 48px;
+      flex-shrink: 0;
+    }
+    .nav-brand {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: #90cdf4;
+      margin-right: 24px;
+      white-space: nowrap;
+      text-decoration: none;
+    }
+    .nav-links { display: flex; gap: 2px; flex: 1; flex-wrap: wrap; }
+    .nav-link {
+      color: #718096;
+      text-decoration: none;
+      font-size: 0.85rem;
+      padding: 6px 14px;
+      border-radius: 6px;
+      transition: background 0.15s, color 0.15s;
+    }
+    .nav-link:hover { background: #2d3748; color: #e2e8f0; }
+    .nav-link.active { background: #2d4a6e; color: #90cdf4; font-weight: 500; }
+    .nav-user { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+    .nav-btn { background: transparent; border: 1px solid #4a5568; color: #a0aec0; font-size: 0.8rem; padding: 4px 10px; border-radius: 5px; cursor: pointer; transition: background 0.15s; }
+    .nav-btn:hover { background: #2d3748; color: #e2e8f0; }
+    #navLangPicker { display: flex; gap: 2px; margin-left: 8px; }
+    .lang-btn { background: transparent; border: 1px solid #4a5568; color: #718096; font-size: 0.72rem; padding: 3px 7px; border-radius: 4px; cursor: pointer; transition: background 0.15s; }
+    .lang-btn:hover { background: #2d3748; color: #e2e8f0; }
+    .lang-btn.active { background: #2d4a6e; color: #90cdf4; border-color: #4a7bab; }
+
+    /* ── Page header ─────────────────────────── */
+    .page-header {
+      background: #1a1f2e;
+      border-bottom: 1px solid #2d3748;
+      padding: 14px 24px;
+    }
+    .page-header h1 { font-size: 1.1rem; font-weight: 600; color: #90cdf4; }
+    .page-header p { font-size: 0.8rem; color: #718096; margin-top: 3px; }
+
+    /* ── Controls bar ────────────────────────── */
+    .controls-bar {
+      background: #1a1f2e;
+      padding: 10px 24px;
+      border-bottom: 1px solid #2d3748;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .controls-label {
+      font-size: 0.8rem;
+      color: #718096;
+      white-space: nowrap;
+    }
+    .toggle-btn {
+      background: #2d3748;
+      border: 1px solid #4a5568;
+      border-radius: 6px;
+      color: #a0aec0;
+      padding: 5px 14px;
+      font-size: 0.82rem;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+      white-space: nowrap;
+    }
+    .toggle-btn:hover { background: #3a4a5e; color: #e2e8f0; }
+    .toggle-btn.active { background: #2b6cb0; border-color: #3182ce; color: #fff; }
+    .divider-v { width: 1px; height: 20px; background: #2d3748; flex-shrink: 0; }
+    .info-badge {
+      font-size: 0.78rem;
+      color: #4a5568;
+      padding: 4px 10px;
+      background: #161b29;
+      border: 1px solid #2d3748;
+      border-radius: 6px;
+    }
+    .refresh-btn {
+      margin-left: auto;
+      background: #2d3748;
+      border: 1px solid #4a5568;
+      border-radius: 6px;
+      color: #a0aec0;
+      padding: 5px 14px;
+      font-size: 0.82rem;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .refresh-btn:hover { background: #3a4a5e; color: #e2e8f0; }
+    .refresh-btn:disabled { opacity: 0.45; cursor: default; }
+
+    /* ── Error banner ────────────────────────── */
+    .error-banner {
+      background: #742a2a;
+      color: #feb2b2;
+      padding: 12px 24px;
+      font-size: 0.85rem;
+      display: none;
+    }
+
+    /* ── Loading / empty states ──────────────── */
+    .state-overlay {
+      text-align: center;
+      padding: 72px 0;
+      color: #4a5568;
+    }
+    .spinner {
+      border: 2px solid #2d3748;
+      border-top: 2px solid #63b3ed;
+      border-radius: 50%;
+      width: 24px;
+      height: 24px;
+      animation: spin 0.8s linear infinite;
+      display: inline-block;
+      margin-bottom: 12px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Field sections ──────────────────────── */
+    .sections-wrapper {
+      padding: 20px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    .field-section {
+      background: #1a1f2e;
+      border: 1px solid #2d3748;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .field-section-header {
+      padding: 12px 16px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: #a0aec0;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      background: #161b29;
+      border-bottom: 1px solid #2d3748;
+    }
+
+    /* ── Ranking table ───────────────────────── */
+    .rank-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.82rem;
+    }
+    .rank-table th {
+      padding: 8px 12px;
+      text-align: left;
+      font-weight: 600;
+      color: #718096;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border-bottom: 1px solid #2d3748;
+      white-space: nowrap;
+    }
+    .rank-table td {
+      padding: 9px 12px;
+      border-bottom: 1px solid #1e2535;
+      vertical-align: middle;
+    }
+    .rank-table tr:last-child td { border-bottom: none; }
+    .rank-table tr:hover td { background: #1e2535; }
+
+    .rank-num {
+      color: #4a5568;
+      font-weight: 700;
+      font-size: 0.78rem;
+      min-width: 24px;
+    }
+    .rank-1 { color: #fc8181; }
+    .rank-2 { color: #f6ad55; }
+    .rank-3 { color: #fbd38d; }
+
+    .station-name { color: #e2e8f0; font-weight: 500; }
+    .station-link { color: #90cdf4; text-decoration: none; }
+    .station-link:hover { text-decoration: underline; }
+
+    .network-badge {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .network-meteoswiss { background: #2a4365; color: #90cdf4; }
+    .network-metar      { background: #2f855a; color: #c6f6d5; }
+    .network-holfuy     { background: #22543d; color: #9ae6b4; }
+    .network-slf        { background: #44337a; color: #d6bcfa; }
+    .network-windline   { background: #1f4e5f; color: #b2f5ea; }
+    .network-ecowitt    { background: #7b341e; color: #fbd38d; }
+    .network-wunderground { background: #553c9a; color: #e9d8fd; }
+    .network-unknown    { background: #2d3748; color: #a0aec0; }
+
+    .mae-cell {
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      padding: 2px 7px;
+      border-radius: 4px;
+      display: inline-block;
+    }
+    .mae-high   { background: #742a2a; color: #fc8181; }
+    .mae-medium { background: #7b341e; color: #fbd38d; }
+    .mae-low    { background: #1c3a2e; color: #9ae6b4; }
+
+    .bias-cell {
+      font-variant-numeric: tabular-nums;
+      color: #a0aec0;
+    }
+    .bias-pos { color: #fc8181; }
+    .bias-neg { color: #9ae6b4; }
+
+    .correction-hint {
+      font-size: 0.75rem;
+      color: #718096;
+      font-style: italic;
+    }
+    .correction-high { color: #fc8181; }
+    .correction-low  { color: #9ae6b4; }
+
+    .samples-cell {
+      color: #4a5568;
+      font-size: 0.78rem;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .no-data-row td {
+      text-align: center;
+      padding: 24px;
+      color: #4a5568;
+      font-style: italic;
+    }
+  </style>
+</head>
+<body>
+
+<nav class="top-nav">
+  <a href="/" class="nav-brand">🪁 Lenticularis</a>
+  <div class="nav-links">
+    <a href="/" class="nav-link" data-i18n="nav.map">Map</a>
+    <a href="/stations" class="nav-link" data-i18n="nav.stations">Stations</a>
+    <a href="/rulesets" class="nav-link" data-i18n="nav.rulesets">Rule Sets</a>
+    <a href="/stats" class="nav-link" data-i18n="nav.stats">Statistics</a>
+    <a href="/foehn" class="nav-link" data-i18n="nav.foehn">Föhn</a>
+    <a href="/wind-forecast" class="nav-link" data-i18n="nav.wind_forecast">Wind Forecast</a>
+    <a href="/forecast-accuracy" class="nav-link" data-i18n="forecast_accuracy.title">Forecast Accuracy</a>
+    <a href="/forecast-analysis" class="nav-link active" data-i18n="forecast_analysis.title">Forecast Analysis</a>
+    <a href="/help" class="nav-link" data-i18n="nav.help">Help</a>
+  </div>
+  <div id="navLangPicker"></div>
+  <div class="nav-user" id="navUser"></div>
+</nav>
+
+<header class="page-header">
+  <h1 data-i18n="forecast_analysis.title">Forecast Accuracy Analysis</h1>
+  <p data-i18n="forecast_analysis.subtitle">Cross-station ranking of forecast accuracy by measurement field and lead time.</p>
+</header>
+
+<div class="error-banner" id="errorBanner"></div>
+
+<div class="controls-bar">
+  <span class="controls-label" data-i18n="forecast_analysis.lead_time">Lead time</span>
+  <button class="toggle-btn active" data-bucket="D+1" onclick="setBucket('D+1')" data-i18n="forecast_analysis.d1">D+1 (0–24 h)</button>
+  <button class="toggle-btn"        data-bucket="D+2" onclick="setBucket('D+2')" data-i18n="forecast_analysis.d2">D+2 (24–48 h)</button>
+  <button class="toggle-btn"        data-bucket="D+3" onclick="setBucket('D+3')" data-i18n="forecast_analysis.d3">D+3 (48–72 h)</button>
+  <div class="divider-v"></div>
+  <span class="info-badge" id="basedOnBadge"></span>
+  <button class="refresh-btn" id="refreshBtn" onclick="loadRanking()" data-i18n="forecast_analysis.refresh">↻ Refresh</button>
+</div>
+
+<div id="loadingOverlay" class="state-overlay">
+  <div class="spinner"></div>
+  <p data-i18n="forecast_analysis.loading">Computing ranking…</p>
+  <p id="loadingHint" style="font-size:0.75rem;margin-top:8px;color:#4a5568;"></p>
+</div>
+
+<div id="sectionsWrapper" class="sections-wrapper" style="display:none"></div>
+
+<script src="/static/forecast-analysis.js"></script>
+<script type="module">
+  import { initI18n, renderLangPicker } from '/static/i18n.js';
+  import { renderNavAuth } from '/static/auth.js';
+  await initI18n();
+  renderNavAuth('forecast-analysis');
+  renderLangPicker();
+  initPage();
+</script>
+</body>
+</html>

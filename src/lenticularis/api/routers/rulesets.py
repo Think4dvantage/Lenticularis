@@ -242,6 +242,10 @@ def get_history(
     db: Session = Depends(get_db),
 ):
     import json as _json
+    try:
+        uuid.UUID(ruleset_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Rule set not found")
     rs = db.get(RuleSet, ruleset_id)
     if rs is None:
         raise HTTPException(status_code=404, detail="Rule set not found")

@@ -19,7 +19,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
-from datetime import datetime, timezone
+import math
+from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any, Optional
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -68,6 +69,12 @@ _FORECAST_REGISTRY = {
 
 # Jitter range in seconds applied to each job's first run
 _JITTER_SECONDS = 60
+
+# Altitude thresholds (m ASL) → pressure level (hPa) for grid matching
+_ALTITUDE_TO_HPA: list[tuple[float, int]] = [
+    (500, 950), (1000, 900), (1500, 850), (2000, 800),
+    (2500, 750), (3000, 700), (4000, 600), (5000, 500),
+]
 
 
 def get_collector_class(name: str):
@@ -308,6 +315,33 @@ class CollectorScheduler:
             )
             logger.info("Registered ruleset evaluator with 10-minute interval")
 
+        # ---- forecast deviation writer (HH:05 every hour) ------------------
+        self._collector_health["forecast_deviation_writer"] = {
+            "collector": "forecast_deviation_writer",
+            "type": "derived",
+            "enabled": True,
+            "interval_minutes": 60,
+            "status": "scheduled",
+            "last_started_at": None,
+            "last_finished_at": None,
+            "last_success_at": None,
+            "last_error_at": None,
+            "last_error": None,
+            "last_measurement_count": None,
+            "consecutive_failures": 0,
+        }
+        self._scheduler.add_job(
+            func=self._run_forecast_deviation_writer,
+            trigger=CronTrigger(minute=5),
+            id="forecast_deviation_writer",
+            name="forecast deviation writer",
+            misfire_grace_time=600,
+            coalesce=True,
+            max_instances=1,
+            next_run_time=None,
+        )
+        logger.info("Registered forecast deviation writer (CronTrigger minute=5)")
+
         self._scheduler.start()
 
         # Trigger first runs with jitter
@@ -332,14 +366,6 @@ class CollectorScheduler:
                         self._trigger_now(f"forecast_{name}")
                     ),
                 )
-                if fc_cfg.name == "swissmeteo":
-                    asyncio.get_event_loop().call_later(
-                        jitter_secs + 5,
-                        lambda: asyncio.ensure_future(
-                            self._trigger_now("forecast_swissmeteo_altitude")
-                        ),
-                    )
-
         # Grid forecast collector starts after a longer delay (doesn't need stations)
         asyncio.get_event_loop().call_later(
             random.uniform(_JITTER_SECONDS * 2, _JITTER_SECONDS * 4),
@@ -759,6 +785,249 @@ class CollectorScheduler:
                 "consecutive_failures": int(health.get("consecutive_failures", 0)) + 1,
             })
             logger.error("[Lenti:grid-collector] InfluxDB write failed: %s", exc, exc_info=True)
+
+    # ------------------------------------------------------------------
+    # Forecast deviation computation
+    # ------------------------------------------------------------------
+
+    def _build_station_grid_mapping(self, grid_rows: list[dict]) -> dict[str, dict]:
+        """Return {station_id: {grid_id, level_hpa}} using nearest grid point + elevation."""
+        grid_points: dict[str, tuple[float, float]] = {}
+        for row in grid_rows:
+            gid = row.get("grid_id", "")
+            lat, lon = row.get("lat"), row.get("lon")
+            if gid and lat is not None and lon is not None:
+                grid_points[gid] = (float(lat), float(lon))
+
+        if not grid_points:
+            return {}
+
+        def _haversine_sq(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+            dlat = math.radians(lat2 - lat1)
+            dlon = math.radians(lon2 - lon1)
+            return (
+                math.sin(dlat / 2) ** 2
+                + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2) ** 2
+            )
+
+        mapping: dict[str, dict] = {}
+        for sid, station in self._station_registry.items():
+            lat = getattr(station, "latitude", None)
+            lon = getattr(station, "longitude", None)
+            if lat is None or lon is None:
+                continue
+            best_gid = min(
+                grid_points,
+                key=lambda gid: _haversine_sq(lat, lon, grid_points[gid][0], grid_points[gid][1]),
+            )
+            alt = getattr(station, "altitude", None)
+            level_hpa = 950
+            if alt is not None:
+                for alt_thresh, hpa in _ALTITUDE_TO_HPA:
+                    if float(alt) <= alt_thresh:
+                        level_hpa = hpa
+                        break
+                else:
+                    level_hpa = 500
+            mapping[sid] = {"grid_id": best_gid, "level_hpa": level_hpa}
+        return mapping
+
+    def _compute_and_write_deviations_for_hour(
+        self, target_hour: datetime, skip_grid: bool = False
+    ) -> int:
+        """Synchronous: compute + write forecast deviations for one completed hour.
+
+        Returns total deviation points written (station + grid).
+        """
+        stop = target_hour + timedelta(hours=1)
+
+        obs = self._influx.query_observations_for_hour(target_hour, stop)
+        if not obs:
+            logger.debug("[deviation-writer] No observations for %s — skipping", target_hour.isoformat())
+            return 0
+
+        forecasts = self._influx.query_forecasts_for_hour(target_hour, stop)
+
+        _OBS_FIELDS = (
+            "wind_speed", "wind_gust", "wind_direction",
+            "temperature", "humidity", "pressure_qff", "precipitation",
+        )
+        deviations: list[dict] = []
+        for fc in forecasts:
+            sid = fc.get("station_id", "")
+            actual = obs.get(sid)
+            if not actual:
+                continue
+            init_date_str = fc.get("init_date", "")
+            try:
+                init_dt = datetime.strptime(init_date_str[:13], "%Y-%m-%dT%H").replace(tzinfo=timezone.utc)
+            except (ValueError, IndexError):
+                continue
+            lead_hours = (target_hour - init_dt).total_seconds() / 3600.0
+            if lead_hours <= 0 or lead_hours > 120:
+                continue
+            dev: dict = {
+                "station_id": sid,
+                "network": actual.get("network", fc.get("network", "")),
+                "source": fc.get("source", ""),
+                "model": fc.get("model", ""),
+                "init_date": init_date_str,
+                "timestamp": target_hour,
+                "lead_hours": lead_hours,
+            }
+            for field in _OBS_FIELDS:
+                fc_val = fc.get(field)
+                obs_val = actual.get(field)
+                if fc_val is None or obs_val is None:
+                    continue
+                if field == "wind_direction":
+                    diff = ((float(fc_val) - float(obs_val) + 180.0) % 360.0) - 180.0
+                else:
+                    diff = float(fc_val) - float(obs_val)
+                dev[f"dev_{field}"] = diff
+            deviations.append(dev)
+
+        grid_deviations: list[dict] = []
+        if not skip_grid:
+            grid_rows = self._influx.query_grid_forecasts_for_hour(target_hour, stop)
+            if grid_rows:
+                if not getattr(self, "_station_grid_mapping", None):
+                    self._station_grid_mapping = self._build_station_grid_mapping(grid_rows)
+                grid_by_key: dict[tuple, dict] = {
+                    (r["grid_id"], str(r["level_hpa"])): r for r in grid_rows
+                }
+                for sid, actual in obs.items():
+                    mapping = self._station_grid_mapping.get(sid)
+                    if not mapping:
+                        continue
+                    grid_key = (mapping["grid_id"], str(mapping["level_hpa"]))
+                    grid_row = grid_by_key.get(grid_key)
+                    if not grid_row:
+                        continue
+                    init_date_str = grid_row.get("init_date", "")
+                    try:
+                        init_dt = datetime.strptime(init_date_str[:10], "%Y-%m-%d").replace(tzinfo=timezone.utc)
+                    except (ValueError, IndexError):
+                        continue
+                    lead_hours = (target_hour - init_dt).total_seconds() / 3600.0
+                    if lead_hours <= 0 or lead_hours > 120:
+                        continue
+                    dev = {
+                        "station_id": sid,
+                        "network": actual.get("network", ""),
+                        "grid_id": mapping["grid_id"],
+                        "level_hpa": mapping["level_hpa"],
+                        "source": "swissmeteo",
+                        "model": "icon-ch",
+                        "init_date": init_date_str,
+                        "timestamp": target_hour,
+                        "lead_hours": lead_hours,
+                    }
+                    for field in ("wind_speed", "wind_direction", "humidity"):
+                        fc_val = grid_row.get(field)
+                        obs_val = actual.get(field)
+                        if fc_val is None or obs_val is None:
+                            continue
+                        if field == "wind_direction":
+                            diff = ((float(fc_val) - float(obs_val) + 180.0) % 360.0) - 180.0
+                        else:
+                            diff = float(fc_val) - float(obs_val)
+                        dev[f"dev_{field}"] = diff
+                    grid_deviations.append(dev)
+
+        if deviations:
+            self._influx.write_forecast_deviations(deviations)
+        if grid_deviations:
+            self._influx.write_grid_forecast_deviations(grid_deviations)
+
+        total = len(deviations) + len(grid_deviations)
+        logger.debug(
+            "[deviation-writer] %s → %d station + %d grid deviations",
+            target_hour.isoformat(), len(deviations), len(grid_deviations),
+        )
+        return total
+
+    async def _run_forecast_deviation_writer(self) -> None:
+        """Compute and store forecast deviations for the most recently completed hour."""
+        health = self._collector_health.setdefault("forecast_deviation_writer", {
+            "collector": "forecast_deviation_writer",
+            "type": "derived",
+            "enabled": True,
+            "interval_minutes": 60,
+            "status": "pending",
+            "last_started_at": None,
+            "last_finished_at": None,
+            "last_success_at": None,
+            "last_error_at": None,
+            "last_error": None,
+            "last_measurement_count": None,
+            "consecutive_failures": 0,
+        })
+        now = datetime.now(timezone.utc)
+        target_hour = now.replace(minute=0, second=0, microsecond=0) - timedelta(hours=1)
+        health["status"] = "running"
+        health["last_started_at"] = now
+        try:
+            loop = asyncio.get_event_loop()
+            count = await loop.run_in_executor(
+                None, self._compute_and_write_deviations_for_hour, target_hour
+            )
+            finished_at = datetime.now(timezone.utc)
+            health.update({
+                "status": "ok" if count > 0 else "ok_no_data",
+                "last_finished_at": finished_at,
+                "last_success_at": finished_at,
+                "last_error": None,
+                "last_measurement_count": count,
+                "consecutive_failures": 0,
+            })
+            logger.info(
+                "[deviation-writer] target_hour=%s → %d deviations written",
+                target_hour.isoformat(), count,
+            )
+        except Exception as exc:
+            finished_at = datetime.now(timezone.utc)
+            health.update({
+                "status": "error",
+                "last_finished_at": finished_at,
+                "last_error_at": finished_at,
+                "last_error": str(exc),
+                "consecutive_failures": int(health.get("consecutive_failures", 0)) + 1,
+            })
+            logger.error("[deviation-writer] failed: %s", exc, exc_info=True)
+
+    async def run_forecast_deviation_backfill_if_needed(self) -> None:
+        """Backfill forecast_deviation for the past 90 days if measurement is sparse.
+
+        Called once at startup by main.py as a background asyncio.Task.
+        Grid deviations are skipped during backfill to keep write volume manageable.
+        """
+        if self._influx.has_forecast_deviation_data():
+            logger.info("[deviation-backfill] forecast_deviation already populated — skipping")
+            return
+
+        now = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
+        start = now - timedelta(days=90)
+        current = start
+        total = 0
+        logger.info(
+            "[deviation-backfill] Starting backfill from %s to %s",
+            start.isoformat(), now.isoformat(),
+        )
+        loop = asyncio.get_event_loop()
+        while current < now:
+            try:
+                count = await loop.run_in_executor(
+                    None,
+                    lambda h=current: self._compute_and_write_deviations_for_hour(h, skip_grid=True),
+                )
+                total += count
+            except Exception as exc:
+                logger.warning("[deviation-backfill] Error at %s: %s", current.isoformat(), exc)
+            current += timedelta(hours=1)
+            await asyncio.sleep(0)  # yield to event loop
+
+        logger.info("[deviation-backfill] Done — %d deviation points written", total)
 
     def update_collector_runtime(
         self,

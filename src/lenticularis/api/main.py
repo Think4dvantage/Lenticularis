@@ -24,6 +24,8 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from lenticularis.config import get_config
 from lenticularis.database.influx import InfluxClient
@@ -67,6 +69,14 @@ def _configure_logging(cfg) -> None:
 # Lifespan
 # ---------------------------------------------------------------------------
 
+_PLACEHOLDER_SECRETS = {
+    "change-me-in-production",
+    "change-me-in-production-use-openssl-rand-hex-32",
+    "dev-secret-change-in-production",
+    "",
+}
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Handle startup and graceful shutdown."""
@@ -74,6 +84,14 @@ async def lifespan(app: FastAPI):
     _configure_logging(cfg)
     logger = logging.getLogger(__name__)
     logger.info("Lenticularis starting up…")
+
+    _secret = cfg.auth.jwt_secret
+    if _secret in _PLACEHOLDER_SECRETS or len(_secret) < 32:
+        logger.critical(
+            "auth.jwt_secret is unset, a known placeholder, or shorter than 32 chars — refusing to start. "
+            "Generate one with: openssl rand -hex 32"
+        )
+        raise RuntimeError("Insecure auth.jwt_secret — see logs")
 
     # SQLite
     init_db(cfg.database.path)
@@ -154,6 +172,9 @@ async def lifespan(app: FastAPI):
 
     # Warm the replay cache in the background so the first user sees instant day-button responses.
     asyncio.get_event_loop().create_task(warm_replay_cache(influx, app.state.display_registry))
+
+    # Backfill forecast_deviation if the measurement is sparse (runs once, no-ops if data exists).
+    asyncio.get_event_loop().create_task(scheduler.run_forecast_deviation_backfill_if_needed())
 
     yield  # Server is running
 
@@ -273,6 +294,27 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    async def _security_headers(request: Request, call_next):
+        resp = await call_next(request)
+        resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+        resp.headers.setdefault("X-Frame-Options", "DENY")
+        resp.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        resp.headers.setdefault(
+            "Content-Security-Policy",
+            "default-src 'self'; "
+            "img-src 'self' data: https:; "
+            "script-src 'self' 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net; "
+            "style-src 'self' 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net; "
+            "connect-src 'self'; frame-ancestors 'none'",
+        )
+        return resp
+
+    app.add_middleware(BaseHTTPMiddleware, dispatch=_security_headers)
+
+    # Cross-origin clients (e.g. the mobile app) — add explicit origins here, never "*":
+    # app.add_middleware(CORSMiddleware, allow_origins=["https://lenti.cloud"],
+    #                    allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+
     # API routers
     app.include_router(stations_router.router)
     app.include_router(auth_router.router)
@@ -368,6 +410,10 @@ def create_app() -> FastAPI:
         @app.get("/forecast-accuracy", include_in_schema=False)
         async def serve_forecast_accuracy():
             return FileResponse(str(static_dir / "forecast-accuracy.html"))
+
+        @app.get("/forecast-analysis", include_in_schema=False)
+        async def serve_forecast_analysis():
+            return FileResponse(str(static_dir / "forecast-analysis.html"))
 
         @app.get("/help", include_in_schema=False)
         async def serve_help():

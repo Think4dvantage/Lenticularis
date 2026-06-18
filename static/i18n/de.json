@@ -248,6 +248,38 @@
     "notify_red": "Rot",
     "notify_sending_to": "E-Mails werden gesendet an {email}"
   },
+  "forecast_analysis": {
+    "title": "Vorhersagegenauigkeitsanalyse",
+    "subtitle": "Stationsübergreifendes Ranking der Vorhersagegenauigkeit nach Messfeld und Vorlaufzeit.",
+    "lead_time": "Vorlaufzeit",
+    "d1": "D+1 (0–24 Std.)",
+    "d2": "D+2 (24–48 Std.)",
+    "d3": "D+3 (48–72 Std.)",
+    "based_on": "Basierend auf den letzten {days} Tagen",
+    "refresh": "↻ Aktualisieren",
+    "loading": "Ranking wird berechnet…",
+    "no_data": "Keine Vorhersage-/Messwert-Paare für dieses Feld gefunden.",
+    "col_rank": "#",
+    "col_station": "Station",
+    "col_network": "Netzwerk",
+    "col_canton": "Kanton",
+    "col_mae": "MAE",
+    "col_bias": "Mittl. Abweichung",
+    "col_samples": "Stichproben",
+    "col_correction": "Korrekturhinweis",
+    "correction_high": "Vorhersage um +{val} zu hoch — subtrahieren",
+    "correction_low": "Vorhersage um {val} zu niedrig — addieren",
+    "correction_neutral": "Kein konsistenter Bias",
+    "fields": {
+      "wind_speed": "Windgeschwindigkeit (km/h)",
+      "wind_gust": "Windböen (km/h)",
+      "wind_direction": "Windrichtung (°)",
+      "temperature": "Temperatur (°C)",
+      "humidity": "Feuchtigkeit (%)",
+      "pressure_qff": "Luftdruck QFF (hPa)",
+      "precipitation": "Niederschlag (mm)"
+    }
+  },
   "forecast_accuracy": {
     "title": "Vorhersagegenauigkeit",
     "subtitle": "Vergleich vergangener Vorhersagen mit gemessenen Werten.",

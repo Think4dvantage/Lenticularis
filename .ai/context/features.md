@@ -1,5 +1,25 @@
 # Feature History & Backlog
 
+## In Progress: v1.18 (NOT YET VERIFIED — awaiting first successful data load)
+
+### Forecast Accuracy Analysis Page
+
+| Change | Detail |
+|---|---|
+| `static/forecast-analysis.html` + `forecast-analysis.js` | New `/forecast-analysis` page. Lead-time toggle D+1/D+2/D+3. Per-field ranked tables of worst-forecast stations (MAE + bias + correction hint). Colour-coded MAE cells. Station names link to `/forecast-accuracy?station=X`. |
+| `database/influx.py` — `query_forecast_accuracy_ranking` | New method. Queries 90d actuals (aggregateWindow 1h) + forecasts; Python-side join keyed on hourly timestamp; circular error for wind_direction; MAE + bias per station×field×bucket. |
+| `database/influx.py` — `_ranking_client` | Third InfluxDB client with `ranking_query_timeout` (default 300 s). Used only for ranking queries — avoids 60 s `_slow_query_api` timeout that was silently killing the actuals query. |
+| `config.py` — `ranking_query_timeout` | `InfluxDBConfig` gains `ranking_query_timeout: int = 300000`. |
+| `api/routers/stations.py` — `GET /api/stations/forecast-accuracy-ranking` | 30-min server-side cache. `force_refresh=true` param bypasses cache. `warm_accuracy_ranking_cache()` function. |
+| `api/main.py` | Startup warm-up task + page route `/forecast-analysis`. |
+| `scheduler.py` | 24h `IntervalTrigger` job re-warms ranking cache. |
+| All 13 HTML files | Forecast Analysis nav link added. |
+| `i18n/en+de+fr+it.json` | `forecast_analysis.*` keys added. |
+
+See `.ai/context/forecast-analysis-wip.md` for full debug history and next steps.
+
+---
+
 ## Current Version: v1.17 (shipped)
 
 ### Replay fix, collector scheduling overhaul, stats table improvements
@@ -115,18 +135,19 @@
 
 ## Backlog (unordered)
 
-### VKPI Safetychat Replacement (high priority)
+### Thermal Forecast (lsmfapi thermal-grid endpoint — ready to integrate)
 
-Replaces WhatsApp-based go/no-go coordination for VKPI commercial tandem operators.
+Full API spec + TypeScript types + fetch helpers in `.ai/context/lsmfapi-thermal-grid.md`.
 
-- **TIMEOUT button** — org member triggers; reason (free text or quick-pick); push notification to all org members.
-- **In-app voting** — 10-min window; each daily lead pilot votes (Stop / Continue with caution); auto-tally.
-  - Tables: `org_timeouts`, `org_timeout_votes`
-- **Daily lead pilot designation** — mark self as daily lead; only lead casts company vote.
-- **Automatic TIMEOUT suggestion** — Green → Orange/Red transition surfaces prompt.
-- **Resumption tracking** — 30-min countdown after Red; push when conditions recover.
-- **Decision audit log** — exportable CSV. `GET /api/org/{slug}/timeouts`.
-- **Company layer** — `org_companies` table; `company_id` FK on users.
+Key fields: `solar` (W/m²), `lcl` (cloud base m ASL), `lfc`, `freezing_level`, `cape`, `cin`, `cloud_cover`, `tke`, `sunshine`. All with ensemble `_min`/`_max`. 120-hour horizon, ~4×/day refresh. Default `stride_km=10` (~200 pts over Switzerland, ~0.5 MB uncompressed).
+
+Candidate integration surfaces:
+- **Thermal map page** (`/thermal`) — grid overlay coloured by `solar` or `lcl`, time-nav controls (same pattern as `/wind-forecast`)
+- **Station-detail thermal panel** — cloud base, freezing level, CAPE, sunshine below wind chart; nearest grid point via `nearestGridIndex`
+- **Ruleset conditions** — `lcl > X`, `cape < Y`, `cloud_cover < Z` — requires thermal fields in InfluxDB
+- **Thermal suitability badge** — green/orange/red on map popups
+
+Implementation note: confirm schema stability with lsmfapi owner before writing to InfluxDB.
 
 ### Platform Features
 

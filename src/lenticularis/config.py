@@ -36,7 +36,7 @@ class DatabaseConfig(BaseModel):
     path: str = "data/lenticularis.db"
 
 class AuthConfig(BaseModel):
-    jwt_secret: str = "change-me-in-production"
+    jwt_secret: str
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
     refresh_token_expire_days: int = 30
@@ -99,7 +99,7 @@ class MainConfig(BaseModel):
     collectors: list[CollectorConfig]
     forecast_collectors: list[ForecastCollectorConfig] = []
     database: DatabaseConfig
-    auth: AuthConfig = AuthConfig()
+    auth: AuthConfig
     logging: LoggingConfig
     api: APIConfig
     ollama: OllamaConfig = OllamaConfig()

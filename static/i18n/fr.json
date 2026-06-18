@@ -248,6 +248,38 @@
     "notify_red": "Rouge",
     "notify_sending_to": "Les e-mails seront envoyés à {email}"
   },
+  "forecast_analysis": {
+    "title": "Analyse de précision des prévisions",
+    "subtitle": "Classement des stations par précision de prévision selon le champ et le délai.",
+    "lead_time": "Délai de prévision",
+    "d1": "D+1 (0–24 h)",
+    "d2": "D+2 (24–48 h)",
+    "d3": "D+3 (48–72 h)",
+    "based_on": "Basé sur les {days} derniers jours",
+    "refresh": "↻ Actualiser",
+    "loading": "Calcul du classement…",
+    "no_data": "Aucune paire prévision/observation trouvée pour ce champ.",
+    "col_rank": "#",
+    "col_station": "Station",
+    "col_network": "Réseau",
+    "col_canton": "Canton",
+    "col_mae": "EAM",
+    "col_bias": "Biais moy.",
+    "col_samples": "Échantillons",
+    "col_correction": "Conseil de correction",
+    "correction_high": "Prévision de +{val} trop haute — soustraire pour corriger",
+    "correction_low": "Prévision de {val} trop basse — ajouter pour corriger",
+    "correction_neutral": "Pas de biais systématique",
+    "fields": {
+      "wind_speed": "Vitesse du vent (km/h)",
+      "wind_gust": "Rafales (km/h)",
+      "wind_direction": "Direction du vent (°)",
+      "temperature": "Température (°C)",
+      "humidity": "Humidité (%)",
+      "pressure_qff": "Pression QFF (hPa)",
+      "precipitation": "Précipitations (mm)"
+    }
+  },
   "forecast_accuracy": {
     "title": "Précision des prévisions",
     "subtitle": "Comparer les prévisions passées aux valeurs observées.",

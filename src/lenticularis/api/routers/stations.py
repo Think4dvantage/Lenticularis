@@ -241,6 +241,15 @@ def _get_virtual_members(request: Request) -> dict[str, list[str]]:
     return getattr(request.app.state, "virtual_members", {})
 
 
+def _require_known_station(request: Request, station_id: str) -> None:
+    reg = _get_display_registry(request)
+    members = _get_virtual_members(request)
+    known = station_id in reg or any(station_id in m for m in members.values())
+    if not known:
+        logger.warning("[Lenti:stations] rejected unknown station_id=%r", station_id)
+        raise HTTPException(status_code=404, detail=f"Station '{station_id}' not found")
+
+
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
@@ -377,6 +386,64 @@ async def get_replay(
     return payload
 
 
+# ---------------------------------------------------------------------------
+# Cross-station forecast accuracy ranking cache
+# ---------------------------------------------------------------------------
+_accuracy_ranking_cache: dict[str, tuple[Any, float]] = {}
+_ACCURACY_RANKING_CACHE_TTL_S = 300  # 5 minutes
+
+
+@router.get("/forecast-accuracy-ranking")
+async def get_forecast_accuracy_ranking(
+    request: Request,
+    days: int = Query(default=90, ge=7, le=365, description="Lookback window in days"),
+    top_n: int = Query(default=10, ge=3, le=25, description="Stations per field per bucket"),
+):
+    """
+    Return per-field, per-lead-time accuracy rankings (MAE + bias) across all stations.
+
+    Reads pre-computed deviations from InfluxDB — fast, no Python-side joins.
+    Lead-time buckets: D+1 (0–24 h), D+2 (24–48 h), D+3 (48–72 h).
+    Results are cached for 5 minutes.
+    """
+    influx = _get_influx(request)
+    registry: dict = _get_station_registry(request)
+
+    cache_key = f"{days}:{top_n}"
+    cached = _accuracy_ranking_cache.get(cache_key)
+    if cached is not None:
+        payload, stored_at = cached
+        age = time.monotonic() - stored_at
+        if age < _ACCURACY_RANKING_CACHE_TTL_S:
+            logger.debug("Accuracy ranking cache HIT: %s (age %.0fs)", cache_key, age)
+            return payload
+        logger.info("Accuracy ranking cache EXPIRED: %s (age %.0fs)", cache_key, age)
+
+    logger.info("Accuracy ranking cache MISS — querying (days=%d, top_n=%d)", days, top_n)
+    ranking = await asyncio.get_event_loop().run_in_executor(
+        None, influx.query_forecast_accuracy_ranking, days, top_n
+    )
+
+    for field_data in ranking.values():
+        for bucket_list in field_data.values():
+            for entry in bucket_list:
+                sid = entry["station_id"]
+                station = registry.get(sid)
+                entry["name"] = station.name if station else sid
+                entry["network"] = station.network if station else ""
+                entry["canton"] = station.canton if station else None
+
+    payload = {
+        "days": days,
+        "top_n": top_n,
+        "computed_at": datetime.now(timezone.utc).isoformat(),
+        "ranking": ranking,
+    }
+    _accuracy_ranking_cache[cache_key] = (payload, time.monotonic())
+    logger.info("Accuracy ranking cache STORE: %s", cache_key)
+    return payload
+
+
 @router.get("/{station_id}/forecast-accuracy")
 async def get_forecast_accuracy(
     station_id: str,
@@ -389,6 +456,7 @@ async def get_forecast_accuracy(
     accuracy comparison.  ``from`` and ``to`` are ISO 8601 strings; max 31 days.
     Defaults to the 24 h window ending at UTC midnight today.
     """
+    _require_known_station(request, station_id)
     influx = _get_influx(request)
     now = datetime.now(timezone.utc)
 
@@ -426,6 +494,7 @@ async def get_station_forecast(
     Return forecast data for a single station as a flat time-series list,
     same shape as the history endpoint.
     """
+    _require_known_station(request, station_id)
     influx = _get_influx(request)
     raw = influx.query_forecast_for_stations([station_id], horizon_hours=hours)
     station_fc = raw.get(station_id, {})
@@ -477,6 +546,7 @@ async def get_station(station_id: str, request: Request):
 @router.get("/{station_id}/latest", response_model=MeasurementResponse)
 async def get_latest(station_id: str, request: Request):
     """Return the most recent measurement for a station."""
+    _require_known_station(request, station_id)
     influx = _get_influx(request)
     virtual_members = _get_virtual_members(request)
     members = virtual_members.get(station_id)
@@ -493,6 +563,7 @@ async def get_history(
     hours: int = Query(default=24, ge=1, le=720, description="Number of hours of history to return (max 720 = 30 days)"),
 ):
     """Return time-series data for the last N hours (default 24, max 168)."""
+    _require_known_station(request, station_id)
     influx = _get_influx(request)
     virtual_members = _get_virtual_members(request)
     members = virtual_members.get(station_id)

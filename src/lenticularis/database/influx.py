@@ -25,6 +25,14 @@ logger = logging.getLogger(__name__)
 # InfluxDB measurement names
 MEASUREMENT_WEATHER = "weather_data"
 MEASUREMENT_FORECAST = "weather_forecast"
+MEASUREMENT_FORECAST_DEVIATION = "forecast_deviation"
+MEASUREMENT_GRID_FORECAST_DEVIATION = "grid_forecast_deviation"
+
+
+def _flux_str(value) -> str:
+    """Escape a value for safe interpolation inside a Flux double-quoted string literal."""
+    s = "" if value is None else str(value)
+    return s.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "").replace("\r", "")
 
 
 class InfluxClient:
@@ -126,7 +134,7 @@ class InfluxClient:
 from(bucket: "{self._cfg.bucket}")
   |> range(start: -24h)
   |> filter(fn: (r) => r._measurement == "{MEASUREMENT_WEATHER}")
-  |> filter(fn: (r) => r.station_id == "{station_id}")
+  |> filter(fn: (r) => r.station_id == "{_flux_str(station_id)}")
   |> last()
   |> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")
 """
@@ -196,7 +204,7 @@ from(bucket: "{self._cfg.bucket}")
         """
         if not station_ids:
             return {}
-        ids_literal = '["' + '", "'.join(station_ids) + '"]'
+        ids_literal = '["' + '", "'.join(_flux_str(sid) for sid in station_ids) + '"]'
         flux = f"""
 from(bucket: "{self._cfg.bucket}")
   |> range(start: -2h)
@@ -236,7 +244,7 @@ from(bucket: "{self._cfg.bucket}")
         """
         if not station_ids:
             return {}
-        ids_literal = '["' + '", "'.join(station_ids) + '"]'
+        ids_literal = '["' + '", "'.join(_flux_str(sid) for sid in station_ids) + '"]'
         start = (valid_time - timedelta(minutes=30)).isoformat()
         stop  = (valid_time + timedelta(minutes=31)).isoformat()
         flux = f"""
@@ -280,7 +288,7 @@ from(bucket: "{self._cfg.bucket}")
         """
         if not station_ids:
             return {}
-        ids_literal = '["' + '", "'.join(station_ids) + '"]'
+        ids_literal = '["' + '", "'.join(_flux_str(sid) for sid in station_ids) + '"]'
         start = (valid_time - timedelta(minutes=30)).isoformat()
         stop  = (valid_time + timedelta(minutes=31)).isoformat()
         flux = f"""
@@ -332,7 +340,7 @@ from(bucket: "{self._cfg.bucket}")
         """
         if not station_ids:
             return []
-        ids_literal = '["' + '", "'.join(station_ids) + '"]'
+        ids_literal = '["' + '", "'.join(_flux_str(sid) for sid in station_ids) + '"]'
         now = datetime.now(timezone.utc)
         half = hours // 2
 
@@ -431,7 +439,7 @@ from(bucket: "{self._cfg.bucket}")
         """
         if not station_ids:
             return []
-        ids_literal = '["' + '", "'.join(station_ids) + '"]'
+        ids_literal = '["' + '", "'.join(_flux_str(sid) for sid in station_ids) + '"]'
         # Lightweight check: last() + pivot gives one row per station that has
         # data in the pre-window slice — same pattern as query_latest_for_stations.
         flux = f"""
@@ -501,7 +509,7 @@ from(bucket: "{self._cfg.bucket}")
         if len(active) == 1:
             return self.query_history(active[0], hours)
 
-        ids_literal = '["' + '", "'.join(active) + '"]'
+        ids_literal = '["' + '", "'.join(_flux_str(sid) for sid in active) + '"]'
         flux = f"""
 from(bucket: "{self._cfg.bucket}")
   |> range(start: -{hours}h)
@@ -540,7 +548,7 @@ from(bucket: "{self._cfg.bucket}")
 from(bucket: "{self._cfg.bucket}")
   |> range(start: -{hours}h)
   |> filter(fn: (r) => r._measurement == "{MEASUREMENT_WEATHER}")
-  |> filter(fn: (r) => r.station_id == "{station_id}")
+  |> filter(fn: (r) => r.station_id == "{_flux_str(station_id)}")
   |> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")
   |> sort(columns: ["_time"])
 """
@@ -660,7 +668,7 @@ from(bucket: "{self._cfg.bucket}")
 from(bucket: "{self._cfg.bucket}")
   |> range(start: {ts_str}, stop: {ts_str})
   |> filter(fn: (r) => r._measurement == "{MEASUREMENT_WEATHER}")
-  |> filter(fn: (r) => r.station_id == "{station_id}")
+  |> filter(fn: (r) => r.station_id == "{_flux_str(station_id)}")
   |> count()
 """
         try:
@@ -685,7 +693,7 @@ from(bucket: "{self._cfg.bucket}")
 from(bucket: "{self._cfg.bucket}")
   |> range(start: -{hours}h)
   |> filter(fn: (r) => r._measurement == "rule_decisions")
-  |> filter(fn: (r) => r.ruleset_id == "{ruleset_id}")
+  |> filter(fn: (r) => r.ruleset_id == "{_flux_str(ruleset_id)}")
   |> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")
   |> sort(columns: ["_time"])
 """
@@ -768,7 +776,7 @@ from(bucket: "{self._cfg.bucket}")
         if not ruleset_ids:
             return {}
 
-        id_filter = " or ".join(f'r.ruleset_id == "{rid}"' for rid in ruleset_ids)
+        id_filter = " or ".join(f'r.ruleset_id == "{_flux_str(rid)}"' for rid in ruleset_ids)
         flux = f"""
 from(bucket: "{self._cfg.bucket}")
   |> range(start: -{hours}h)
@@ -933,7 +941,7 @@ from(bucket: "{self._cfg.bucket}")
 from(bucket: "{self._cfg.bucket}")
   |> range(start: {start_str}, stop: {end_str})
   |> filter(fn: (r) => r._measurement == "wind_forecast_grid")
-  |> filter(fn: (r) => r.level_hpa == "{level_hpa}")
+  |> filter(fn: (r) => r.level_hpa == "{_flux_str(level_hpa)}")
   |> pivot(rowKey: ["_time", "grid_id", "level_hpa", "init_date"], columnKey: ["_field"], valueColumn: "_value")
 """
         try:
@@ -1032,7 +1040,7 @@ from(bucket: "{self._cfg.bucket}")
         latest = self._latest_forecast_init_dates()
         if latest:
             init_date_clauses = " or ".join(
-                f'r.init_date == "{d}"' for d in set(latest.values())
+                f'r.init_date == "{_flux_str(d)}"' for d in set(latest.values())
             )
             init_date_filter = f"({init_date_clauses})"
         else:
@@ -1119,7 +1127,7 @@ from(bucket: "{self._cfg.bucket}")
         )
 
         station_filter = " or ".join(
-            f'r.station_id == "{sid}"' for sid in station_ids
+            f'r.station_id == "{_flux_str(sid)}"' for sid in station_ids
         )
         # Limit to runs from the last 3 days so we don't pull all historical init_dates.
         # Uses day-prefix string for the cutoff — lexicographic comparison works because
@@ -1221,7 +1229,7 @@ from(bucket: "{self._cfg.bucket}")
             return {}
 
         station_filter = " or ".join(
-            f'r.station_id == "{sid}"' for sid in station_ids
+            f'r.station_id == "{_flux_str(sid)}"' for sid in station_ids
         )
         flux = f"""
 from(bucket: "{self._cfg.bucket}")
@@ -1288,7 +1296,7 @@ from(bucket: "{self._cfg.bucket}")
 from(bucket: "{self._cfg.bucket}")
   |> range(start: {start_str}, stop: {end_str})
   |> filter(fn: (r) => r._measurement == "{MEASUREMENT_WEATHER}")
-  |> filter(fn: (r) => r.station_id == "{station_id}")
+  |> filter(fn: (r) => r.station_id == "{_flux_str(station_id)}")
   |> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")
   |> sort(columns: ["_time"])
 """
@@ -1310,7 +1318,7 @@ from(bucket: "{self._cfg.bucket}")
 from(bucket: "{self._cfg.bucket}")
   |> range(start: {start_str}, stop: {end_str})
   |> filter(fn: (r) => r._measurement == "{MEASUREMENT_FORECAST}")
-  |> filter(fn: (r) => r.station_id == "{station_id}")
+  |> filter(fn: (r) => r.station_id == "{_flux_str(station_id)}")
   |> filter(fn: (r) => exists r.init_date)
   |> pivot(rowKey: ["_time", "station_id", "network", "source", "model", "init_date"],
            columnKey: ["_field"], valueColumn: "_value")
@@ -1339,7 +1347,7 @@ from(bucket: "{self._cfg.bucket}")
 from(bucket: "{self._cfg.bucket}")
   |> range(start: {start_str}, stop: {end_str})
   |> filter(fn: (r) => r._measurement == "{MEASUREMENT_FORECAST}")
-  |> filter(fn: (r) => r.station_id == "{station_id}")
+  |> filter(fn: (r) => r.station_id == "{_flux_str(station_id)}")
   |> filter(fn: (r) => not exists r.init_date)
   |> pivot(rowKey: ["_time", "station_id", "network", "source", "model"],
            columnKey: ["_field"], valueColumn: "_value")
@@ -1372,6 +1380,337 @@ from(bucket: "{self._cfg.bucket}")
             forecasts.append({"init_date": None, "data": legacy_data})
 
         return {"actual": actual, "forecasts": forecasts}
+
+    # ------------------------------------------------------------------
+    # Forecast deviation — write
+    # ------------------------------------------------------------------
+
+    def write_forecast_deviations(self, deviations: list[dict]) -> None:
+        """Write per-hour forecast deviation points to ``forecast_deviation``.
+
+        Each dict must have: station_id, network, source, model, init_date,
+        timestamp (datetime, the observation hour), lead_hours (float), and
+        optional dev_* fields (signed: forecast − actual).
+        """
+        if not deviations:
+            return
+        _DEV_FIELDS = (
+            "dev_wind_speed", "dev_wind_gust", "dev_wind_direction",
+            "dev_temperature", "dev_humidity", "dev_pressure_qff", "dev_precipitation",
+        )
+        points: list[Point] = []
+        for d in deviations:
+            p = (
+                Point(MEASUREMENT_FORECAST_DEVIATION)
+                .tag("station_id", d["station_id"])
+                .tag("network", d.get("network", ""))
+                .tag("source", d.get("source", ""))
+                .tag("model", d.get("model", ""))
+                .tag("init_date", d.get("init_date", ""))
+                .field("lead_hours", float(d["lead_hours"]))
+                .time(int(d["timestamp"].timestamp()), "s")
+            )
+            for field in _DEV_FIELDS:
+                val = d.get(field)
+                if val is not None:
+                    p = p.field(field, float(val))
+            points.append(p)
+        chunk_size = 5000
+        try:
+            for i in range(0, len(points), chunk_size):
+                self._write_api.write(
+                    bucket=self._cfg.bucket, org=self._cfg.org,
+                    record=points[i : i + chunk_size],
+                )
+            logger.debug("Wrote %d forecast_deviation points", len(points))
+        except Exception as exc:
+            logger.error("InfluxDB write_forecast_deviations error: %s", exc)
+            raise
+
+    def write_grid_forecast_deviations(self, deviations: list[dict]) -> None:
+        """Write per-hour grid forecast deviation points to ``grid_forecast_deviation``.
+
+        Each dict must have: station_id, network, grid_id, level_hpa, source, model,
+        init_date, timestamp (datetime), lead_hours (float), and optional dev_* fields.
+        """
+        if not deviations:
+            return
+        _DEV_FIELDS = ("dev_wind_speed", "dev_wind_direction", "dev_humidity")
+        points: list[Point] = []
+        for d in deviations:
+            p = (
+                Point(MEASUREMENT_GRID_FORECAST_DEVIATION)
+                .tag("station_id", d["station_id"])
+                .tag("network", d.get("network", ""))
+                .tag("grid_id", d.get("grid_id", ""))
+                .tag("level_hpa", str(d.get("level_hpa", "")))
+                .tag("source", d.get("source", ""))
+                .tag("model", d.get("model", ""))
+                .tag("init_date", d.get("init_date", ""))
+                .field("lead_hours", float(d["lead_hours"]))
+                .time(int(d["timestamp"].timestamp()), "s")
+            )
+            for field in _DEV_FIELDS:
+                val = d.get(field)
+                if val is not None:
+                    p = p.field(field, float(val))
+            points.append(p)
+        chunk_size = 5000
+        try:
+            for i in range(0, len(points), chunk_size):
+                self._write_api.write(
+                    bucket=self._cfg.bucket, org=self._cfg.org,
+                    record=points[i : i + chunk_size],
+                )
+            logger.debug("Wrote %d grid_forecast_deviation points", len(points))
+        except Exception as exc:
+            logger.error("InfluxDB write_grid_forecast_deviations error: %s", exc)
+            raise
+
+    # ------------------------------------------------------------------
+    # Forecast deviation — hour-window queries (used by deviation writer)
+    # ------------------------------------------------------------------
+
+    def query_observations_for_hour(self, start: datetime, stop: datetime) -> dict[str, dict]:
+        """Return the last observation per station in [start, stop).
+
+        Returns ``{station_id: {field: value, "network": str}}``.
+        """
+        _FIELDS = frozenset({
+            "wind_speed", "wind_gust", "wind_direction",
+            "temperature", "humidity", "pressure_qff", "precipitation",
+        })
+        field_filter = " or ".join(f'r._field == "{f}"' for f in _FIELDS)
+        start_str = start.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        stop_str  = stop.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        flux = f"""
+from(bucket: "{self._cfg.bucket}")
+  |> range(start: {start_str}, stop: {stop_str})
+  |> filter(fn: (r) => r._measurement == "{MEASUREMENT_WEATHER}")
+  |> filter(fn: (r) => r.network != "foehn")
+  |> filter(fn: (r) => {field_filter})
+  |> last()
+  |> pivot(rowKey: ["_time", "station_id", "network"], columnKey: ["_field"], valueColumn: "_value")
+"""
+        try:
+            tables = self._query_api.query(flux, org=self._cfg.org)
+        except Exception as exc:
+            logger.error("query_observations_for_hour error: %s", exc)
+            return {}
+
+        results: dict[str, dict] = {}
+        for table in tables:
+            for record in table.records:
+                sid = record.values.get("station_id", "")
+                if not sid:
+                    continue
+                entry: dict = {"network": record.values.get("network", "")}
+                entry.update({
+                    k: float(v)
+                    for k, v in record.values.items()
+                    if k in _FIELDS and v is not None
+                })
+                results[sid] = entry
+        return results
+
+    def query_forecasts_for_hour(self, start: datetime, stop: datetime) -> list[dict]:
+        """Return all forecast rows with valid_time in [start, stop), all init_dates.
+
+        Excludes _min/_max/init_time fields. Each row dict has station_id, network,
+        source, model, init_date, and weather field values.
+        """
+        start_str = start.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        stop_str  = stop.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        flux = f"""
+from(bucket: "{self._cfg.bucket}")
+  |> range(start: {start_str}, stop: {stop_str})
+  |> filter(fn: (r) => r._measurement == "{MEASUREMENT_FORECAST}")
+  |> filter(fn: (r) => exists r.init_date)
+  |> filter(fn: (r) => not (r._field =~ /_min$/ or r._field =~ /_max$/ or r._field == "init_time"))
+  |> pivot(rowKey: ["_time", "station_id", "network", "source", "model", "init_date"],
+           columnKey: ["_field"], valueColumn: "_value")
+"""
+        try:
+            tables = self._query_api.query(flux, org=self._cfg.org)
+        except Exception as exc:
+            logger.error("query_forecasts_for_hour error: %s", exc)
+            return []
+
+        rows: list[dict] = []
+        for table in tables:
+            for record in table.records:
+                sid = record.values.get("station_id", "")
+                if not sid:
+                    continue
+                row: dict = {
+                    "station_id": sid,
+                    "network": record.values.get("network", ""),
+                    "source": record.values.get("source", ""),
+                    "model": record.values.get("model", ""),
+                    "init_date": record.values.get("init_date", ""),
+                }
+                row.update({
+                    k: v
+                    for k, v in record.values.items()
+                    if not k.startswith("_")
+                    and k not in ("result", "table", "station_id", "network",
+                                  "source", "model", "init_date")
+                    and v is not None
+                })
+                rows.append(row)
+        return rows
+
+    def query_grid_forecasts_for_hour(self, start: datetime, stop: datetime) -> list[dict]:
+        """Return grid forecast rows for [start, stop), deduped to latest init_date per (grid_id, level_hpa).
+
+        Each row dict has: grid_id, level_hpa (str), init_date, lat, lon, wind_speed,
+        wind_direction, humidity.
+        """
+        start_str = start.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        stop_str  = stop.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        flux = f"""
+from(bucket: "{self._cfg.bucket}")
+  |> range(start: {start_str}, stop: {stop_str})
+  |> filter(fn: (r) => r._measurement == "wind_forecast_grid")
+  |> pivot(rowKey: ["_time", "grid_id", "level_hpa", "init_date"], columnKey: ["_field"], valueColumn: "_value")
+"""
+        try:
+            tables = self._query_api.query(flux, org=self._cfg.org)
+        except Exception as exc:
+            logger.error("query_grid_forecasts_for_hour error: %s", exc)
+            return []
+
+        # Dedup: latest init_date per (grid_id, level_hpa)
+        raw: dict[tuple, dict] = {}
+        for table in tables:
+            for record in table.records:
+                gid = record.values.get("grid_id", "")
+                lhpa = record.values.get("level_hpa", "")
+                idate = record.values.get("init_date", "")
+                if not gid or not lhpa:
+                    continue
+                key = (gid, lhpa)
+                existing = raw.get(key)
+                if existing is None or idate > existing.get("init_date", ""):
+                    raw[key] = {
+                        "grid_id": gid,
+                        "level_hpa": lhpa,
+                        "init_date": idate,
+                        "lat": record.values.get("lat"),
+                        "lon": record.values.get("lon"),
+                        "wind_speed": record.values.get("wind_speed"),
+                        "wind_direction": record.values.get("wind_direction"),
+                        "humidity": record.values.get("humidity"),
+                    }
+        return list(raw.values())
+
+    # ------------------------------------------------------------------
+    # Forecast deviation — ranking query (reads pre-computed data)
+    # ------------------------------------------------------------------
+
+    def query_forecast_accuracy_ranking(
+        self, days: int = 90, top_n: int = 10
+    ) -> dict[str, dict[str, list[dict]]]:
+        """Return per-field, per-lead-time accuracy rankings from ``forecast_deviation``.
+
+        Reads the pre-computed deviation measurement — fast, no Python-side joins.
+        Lead-time buckets: D+1 (0–24 h), D+2 (24–48 h), D+3 (48–72 h).
+
+        Returns::
+
+            {
+                "wind_speed": {
+                    "D+1": [{"station_id", "mae", "bias", "n"}, …],
+                    …
+                },
+                …
+            }
+        """
+        _FIELDS = frozenset({
+            "wind_speed", "wind_gust", "wind_direction",
+            "temperature", "humidity", "pressure_qff", "precipitation",
+        })
+        _BUCKETS = ("D+1", "D+2", "D+3")
+
+        flux = f"""
+from(bucket: "{self._cfg.bucket}")
+  |> range(start: -{days}d)
+  |> filter(fn: (r) => r._measurement == "{MEASUREMENT_FORECAST_DEVIATION}")
+  |> filter(fn: (r) => r._field =~ /^dev_/ or r._field == "lead_hours")
+  |> pivot(rowKey: ["_time", "station_id", "network", "source", "model", "init_date"],
+           columnKey: ["_field"], valueColumn: "_value")
+"""
+        try:
+            tables = self._query_api.query(flux, org=self._cfg.org)
+        except Exception as exc:
+            logger.error("query_forecast_accuracy_ranking error: %s", exc)
+            return {}
+
+        # acc[station_id][bucket][field] = [signed_deviation, …]
+        acc: dict[str, dict[str, dict[str, list[float]]]] = {}
+        for table in tables:
+            for record in table.records:
+                sid = record.values.get("station_id", "")
+                lead_hours = record.values.get("lead_hours")
+                if not sid or lead_hours is None:
+                    continue
+                lead_h = float(lead_hours)
+                if lead_h <= 0 or lead_h > 72:
+                    continue
+                bucket = "D+1" if lead_h <= 24 else ("D+2" if lead_h <= 48 else "D+3")
+                s_acc = acc.setdefault(sid, {})
+                b_acc = s_acc.setdefault(bucket, {})
+                for field in _FIELDS:
+                    val = record.values.get(f"dev_{field}")
+                    if val is not None:
+                        b_acc.setdefault(field, []).append(float(val))
+
+        logger.info(
+            "query_forecast_accuracy_ranking: %d stations from forecast_deviation (-%dd)",
+            len(acc), days,
+        )
+
+        result: dict[str, dict[str, list[dict]]] = {}
+        for field in sorted(_FIELDS):
+            field_result: dict[str, list[dict]] = {}
+            for bucket in _BUCKETS:
+                station_stats: list[dict] = []
+                for sid, s_data in acc.items():
+                    devs = s_data.get(bucket, {}).get(field)
+                    if not devs:
+                        continue
+                    n = len(devs)
+                    mae = sum(abs(e) for e in devs) / n
+                    bias = sum(devs) / n
+                    station_stats.append({
+                        "station_id": sid,
+                        "mae": round(mae, 2),
+                        "bias": round(bias, 2),
+                        "n": n,
+                    })
+                station_stats.sort(key=lambda x: x["mae"], reverse=True)
+                field_result[bucket] = station_stats[:top_n]
+            result[field] = field_result
+
+        return result
+
+    def has_forecast_deviation_data(self, min_points: int = 500) -> bool:
+        """Return True if ``forecast_deviation`` has at least ``min_points`` in the past 90 days."""
+        flux = f"""
+from(bucket: "{self._cfg.bucket}")
+  |> range(start: -90d)
+  |> filter(fn: (r) => r._measurement == "{MEASUREMENT_FORECAST_DEVIATION}" and r._field == "lead_hours")
+  |> group()
+  |> count()
+"""
+        try:
+            tables = self._query_api.query(flux, org=self._cfg.org)
+            for table in tables:
+                for record in table.records:
+                    return int(record.get_value() or 0) >= min_points
+        except Exception as exc:
+            logger.warning("has_forecast_deviation_data check error: %s", exc)
+        return False
 
     # ------------------------------------------------------------------
     # Storage / ingestion stats
@@ -1544,4 +1883,5 @@ from(bucket: "{self._cfg.bucket}")
     def close(self) -> None:
         """Close the underlying InfluxDB client."""
         self._client.close()
+        self._slow_client.close()
         logger.info("InfluxDB client closed")

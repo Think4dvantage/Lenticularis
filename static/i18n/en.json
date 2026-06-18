@@ -248,6 +248,38 @@
     "notify_red": "Red",
     "notify_sending_to": "Emails will be sent to {email}"
   },
+  "forecast_analysis": {
+    "title": "Forecast Accuracy Analysis",
+    "subtitle": "Cross-station ranking of forecast accuracy by measurement field and lead time.",
+    "lead_time": "Lead time",
+    "d1": "D+1 (0–24 h)",
+    "d2": "D+2 (24–48 h)",
+    "d3": "D+3 (48–72 h)",
+    "based_on": "Based on last {days} days",
+    "refresh": "↻ Refresh",
+    "loading": "Computing ranking…",
+    "no_data": "No forecast vs. actual pairs found for this field.",
+    "col_rank": "#",
+    "col_station": "Station",
+    "col_network": "Network",
+    "col_canton": "Canton",
+    "col_mae": "MAE",
+    "col_bias": "Avg. bias",
+    "col_samples": "Samples",
+    "col_correction": "Correction hint",
+    "correction_high": "Forecast runs +{val} too high — subtract to correct",
+    "correction_low": "Forecast runs {val} too low — add to correct",
+    "correction_neutral": "No consistent bias",
+    "fields": {
+      "wind_speed": "Wind Speed (km/h)",
+      "wind_gust": "Wind Gust (km/h)",
+      "wind_direction": "Wind Direction (°)",
+      "temperature": "Temperature (°C)",
+      "humidity": "Humidity (%)",
+      "pressure_qff": "Pressure QFF (hPa)",
+      "precipitation": "Precipitation (mm)"
+    }
+  },
   "forecast_accuracy": {
     "title": "Forecast Accuracy",
     "subtitle": "Compare past forecasts against observed values for any station and time range.",

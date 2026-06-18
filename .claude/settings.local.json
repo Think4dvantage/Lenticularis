@@ -31,7 +31,9 @@
       "WebFetch(domain:vkpi.ch)",
       "Bash(curl:*)",
       "WebFetch(domain:lsmfapi-dev.lg4.ch)",
-      "Bash(ssh xpsex *)"
+      "Bash(ssh xpsex *)",
+      "Bash(xargs wc -l)",
+      "Bash(sort -t: -k2 -rn)"
     ]
   }
 }

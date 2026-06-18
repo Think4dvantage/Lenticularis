@@ -6,7 +6,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 SiteType = Literal["launch", "landing", "opportunity"]
 
@@ -34,6 +34,14 @@ class WebcamBase(BaseModel):
     url: str
     label: Optional[str] = None
     sort_order: int = 0
+
+    @field_validator("url")
+    @classmethod
+    def _http_only(cls, v: str) -> str:
+        v = (v or "").strip()
+        if not (v.startswith("http://") or v.startswith("https://")):
+            raise ValueError("Webcam URL must start with http:// or https://")
+        return v
 
 
 class WebcamCreate(WebcamBase):
