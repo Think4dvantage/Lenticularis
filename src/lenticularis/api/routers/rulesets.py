@@ -24,7 +24,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
-from sqlalchemy import select
+from sqlalchemy import delete as _delete, select
 from sqlalchemy.orm import Session
 
 from lenticularis.api.dependencies import get_current_user, require_admin, require_pilot
@@ -479,9 +479,7 @@ def replace_landings(
     rs = _get_own_ruleset(ruleset_id, current_user, db)
 
     # Bulk-delete existing links (avoids ORM collection/cascade confusion)
-    db.query(LaunchLandingLink).filter(
-        LaunchLandingLink.launch_ruleset_id == rs.id
-    ).delete(synchronize_session=False)
+    db.execute(_delete(LaunchLandingLink).where(LaunchLandingLink.launch_ruleset_id == rs.id))
 
     # Insert new ones (validate each landing ruleset exists and belongs to the user)
     for landing_id in body.landing_ids:
@@ -513,9 +511,7 @@ def replace_webcams(
 ):
     rs = _get_own_ruleset(ruleset_id, current_user, db)
 
-    db.query(RuleSetWebcam).filter(
-        RuleSetWebcam.ruleset_id == rs.id
-    ).delete(synchronize_session=False)
+    db.execute(_delete(RuleSetWebcam).where(RuleSetWebcam.ruleset_id == rs.id))
 
     for i, wc in enumerate(body.webcams):
         db.add(RuleSetWebcam(

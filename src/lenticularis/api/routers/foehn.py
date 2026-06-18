@@ -71,7 +71,7 @@ def _evaluate(
 # ---------------------------------------------------------------------------
 
 @router.get("/config")
-async def get_user_foehn_config(
+def get_user_foehn_config(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> dict:
@@ -81,7 +81,7 @@ async def get_user_foehn_config(
 
 
 @router.put("/config")
-async def put_user_foehn_config(
+def put_user_foehn_config(
     data: dict,
     set_as_default: bool = Query(False, description="Admin only: also overwrite the system-wide default config"),
     current_user: User = Depends(get_current_user),
@@ -117,7 +117,7 @@ async def put_user_foehn_config(
 
 
 @router.delete("/config")
-async def delete_user_foehn_config(
+def delete_user_foehn_config(
     set_as_default: bool = Query(False, description="Admin only: also reset the system-wide default to hardcoded values"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -148,7 +148,7 @@ async def delete_user_foehn_config(
 # ---------------------------------------------------------------------------
 
 @router.get("/status")
-async def get_foehn_status(
+def get_foehn_status(
     request: Request,
     current_user: Optional[User] = Depends(get_current_user_optional),
     db: Session = Depends(get_db),
@@ -175,7 +175,7 @@ async def get_foehn_status(
 
 
 @router.get("/forecast")
-async def get_foehn_forecast(
+def get_foehn_forecast(
     request: Request,
     valid_time: str = Query(..., description="ISO 8601 UTC timestamp, e.g. 2026-03-22T11:00:00Z"),
     current_user: Optional[User] = Depends(get_current_user_optional),
@@ -200,7 +200,7 @@ async def get_foehn_forecast(
 
 
 @router.get("/observation")
-async def get_foehn_observation(
+def get_foehn_observation(
     request: Request,
     valid_time: str = Query(..., description="ISO 8601 UTC timestamp, e.g. 2026-03-19T12:00:00Z"),
     current_user: Optional[User] = Depends(get_current_user_optional),
@@ -225,7 +225,7 @@ async def get_foehn_observation(
 
 
 @router.get("/history")
-async def get_foehn_history(
+def get_foehn_history(
     request: Request,
     hours: int = 48,
     center_time: Optional[str] = Query(

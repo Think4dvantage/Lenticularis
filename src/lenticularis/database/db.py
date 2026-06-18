@@ -6,7 +6,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from lenticularis.database.models import Base
@@ -85,12 +85,25 @@ def init_db(db_path: str) -> None:
     global _engine, _SessionLocal
     Path(db_path).parent.mkdir(parents=True, exist_ok=True)
     db_url = f"sqlite:///{db_path}"
-    _engine = create_engine(db_url, connect_args={"check_same_thread": False})
+    _engine = create_engine(
+        db_url,
+        connect_args={"check_same_thread": False, "timeout": 30},
+        pool_pre_ping=True,
+    )
+
+    @event.listens_for(_engine, "connect")
+    def _set_sqlite_pragma(dbapi_conn, _rec):
+        cur = dbapi_conn.cursor()
+        cur.execute("PRAGMA journal_mode=WAL")
+        cur.execute("PRAGMA synchronous=NORMAL")
+        cur.execute("PRAGMA busy_timeout=30000")
+        cur.close()
+
     Base.metadata.create_all(bind=_engine)
     _run_column_migrations(_engine)
     _seed_dedup_overrides(_engine)
     _SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=_engine)
-    logger.info("SQLite database ready: %s", db_path)
+    logger.info("SQLite database ready (WAL mode): %s", db_path)
 
 
 def get_db():

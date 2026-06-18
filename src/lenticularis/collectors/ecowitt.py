@@ -25,6 +25,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from lenticularis.collectors.base import BaseCollector
+from lenticularis.collectors.utils import normalize_wind_dir, to_float as _to_float
 from lenticularis.models.weather import WeatherMeasurement, WeatherStation
 
 logger = logging.getLogger(__name__)
@@ -37,15 +38,6 @@ _TEMP_UNIT = 1      # Celsius
 _PRESSURE_UNIT = 3  # hPa
 _WIND_SPEED_UNIT = 7  # km/h  — matches MeteoSwiss / SLF storage convention
 _RAINFALL_UNIT = 12   # mm
-
-
-def _to_float(val: object) -> Optional[float]:
-    if val is None:
-        return None
-    try:
-        return float(val)
-    except (TypeError, ValueError):
-        return None
 
 
 def _to_int(val: object) -> Optional[int]:
@@ -126,9 +118,7 @@ class EcowittCollector(BaseCollector):
 
     async def collect(self) -> list[WeatherMeasurement]:
         """Fetch latest measurements from all configured Ecowitt stations concurrently."""
-        import asyncio
-        tasks = [self._collect_station(entry) for entry in self._stations_cfg]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        results = await self._collect_concurrent(self._stations_cfg, self._collect_station)
         measurements: list[WeatherMeasurement] = []
         for r in results:
             if isinstance(r, Exception):
@@ -190,8 +180,7 @@ class EcowittCollector(BaseCollector):
 
         wind_speed = _to_float(_field_value(data, "wind", "wind_speed"))
         wind_gust = _to_float(_field_value(data, "wind", "wind_gust"))
-        raw_dir = _to_int(_field_value(data, "wind", "wind_direction"))
-        wind_direction: Optional[int] = None if raw_dir is None else raw_dir % 360
+        wind_direction: Optional[int] = normalize_wind_dir(_field_value(data, "wind", "wind_direction"))
 
         temperature = _to_float(_field_value(data, "outdoor", "temperature"))
         humidity = _to_float(_field_value(data, "outdoor", "humidity"))

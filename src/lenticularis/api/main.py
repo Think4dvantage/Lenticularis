@@ -19,13 +19,23 @@ import asyncio
 import logging
 import logging.config
 from contextlib import asynccontextmanager
+from importlib.metadata import PackageNotFoundError, version as _pkg_version
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+try:
+    _APP_VERSION = _pkg_version("lenticularis")
+except PackageNotFoundError:
+    _APP_VERSION = "0.0.0+dev"
+
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
+
+from lenticularis.api.errors import AppException, _envelope
 
 from lenticularis.config import get_config
 from lenticularis.database.influx import InfluxClient
@@ -83,7 +93,7 @@ async def lifespan(app: FastAPI):
     cfg = get_config()
     _configure_logging(cfg)
     logger = logging.getLogger(__name__)
-    logger.info("Lenticularis starting up…")
+    logger.info("Lenticularis starting — version %s", _APP_VERSION)
 
     _secret = cfg.auth.jwt_secret
     if _secret in _PLACEHOLDER_SECRETS or len(_secret) < 32:
@@ -161,11 +171,11 @@ async def lifespan(app: FastAPI):
     )
     app.state.scheduler = scheduler
 
-    # Patch scheduler to update station registry after each collect run
-    _patch_scheduler_registry(scheduler, app.state.station_registry, app.state.display_registry, app.state.virtual_members, dedup_distance_m)
-
-    # Patch scheduler to re-warm replay cache after each forecast run
-    _patch_scheduler_forecast(scheduler, influx, app.state.display_registry)
+    # Wire post-run hooks (replaces monkey-patching)
+    scheduler.on_collector_run = _make_registry_updater(
+        app.state.station_registry, app.state.display_registry, app.state.virtual_members, dedup_distance_m
+    )
+    scheduler.on_forecast_run = _make_forecast_rewarmer(influx, app.state.display_registry)
 
     await scheduler.start()
     logger.info("Startup complete — API is ready")
@@ -204,22 +214,11 @@ def rebuild_display_registry(app_state) -> None:
     app_state.virtual_members.update(new_virtual)
 
 
-def _patch_scheduler_registry(
-    scheduler: CollectorScheduler,
-    registry: dict,
-    display_registry: dict,
-    virtual_members: dict,
-    dedup_distance_m: float = 50.0,
-) -> None:
-    """
-    Monkey-patch the scheduler's _run_collector so it also updates the
-    shared station registry and rebuilds the deduped display registry
-    whenever collectors return new station data.
-    """
-    original = scheduler._run_collector
+def _make_registry_updater(registry: dict, display_registry: dict, virtual_members: dict, dedup_distance_m: float):
+    """Return an async callback that rebuilds the station display registry after each observation run."""
+    _log = logging.getLogger(__name__)
 
-    async def patched(collector):
-        await original(collector)
+    async def _on_collector_run(collector):
         try:
             stations = await collector.get_stations()
             changed = False
@@ -243,35 +242,19 @@ def _patch_scheduler_registry(
                 virtual_members.clear()
                 virtual_members.update(new_virtual)
         except Exception:
-            pass  # Registry update is best-effort
+            _log.warning("Registry update after collector run failed (best-effort)", exc_info=True)
 
-    scheduler._run_collector = patched
+    return _on_collector_run
 
 
-def _patch_scheduler_forecast(
-    scheduler: CollectorScheduler,
-    influx,
-    display_registry: dict,
-) -> None:
-    """
-    Monkey-patch the scheduler's _run_forecast_collector so that after each
-    successful forecast run (i.e. actual points written), the stale forecast
-    replay cache entries are invalidated and the warm-up task is re-fired.
+def _make_forecast_rewarmer(influx, display_registry: dict):
+    """Return an async callback that invalidates + re-warms the forecast replay cache after each forecast run."""
+    _log = logging.getLogger(__name__)
 
-    Without this, cached replay windows that include forecast data would
-    continue serving the previous model run until the 5-minute TTL naturally
-    expires — even though fresh data is already in InfluxDB.
-    """
-    logger = logging.getLogger(__name__)
-    original = scheduler._run_forecast_collector
-
-    async def patched(collector, horizon_hours):
-        await original(collector, horizon_hours)
-        health_key = f"forecast_{collector.SOURCE}"
-        health = scheduler._collector_health.get(health_key, {})
+    async def _on_forecast_run(collector, horizon_hours, health):
         if health.get("status") == "ok" and (health.get("last_measurement_count") or 0) > 0:
             n = invalidate_forecast_replay_cache()
-            logger.info(
+            _log.info(
                 "Forecast collector '%s' wrote %d points — invalidated %d replay cache entries, re-warming",
                 collector.SOURCE,
                 health.get("last_measurement_count"),
@@ -279,7 +262,7 @@ def _patch_scheduler_forecast(
             )
             asyncio.get_event_loop().create_task(warm_replay_cache(influx, display_registry))
 
-    scheduler._run_forecast_collector = patched
+    return _on_forecast_run
 
 
 # ---------------------------------------------------------------------------
@@ -290,7 +273,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="Lenticularis",
         description="Paragliding weather decision-support system for Switzerland",
-        version="0.1.0",
+        version=_APP_VERSION,
         lifespan=lifespan,
     )
 
@@ -310,6 +293,36 @@ def create_app() -> FastAPI:
         return resp
 
     app.add_middleware(BaseHTTPMiddleware, dispatch=_security_headers)
+    app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+    # ---------------------------------------------------------------------------
+    # Exception handlers — RFC7807 envelope for all error responses
+    # ---------------------------------------------------------------------------
+    _STATUS_TO_CODE = {
+        400: "VALIDATION_FAILED",
+        401: "AUTH_REQUIRED",
+        403: "PERMISSION_DENIED",
+        404: "ENTITY_NOT_FOUND",
+        409: "CONFLICT",
+    }
+    _logger = logging.getLogger(__name__)
+
+    @app.exception_handler(AppException)
+    async def _app_exc(request: Request, exc: AppException):
+        if exc.status_code >= 500:
+            _logger.error("%s %s → %s %s", request.method, request.url.path, exc.code, exc.message)
+        return JSONResponse(status_code=exc.status_code, content=_envelope(exc.code, exc.message, exc.details))
+
+    @app.exception_handler(HTTPException)
+    async def _http_exc(request: Request, exc: HTTPException):
+        code = _STATUS_TO_CODE.get(exc.status_code, "INTERNAL_ERROR" if exc.status_code >= 500 else "ERROR")
+        if exc.status_code >= 500:
+            _logger.error("%s %s → HTTP %d %s", request.method, request.url.path, exc.status_code, exc.detail)
+        return JSONResponse(status_code=exc.status_code, content=_envelope(code, str(exc.detail)), headers=exc.headers)
+
+    @app.exception_handler(RequestValidationError)
+    async def _validation_exc(request: Request, exc: RequestValidationError):
+        return JSONResponse(status_code=422, content=_envelope("VALIDATION_FAILED", "Request validation failed", {"errors": exc.errors()}))
 
     # Cross-origin clients (e.g. the mobile app) — add explicit origins here, never "*":
     # app.add_middleware(CORSMiddleware, allow_origins=["https://lenti.cloud"],
@@ -327,101 +340,16 @@ def create_app() -> FastAPI:
     app.include_router(org_router.router)
     app.include_router(wind_forecast_router.router)
 
-    # Static files (frontend)
+    # Static files (frontend) + page routes
     static_dir = Path(__file__).parent.parent.parent.parent / "static"
     if static_dir.exists():
         app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
-
-        # Subdomains that belong to the main app — everything else is an org slug
-        _MAIN_SUBDOMAINS = {"www", "lenti", "lenti-dev", "localhost", ""}
-
-        @app.get("/", include_in_schema=False)
-        async def serve_root(request: Request):
-            host = request.headers.get("host", "").split(":")[0]
-            subdomain = host.split(".")[0] if "." in host else ""
-            if subdomain not in _MAIN_SUBDOMAINS:
-                return FileResponse(str(static_dir / "org-dashboard.html"))
-            return FileResponse(str(static_dir / "index.html"))
-
-        @app.get("/org/{slug}", include_in_schema=False)
-        async def serve_org_dashboard(slug: str):
-            return FileResponse(str(static_dir / "org-dashboard.html"))
-
-        @app.get("/map", include_in_schema=False)
-        async def serve_map():
-            return FileResponse(str(static_dir / "index.html"))
-
-        @app.get("/stations", include_in_schema=False)
-        async def serve_stations():
-            return FileResponse(str(static_dir / "stations.html"))
-
-        @app.get("/stations.html", include_in_schema=False)
-        async def serve_stations_html():
-            return FileResponse(str(static_dir / "stations.html"))
-
-        @app.get("/station-detail", include_in_schema=False)
-        async def serve_station_detail():
-            return FileResponse(str(static_dir / "station-detail.html"))
-
-        @app.get("/station-detail.html", include_in_schema=False)
-        async def serve_station_detail_html():
-            return FileResponse(str(static_dir / "station-detail.html"))
-
-        @app.get("/login", include_in_schema=False)
-        async def serve_login():
-            return FileResponse(str(static_dir / "login.html"))
-
-        @app.get("/oauth-callback", include_in_schema=False)
-        async def serve_oauth_callback():
-            return FileResponse(str(static_dir / "oauth-callback.html"))
-
-        @app.get("/register", include_in_schema=False)
-        async def serve_register():
-            return FileResponse(str(static_dir / "register.html"))
-
-        @app.get("/rulesets", include_in_schema=False)
-        async def serve_rulesets():
-            return FileResponse(str(static_dir / "rulesets.html"))
-
-        @app.get("/ruleset-editor", include_in_schema=False)
-        async def serve_ruleset_editor():
-            return FileResponse(str(static_dir / "ruleset-editor.html"))
-
-        @app.get("/ruleset-analysis", include_in_schema=False)
-        async def serve_ruleset_analysis():
-            return FileResponse(str(static_dir / "ruleset-analysis.html"))
-
-        @app.get("/stats", include_in_schema=False)
-        async def serve_stats():
-            return FileResponse(str(static_dir / "stats.html"))
-
-        @app.get("/foehn", include_in_schema=False)
-        async def serve_foehn():
-            return FileResponse(str(static_dir / "foehn.html"))
-
-        @app.get("/wind-forecast", include_in_schema=False)
-        async def serve_wind_forecast():
-            return FileResponse(str(static_dir / "wind-forecast.html"))
-
-        @app.get("/admin", include_in_schema=False)
-        async def serve_admin():
-            return FileResponse(str(static_dir / "admin.html"))
-
-        @app.get("/forecast-accuracy", include_in_schema=False)
-        async def serve_forecast_accuracy():
-            return FileResponse(str(static_dir / "forecast-accuracy.html"))
-
-        @app.get("/forecast-analysis", include_in_schema=False)
-        async def serve_forecast_analysis():
-            return FileResponse(str(static_dir / "forecast-analysis.html"))
-
-        @app.get("/help", include_in_schema=False)
-        async def serve_help():
-            return FileResponse(str(static_dir / "help.html"))
+        from lenticularis.api.routers import pages as pages_router
+        app.include_router(pages_router.router)
     else:
         @app.get("/", include_in_schema=False)
         async def root():
-            return {"status": "ok", "version": "0.1.0"}
+            return {"status": "ok", "version": _APP_VERSION}
 
     return app
 

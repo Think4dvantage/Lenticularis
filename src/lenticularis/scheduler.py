@@ -120,6 +120,9 @@ class CollectorScheduler:
         self._collectors: list = []
         self._forecast_collectors: list = []
         self._collector_health: dict[str, dict[str, Any]] = {}
+        # Post-run hooks — set by the application layer (e.g. main.py lifespan)
+        self.on_collector_run = None    # async cb(collector) after each observation run
+        self.on_forecast_run = None     # async cb(collector, horizon_hours, health) after each forecast run
 
     async def start(self) -> None:
         """Instantiate collectors, register interval jobs, and start the scheduler."""
@@ -601,6 +604,12 @@ class CollectorScheduler:
             health["consecutive_failures"] = int(health.get("consecutive_failures", 0)) + 1
             logger.error("Collector %s failed: %s", name, exc, exc_info=True)
 
+        if self.on_collector_run is not None:
+            try:
+                await self.on_collector_run(collector)
+            except Exception:
+                logger.exception("on_collector_run hook failed")
+
     async def _run_forecast_collector(self, collector, horizon_hours: int) -> None:
         """Execute a single forecast collector run and write results to InfluxDB."""
         name = collector.__class__.__name__
@@ -656,7 +665,7 @@ class CollectorScheduler:
                 stations_with_coords, horizon_hours, spread_seconds=spread_seconds
             ):
                 if pts:
-                    self._influx.write_forecast(pts)
+                    await asyncio.get_event_loop().run_in_executor(None, self._influx.write_forecast, pts)
                     total_points += len(pts)
                     logger.debug("%s: wrote %d points for %s", name, len(pts), station.station_id)
                 else:
@@ -683,6 +692,12 @@ class CollectorScheduler:
                 "consecutive_failures": int(health.get("consecutive_failures", 0)) + 1,
             })
             logger.error("Forecast collector %s failed: %s", name, exc, exc_info=True)
+
+        if self.on_forecast_run is not None:
+            try:
+                await self.on_forecast_run(collector, horizon_hours, health)
+            except Exception:
+                logger.exception("on_forecast_run hook failed")
 
     async def _run_grid_forecast_collector(self) -> None:
         """Collect wind forecasts for the 0.25° Switzerland grid and write to InfluxDB."""
@@ -759,7 +774,7 @@ class CollectorScheduler:
 
         try:
             if points:
-                self._influx.write_forecast_grid(points)
+                await asyncio.get_event_loop().run_in_executor(None, self._influx.write_forecast_grid, points)
 
             finished_at = datetime.now(timezone.utc)
             health.update({

@@ -13,7 +13,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
 import time
+from collections import OrderedDict
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
@@ -22,12 +24,49 @@ from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
+
+class _TTLCache:
+    """Bounded, thread-safe LRU cache. Values are (payload, stored_monotonic) tuples."""
+
+    def __init__(self, maxsize: int) -> None:
+        self._maxsize = maxsize
+        self._data: OrderedDict = OrderedDict()
+        self._lock = threading.Lock()
+
+    def get(self, key: str, default=None):
+        with self._lock:
+            if key not in self._data:
+                return default
+            self._data.move_to_end(key)
+            return self._data[key]
+
+    def __setitem__(self, key: str, value) -> None:
+        with self._lock:
+            if key in self._data:
+                del self._data[key]
+            elif len(self._data) >= self._maxsize:
+                self._data.popitem(last=False)
+            self._data[key] = value
+
+    def __delitem__(self, key: str) -> None:
+        with self._lock:
+            del self._data[key]
+
+    def __iter__(self):
+        with self._lock:
+            return iter(list(self._data.keys()))
+
+    def __contains__(self, key: str) -> bool:
+        with self._lock:
+            return key in self._data
+
+
 # ---------------------------------------------------------------------------
 # Server-side replay cache
 # Keyed by query params string; TTL aligned with the shortest collection cadence.
 # ---------------------------------------------------------------------------
-_replay_cache: dict[str, tuple[Any, float]] = {}  # key → (payload, stored_at_epoch)
 _REPLAY_CACHE_TTL_S = 300  # 5 minutes
+_replay_cache = _TTLCache(maxsize=256)  # key → (payload, stored_at_monotonic)
 
 
 def _build_replay_payload(
@@ -255,7 +294,7 @@ def _require_known_station(request: Request, station_id: str) -> None:
 # ---------------------------------------------------------------------------
 
 @router.get("", response_model=list[StationResponse])
-async def list_stations(request: Request):
+def list_stations(request: Request):
     """
     Return all known stations with their most recent measurement snapshot.
 
@@ -315,7 +354,7 @@ async def list_stations(request: Request):
 
 
 @router.get("/data-bounds")
-async def get_data_bounds(request: Request):
+def get_data_bounds(request: Request):
     """Return the earliest and latest timestamps that have any recorded data."""
     influx = _get_influx(request)
     bounds = influx.query_data_bounds()
@@ -389,8 +428,8 @@ async def get_replay(
 # ---------------------------------------------------------------------------
 # Cross-station forecast accuracy ranking cache
 # ---------------------------------------------------------------------------
-_accuracy_ranking_cache: dict[str, tuple[Any, float]] = {}
 _ACCURACY_RANKING_CACHE_TTL_S = 300  # 5 minutes
+_accuracy_ranking_cache = _TTLCache(maxsize=64)  # key → (payload, stored_at_monotonic)
 
 
 @router.get("/forecast-accuracy-ranking")
@@ -445,7 +484,7 @@ async def get_forecast_accuracy_ranking(
 
 
 @router.get("/{station_id}/forecast-accuracy")
-async def get_forecast_accuracy(
+def get_forecast_accuracy(
     station_id: str,
     request: Request,
     from_: Optional[str] = Query(default=None, alias="from"),
@@ -485,7 +524,7 @@ async def get_forecast_accuracy(
 
 
 @router.get("/{station_id}/forecast")
-async def get_station_forecast(
+def get_station_forecast(
     station_id: str,
     request: Request,
     hours: int = Query(default=120, ge=1, le=120, description="Forecast horizon in hours"),
@@ -517,7 +556,7 @@ async def get_station_forecast(
 
 
 @router.get("/{station_id}", response_model=StationResponse)
-async def get_station(station_id: str, request: Request):
+def get_station(station_id: str, request: Request):
     """Return metadata for a single station."""
     registry = _get_display_registry(request)
     station = registry.get(station_id)
@@ -544,7 +583,7 @@ async def get_station(station_id: str, request: Request):
 
 
 @router.get("/{station_id}/latest", response_model=MeasurementResponse)
-async def get_latest(station_id: str, request: Request):
+def get_latest(station_id: str, request: Request):
     """Return the most recent measurement for a station."""
     _require_known_station(request, station_id)
     influx = _get_influx(request)
@@ -557,7 +596,7 @@ async def get_latest(station_id: str, request: Request):
 
 
 @router.get("/{station_id}/history")
-async def get_history(
+def get_history(
     station_id: str,
     request: Request,
     hours: int = Query(default=24, ge=1, le=720, description="Number of hours of history to return (max 720 = 30 days)"),

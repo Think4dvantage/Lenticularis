@@ -8,8 +8,11 @@ import hashlib
 import hmac
 import json
 import logging
+import secrets
 import time
 import urllib.parse
+
+from sqlalchemy import select as _select
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -21,6 +24,11 @@ from lenticularis.config import get_config
 from lenticularis.database.db import get_db
 from lenticularis.database.models import OAuthIdentity, User
 from lenticularis.models.auth import Token, TokenRefreshRequest, UserCreate, UserLogin, UserOut
+from pydantic import BaseModel as _BaseModel
+
+
+class _OAuthExchangeRequest(_BaseModel):
+    code: str
 from lenticularis.services.auth import (
     create_access_token,
     create_refresh_token,
@@ -31,6 +39,10 @@ from lenticularis.services.auth import (
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+
+# One-time code store: code → (access, refresh, user_b64, created_monotonic)
+_oauth_handoff: dict[str, tuple[str, str, str, float]] = {}
+_HANDOFF_TTL_S = 60
 
 
 # ---------------------------------------------------------------------------
@@ -65,7 +77,7 @@ def _token_pair(user: User) -> Token:
 @router.post("/register", response_model=Token, status_code=status.HTTP_201_CREATED)
 async def register(body: UserCreate, db: Session = Depends(get_db)):
     """Create a new local pilot account and return tokens."""
-    if db.query(User).filter(User.email == body.email).first():
+    if db.execute(_select(User).where(User.email == body.email)).scalar_one_or_none():
         raise HTTPException(status_code=409, detail="Email already registered")
     user = User(
         email=body.email,
@@ -83,7 +95,7 @@ async def register(body: UserCreate, db: Session = Depends(get_db)):
 @router.post("/login", response_model=Token)
 async def login(body: UserLogin, db: Session = Depends(get_db)):
     """Exchange email + password for a token pair."""
-    user = db.query(User).filter(User.email == body.email).first()
+    user = db.execute(_select(User).where(User.email == body.email)).scalar_one_or_none()
     if (
         not user
         or not user.hashed_password
@@ -121,6 +133,29 @@ async def list_providers():
         "google":   cfg.google.enabled,
         "facebook": cfg.facebook.enabled,
     }
+
+
+@router.post("/oauth-exchange")
+async def oauth_exchange(body: _OAuthExchangeRequest):
+    """Exchange a one-time OAuth code (issued by the callback) for a token pair.
+
+    The code expires after 60 seconds and can only be used once.
+    """
+    now = time.monotonic()
+    # Purge stale entries on every exchange call
+    stale = [k for k, v in list(_oauth_handoff.items()) if now - v[3] > _HANDOFF_TTL_S]
+    for k in stale:
+        _oauth_handoff.pop(k, None)
+
+    entry = _oauth_handoff.pop(body.code, None)
+    if entry is None or now - entry[3] > _HANDOFF_TTL_S:
+        logger.warning("[Lenti:auth] oauth-exchange rejected: invalid or expired code")
+        raise HTTPException(status_code=400, detail="Invalid or expired exchange code")
+
+    access, refresh, user_b64 = entry[0], entry[1], entry[2]
+    user_data = json.loads(base64.urlsafe_b64decode(user_b64 + "=="))
+    logger.info("[Lenti:auth] oauth-exchange success for user %s", user_data.get("email"))
+    return {"access_token": access, "refresh_token": refresh, "token_type": "bearer", "user": user_data}
 
 
 # ---------------------------------------------------------------------------
@@ -164,16 +199,21 @@ def _oauth_redirect_url(request: Request, provider: str) -> str:
 def _upsert_oauth_user(db: Session, provider: str, provider_user_id: str,
                        email: str, display_name: str) -> User:
     """Find or create a User linked to this social identity."""
-    identity = (
-        db.query(OAuthIdentity)
-        .filter_by(provider=provider, provider_user_id=provider_user_id)
-        .first()
-    )
+    identity = db.execute(
+        _select(OAuthIdentity).where(
+            OAuthIdentity.provider == provider,
+            OAuthIdentity.provider_user_id == provider_user_id,
+        )
+    ).scalar_one_or_none()
     if identity:
         return identity.user
 
     # Try to link to an existing account with the same email
-    user = db.query(User).filter_by(email=email).first()
+    user = db.execute(_select(User).where(User.email == email)).scalar_one_or_none()
+    if user and user.hashed_password is not None:
+        # Existing password account — do not auto-link; user must sign in first
+        logger.warning("[Lenti:auth] OAuth %s blocked auto-link for password account %s", provider, email)
+        return None
     if not user:
         user = User(email=email, display_name=display_name, role="pilot")
         db.add(user)
@@ -192,7 +232,11 @@ def _upsert_oauth_user(db: Session, provider: str, provider_user_id: str,
 
 
 def _build_success_redirect(user: User) -> str:
-    """Build the /oauth-callback URL carrying the JWT pair for the frontend."""
+    """Issue a one-time code and return the /oauth-callback?code=… URL.
+
+    Tokens are never placed in the URL; the frontend exchanges the code via
+    POST /api/auth/oauth-exchange within 60 seconds.
+    """
     access  = create_access_token(user.id, user.role)
     refresh = create_refresh_token(user.id)
     user_json = json.dumps({
@@ -204,12 +248,10 @@ def _build_success_redirect(user: User) -> str:
         "has_password": user.hashed_password is not None,
         "org_id": user.org_id,
     })
-    params = urllib.parse.urlencode({
-        "access_token":  access,
-        "refresh_token": refresh,
-        "user":          base64.urlsafe_b64encode(user_json.encode()).decode(),
-    })
-    return f"/oauth-callback?{params}"
+    user_b64 = base64.urlsafe_b64encode(user_json.encode()).decode()
+    code = secrets.token_urlsafe(32)
+    _oauth_handoff[code] = (access, refresh, user_b64, time.monotonic())
+    return f"/oauth-callback?code={code}"
 
 
 # ---------------------------------------------------------------------------
@@ -226,23 +268,36 @@ async def google_login(request: Request):
     cfg = get_config().oauth.google
     if not cfg.enabled:
         raise HTTPException(status_code=404, detail="Google login is not enabled")
+    state = _make_state()
     params = urllib.parse.urlencode({
         "client_id":     cfg.client_id,
         "redirect_uri":  _oauth_redirect_url(request, "google"),
         "response_type": "code",
         "scope":         "openid email profile",
-        "state":         _make_state(),
+        "state":         state,
         "access_type":   "online",
     })
-    return RedirectResponse(f"{_GOOGLE_AUTH_URL}?{params}")
+    resp = RedirectResponse(f"{_GOOGLE_AUTH_URL}?{params}")
+    resp.set_cookie("oauth_state", state, httponly=True, samesite="lax", secure=True, max_age=600)
+    return resp
 
 
 @router.get("/google/callback", include_in_schema=False)
 async def google_callback(code: str | None = None, state: str | None = None,
                            error: str | None = None, request: Request = None,
                            db: Session = Depends(get_db)):
-    if error or not code or not state or not _verify_state(state):
-        return RedirectResponse("/login?error=google_auth_failed")
+    cookie_state = request.cookies.get("oauth_state", "")
+    state_ok = (
+        state and _verify_state(state)
+        and cookie_state and hmac.compare_digest(state, cookie_state)
+    )
+    def _fail(reason: str):
+        r = RedirectResponse(f"/login?error={reason}")
+        r.delete_cookie("oauth_state")
+        return r
+
+    if error or not code or not state_ok:
+        return _fail("google_auth_failed")
 
     cfg = get_config().oauth.google
     redirect_uri = _oauth_redirect_url(request, "google")
@@ -257,29 +312,37 @@ async def google_callback(code: str | None = None, state: str | None = None,
         })
         if not token_res.is_success:
             logger.error("Google token exchange failed: %s", token_res.text)
-            return RedirectResponse("/login?error=google_token_failed")
+            return _fail("google_token_failed")
 
         access_token = token_res.json()["access_token"]
         user_res = await client.get(_GOOGLE_USER_URL,
                                     headers={"Authorization": f"Bearer {access_token}"})
         if not user_res.is_success:
             logger.error("Google userinfo failed: %s", user_res.text)
-            return RedirectResponse("/login?error=google_userinfo_failed")
+            return _fail("google_userinfo_failed")
 
     profile = user_res.json()
+    if not profile.get("verified_email"):
+        logger.warning("[Lenti:auth] Google OAuth rejected: email not verified for %s", profile.get("email"))
+        return _fail("google_email_unverified")
+
     email = profile.get("email")
     if not email:
-        return RedirectResponse("/login?error=google_no_email")
+        return _fail("google_no_email")
 
     user = _upsert_oauth_user(
         db, "google", profile["id"], email,
         profile.get("name") or email.split("@")[0],
     )
+    if user is None:
+        return _fail("oauth_link_requires_signin")
     if not user.is_active:
-        return RedirectResponse("/login?error=account_disabled")
+        return _fail("account_disabled")
 
     logger.info("Google OAuth login: %s", email)
-    return RedirectResponse(_build_success_redirect(user))
+    resp = RedirectResponse(_build_success_redirect(user))
+    resp.delete_cookie("oauth_state")
+    return resp
 
 
 # ---------------------------------------------------------------------------
@@ -296,22 +359,35 @@ async def facebook_login(request: Request):
     cfg = get_config().oauth.facebook
     if not cfg.enabled:
         raise HTTPException(status_code=404, detail="Facebook login is not enabled")
+    state = _make_state()
     params = urllib.parse.urlencode({
         "client_id":     cfg.client_id,
         "redirect_uri":  _oauth_redirect_url(request, "facebook"),
         "response_type": "code",
         "scope":         "email,public_profile",
-        "state":         _make_state(),
+        "state":         state,
     })
-    return RedirectResponse(f"{_FACEBOOK_AUTH_URL}?{params}")
+    resp = RedirectResponse(f"{_FACEBOOK_AUTH_URL}?{params}")
+    resp.set_cookie("oauth_state", state, httponly=True, samesite="lax", secure=True, max_age=600)
+    return resp
 
 
 @router.get("/facebook/callback", include_in_schema=False)
 async def facebook_callback(code: str | None = None, state: str | None = None,
                              error: str | None = None, request: Request = None,
                              db: Session = Depends(get_db)):
-    if error or not code or not state or not _verify_state(state):
-        return RedirectResponse("/login?error=facebook_auth_failed")
+    cookie_state = request.cookies.get("oauth_state", "")
+    state_ok = (
+        state and _verify_state(state)
+        and cookie_state and hmac.compare_digest(state, cookie_state)
+    )
+    def _fail(reason: str):
+        r = RedirectResponse(f"/login?error={reason}")
+        r.delete_cookie("oauth_state")
+        return r
+
+    if error or not code or not state_ok:
+        return _fail("facebook_auth_failed")
 
     cfg = get_config().oauth.facebook
     redirect_uri = _oauth_redirect_url(request, "facebook")
@@ -325,7 +401,7 @@ async def facebook_callback(code: str | None = None, state: str | None = None,
         })
         if not token_res.is_success:
             logger.error("Facebook token exchange failed: %s", token_res.text)
-            return RedirectResponse("/login?error=facebook_token_failed")
+            return _fail("facebook_token_failed")
 
         access_token = token_res.json()["access_token"]
         user_res = await client.get(_FACEBOOK_USER_URL, params={
@@ -334,20 +410,23 @@ async def facebook_callback(code: str | None = None, state: str | None = None,
         })
         if not user_res.is_success:
             logger.error("Facebook userinfo failed: %s", user_res.text)
-            return RedirectResponse("/login?error=facebook_userinfo_failed")
+            return _fail("facebook_userinfo_failed")
 
     profile = user_res.json()
     email = profile.get("email")
     if not email:
-        # Facebook can omit email for accounts without a confirmed email address.
-        return RedirectResponse("/login?error=facebook_no_email")
+        return _fail("facebook_no_email")
 
     user = _upsert_oauth_user(
         db, "facebook", profile["id"], email,
         profile.get("name") or email.split("@")[0],
     )
+    if user is None:
+        return _fail("oauth_link_requires_signin")
     if not user.is_active:
-        return RedirectResponse("/login?error=account_disabled")
+        return _fail("account_disabled")
 
     logger.info("Facebook OAuth login: %s", email)
-    return RedirectResponse(_build_success_redirect(user))
+    resp = RedirectResponse(_build_success_redirect(user))
+    resp.delete_cookie("oauth_state")
+    return resp

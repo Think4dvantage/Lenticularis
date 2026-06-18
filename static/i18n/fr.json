@@ -29,7 +29,8 @@
     "n_days_ago": "il y a {n}j",
     "updated": "Mis à jour",
     "canton": "Canton {name}",
-    "elevation_asl": "{m} m s.n.m."
+    "elevation_asl": "{m} m s.n.m.",
+    "no_matches": "Aucun résultat"
   },
   "decisions": {
     "green": "Vert",
@@ -173,6 +174,9 @@
     "search_station_b": "Rechercher la station B…",
     "station_b_label": "Comparer avec la station (B) :",
     "no_matches": "Aucun résultat",
+    "foehn_status_active": "Actif",
+    "foehn_status_partial_or_active": "Partiel ou actif",
+    "foehn_status_inactive": "Inactif",
     "fields": {
       "wind_speed": "Vitesse du vent",
       "wind_gust": "Rafale de vent",
@@ -341,7 +345,9 @@
       "partial_sub": "Certaines conditions de station sont remplies, pas toutes — à surveiller.",
       "inactive_sub": "Toutes les conditions de station sont en dessous des seuils du foehn.",
       "historical": " (Historique)",
-      "forecast": " (Prévisions)"
+      "forecast": " (Prévisions)",
+      "north_risk_title": "Risque de Foehn du Nord{suffix}",
+      "north_risk_sub": "Gradient de pression Nord > Sud ≥ seuil — Foehn du Nord possible"
     },
     "pressure": {
       "no_risk": "Pas de risque",

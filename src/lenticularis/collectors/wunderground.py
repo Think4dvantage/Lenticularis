@@ -31,20 +31,12 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from lenticularis.collectors.base import BaseCollector
+from lenticularis.collectors.utils import normalize_wind_dir, to_float as _to_float
 from lenticularis.models.weather import WeatherMeasurement, WeatherStation
 
 logger = logging.getLogger(__name__)
 
 _API_BASE = "https://api.weather.com/v2/pws/observations/current"
-
-
-def _to_float(val: object) -> Optional[float]:
-    if val is None:
-        return None
-    try:
-        return float(val)
-    except (TypeError, ValueError):
-        return None
 
 
 def _to_int(val: object) -> Optional[int]:
@@ -125,9 +117,7 @@ class WundergroundCollector(BaseCollector):
 
     async def collect(self) -> list[WeatherMeasurement]:
         """Fetch latest measurements from all configured PWS stations concurrently."""
-        import asyncio
-        tasks = [self._collect_station(entry) for entry in self._stations_cfg]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        results = await self._collect_concurrent(self._stations_cfg, self._collect_station)
         measurements: list[WeatherMeasurement] = []
         for r in results:
             if isinstance(r, Exception):
@@ -208,8 +198,7 @@ class WundergroundCollector(BaseCollector):
         # Actual PWS API v2 metric field names (units=m → km/h, °C, hPa, mm)
         wind_speed    = _to_float(metric.get("windSpeed"))
         wind_gust     = _to_float(metric.get("windGust"))
-        raw_dir       = obs.get("winddir")
-        wind_direction: Optional[int] = None if raw_dir is None else int(raw_dir) % 360
+        wind_direction: Optional[int] = normalize_wind_dir(obs.get("winddir"))
         temperature   = _to_float(metric.get("temp"))
         humidity      = _to_float(obs.get("humidity"))
         pressure_qff  = _to_float(metric.get("pressure"))
@@ -222,7 +211,7 @@ class WundergroundCollector(BaseCollector):
             logger.error(
                 "WundergroundCollector [%s]: observation returned but ALL metric values are None. "
                 "metric block: %s  |  obs top-level: winddir=%r humidity=%r",
-                pws_id, metric, raw_dir, obs.get("humidity"),
+                pws_id, metric, obs.get("winddir"), obs.get("humidity"),
             )
         else:
             logger.info(

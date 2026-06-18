@@ -31,6 +31,10 @@ async def widgets_page():
 
 ## New SQLite Table & Migrations
 
+> **No Alembic.** Migrations are raw `ALTER TABLE` statements guarded by `PRAGMA table_info()`
+> checks in `_run_column_migrations()` in `src/lenticularis/database/db.py`.
+> There is no `_migrations` table and no `.sql` migration files.
+
 ### 1. Define ORM Model
 Add the ORM model in `models.py`:
 
@@ -41,45 +45,34 @@ class Widget(Base):
     ...
 ```
 
-### 2. Create Migration Script
-Create a new `.sql` file in `src/[package]/database/migrations/` using a sequential prefix:
+### 2. Schema creation
+`Base.metadata.create_all()` in `init_db()` handles the initial schema on first boot. It is
+idempotent — run it every startup; it only creates tables that are missing.
 
-`0001_initial_schema.sql` → `0002_add_widgets.sql` → `0003_add_user_bio.sql`
+### 3. Adding new columns (`_run_column_migrations`)
+For columns added after the initial schema, add an idempotent guard in `_run_column_migrations()`:
 
-Example migration:
-```sql
-CREATE TABLE IF NOT EXISTS widgets (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);
+```python
+cols = {row[1] for row in conn.execute(text("PRAGMA table_info(widgets)")).fetchall()}
+if "new_col" not in cols:
+    conn.execute(text("ALTER TABLE widgets ADD COLUMN new_col TEXT"))
+    conn.commit()
+    logger.info("Migration: added widgets.new_col column")
 ```
 
-### 3. Implementation Logic (db.py)
-The `init_db()` function in `db.py` must track and apply these scripts using a `_migrations` table. Never skip migrations — SQLAlchemy's `Base.metadata.create_all()` is only for initial bootstrap and does not handle schema drift.
+Never use Alembic. Never create `.sql` migration files. Never maintain a `_migrations` table.
 
 #### SQLite WAL Mode
-To support concurrent writes from collectors and reads from the API, always enable **Write-Ahead Logging (WAL)** mode on the SQLite connection:
+WAL mode is enabled automatically via a SQLAlchemy `connect` event listener in `init_db()`:
 
 ```python
-def init_db(engine):
-    with engine.connect() as conn:
-        conn.execute(text("PRAGMA journal_mode=WAL;"))
-        run_migrations(conn)
-```
-
-```python
-def run_migrations(conn):
-    conn.execute(text("CREATE TABLE IF NOT EXISTS _migrations (filename TEXT PRIMARY KEY)"))
-    applied = {row[0] for row in conn.execute(text("SELECT filename FROM _migrations"))}
-    
-    migration_dir = Path(__file__).parent / "migrations"
-    for sql_file in sorted(migration_dir.glob("*.sql")):
-        if sql_file.name not in applied:
-            with open(sql_file) as f:
-                conn.execute(text(f.read()))
-            conn.execute(text("INSERT INTO _migrations (filename) VALUES (:f)"), {"f": sql_file.name})
-    conn.commit()
+@event.listens_for(_engine, "connect")
+def _set_sqlite_pragma(dbapi_conn, _rec):
+    cur = dbapi_conn.cursor()
+    cur.execute("PRAGMA journal_mode=WAL")
+    cur.execute("PRAGMA synchronous=NORMAL")
+    cur.execute("PRAGMA busy_timeout=30000")
+    cur.close()
 ```
 
 ---

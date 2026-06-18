@@ -37,20 +37,12 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from lenticularis.collectors.base import BaseCollector
+from lenticularis.collectors.utils import to_float as _to_float
 from lenticularis.models.weather import WeatherMeasurement, WeatherStation
 
 logger = logging.getLogger(__name__)
 
 _LIVE_URL = "https://api.holfuy.com/live/"
-
-
-def _to_float(value: object) -> Optional[float]:
-    if value is None:
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
 
 
 def _parse_timestamp(raw: object) -> Optional[datetime]:

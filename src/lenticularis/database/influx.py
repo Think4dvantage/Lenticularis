@@ -96,7 +96,6 @@ class InfluxClient:
                 "humidity": m.humidity,
                 "pressure_qfe": m.pressure_qfe,
                 "pressure_qff": m.pressure_qff,
-                "pressure_qff": m.pressure_qff,
                 "precipitation": m.precipitation,
                 "snow_depth": m.snow_depth,
             }
@@ -1067,6 +1066,7 @@ from(bucket: "{self._cfg.bucket}")
         # Python dedup: prefer swissmeteo over open-meteo for same (station, valid_time)
         _PREFERRED = "swissmeteo"
         raw: dict[str, dict[str, dict]] = {}
+        src_of: dict[tuple[str, str], str] = {}  # (sid, vt_iso) -> source
         for table in tables:
             for record in table.records:
                 sid = record.values.get("station_id", "")
@@ -1084,8 +1084,10 @@ from(bucket: "{self._cfg.bucket}")
                 existing = raw[sid].get(vt_iso)
                 if existing is None:
                     raw[sid][vt_iso] = fields
-                elif in_src == _PREFERRED and existing.get("_source") != _PREFERRED:
+                    src_of[(sid, vt_iso)] = in_src
+                elif in_src == _PREFERRED and src_of.get((sid, vt_iso)) != _PREFERRED:
                     raw[sid][vt_iso] = fields
+                    src_of[(sid, vt_iso)] = in_src
 
         result: dict[str, list[dict]] = {}
         for sid, by_vt in raw.items():
@@ -1641,7 +1643,7 @@ from(bucket: "{self._cfg.bucket}")
            columnKey: ["_field"], valueColumn: "_value")
 """
         try:
-            tables = self._query_api.query(flux, org=self._cfg.org)
+            tables = self._slow_query_api.query(flux, org=self._cfg.org)
         except Exception as exc:
             logger.error("query_forecast_accuracy_ranking error: %s", exc)
             return {}

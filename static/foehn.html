@@ -13,21 +13,6 @@
       background: #0f1117; color: #e2e8f0; min-height: 100vh; display: flex; flex-direction: column;
     }
 
-    /* ── Nav ── */
-    .top-nav { background: #1a1f2e; border-bottom: 1px solid #2d3748; padding: 0 24px; display: flex; align-items: center; height: 48px; flex-shrink: 0; }
-    .nav-brand { font-size: 1.1rem; font-weight: 600; color: #90cdf4; margin-right: 24px; text-decoration: none; }
-    .nav-links { display: flex; gap: 2px; flex: 1; }
-    .nav-link { color: #718096; text-decoration: none; font-size: 0.85rem; padding: 6px 14px; border-radius: 6px; transition: background 0.15s, color 0.15s; }
-    .nav-link:hover  { background: #2d3748; color: #e2e8f0; }
-    .nav-link.active { background: #2d4a6e; color: #90cdf4; font-weight: 500; }
-    .nav-user { display: flex; align-items: center; gap: 10px; margin-left: auto; }
-    .nav-btn { background: transparent; border: 1px solid #4a5568; color: #a0aec0; font-size: 0.8rem; padding: 4px 10px; border-radius: 5px; cursor: pointer; }
-    .nav-btn:hover { background: #2d3748; color: #e2e8f0; }
-    #navLangPicker { display: flex; gap: 2px; margin-left: 8px; }
-    .lang-btn { background: transparent; border: 1px solid #4a5568; color: #718096; font-size: 0.72rem; padding: 3px 7px; border-radius: 4px; cursor: pointer; transition: background 0.15s; }
-    .lang-btn:hover { background: #2d3748; color: #e2e8f0; }
-    .lang-btn.active { background: #2d4a6e; color: #90cdf4; border-color: #4a7bab; }
-
     /* ── Page layout ── */
     .page-content { flex: 1; padding: 20px 28px; max-width: 1400px; margin: 0 auto; width: 100%; }
     .page-header { display: flex; align-items: baseline; gap: 16px; margin-bottom: 14px; }
@@ -310,21 +295,7 @@
 </head>
 <body>
 
-<nav class="top-nav">
-  <a href="/" class="nav-brand">🪁 Lenticularis</a>
-  <div class="nav-links">
-    <a href="/" class="nav-link" data-i18n="nav.map">Map</a>
-    <a href="/stations" class="nav-link" data-i18n="nav.stations">Stations</a>
-    <a href="/rulesets" class="nav-link" data-i18n="nav.rulesets">Rule Sets</a>
-    <a href="/stats" class="nav-link" data-i18n="nav.stats">Statistics</a>
-    <a href="/foehn" class="nav-link active" data-i18n="nav.foehn">Föhn</a>
-    <a href="/wind-forecast" class="nav-link" data-i18n="nav.wind_forecast">Wind Forecast</a>
-    <a href="/forecast-analysis" class="nav-link" data-i18n="forecast_analysis.title">Forecast Analysis</a>
-    <a href="/help" class="nav-link" data-i18n="nav.help">Help</a>
-  </div>
-  <div id="navLangPicker"></div>
-  <div class="nav-user" id="navUser"></div>
-</nav>
+<div id="appNav"></div>
 
 <div class="page-content">
 
@@ -468,8 +439,8 @@
 // ────────────────────────────────────────────────────────────────────────────
 // Föhn Tracker v2 — frontend
 // ────────────────────────────────────────────────────────────────────────────
-import { initI18n, renderLangPicker } from '/static/i18n.js';
-import { renderNavAuth, isLoggedIn, fetchAuth } from '/static/auth.js';
+import { bootstrapPage } from '/static/bootstrap.js';
+import { isLoggedIn, fetchAuth } from '/static/auth.js';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -636,8 +607,8 @@ function renderBanner(overall, isForecast, isSnapshot) {
     icon = '↑'; title = window.t('foehn.status.risk_title', {suffix: fc});
     sub  = window.t('foehn.status.risk_sub');
   } else if (status === 'north_risk') {
-    icon = '↓'; title = 'North Föhn Risk' + (fc ? ' — ' + fc : '');
-    sub  = 'North > South pressure gradient ≥ threshold — North Föhn possible';
+    icon = '↓'; title = window.t('foehn.status.north_risk_title', {suffix: fc});
+    sub  = window.t('foehn.status.north_risk_sub');
   } else if (status === 'partial') {
     const names = partial_regions.join(', ');
     icon = '↗'; title = window.t('foehn.status.partial_title', {suffix: fc, names});
@@ -707,8 +678,8 @@ function renderRegionPressure(rp) {
   let cls, label;
   if (rp.south_active)                    { cls = 'danger';  label = '↑ S-Föhn pressure'; }
   else if (rp.north_active)               { cls = 'north';   label = '↓ N-Föhn pressure'; }
-  else if (d != null && Math.abs(d) >= 1) { cls = 'caution'; label = 'Pressure building'; }
-  else                                    { cls = 'safe';    label = 'Pressure ok'; }
+  else if (d != null && Math.abs(d) >= 1) { cls = 'caution'; label = window.t('foehn.pressure.building'); }
+  else                                    { cls = 'safe';    label = window.t('foehn.pressure.no_risk'); }
   const abbrev   = s => s.split(' ')[0];
   const deltaStr = d != null ? (d > 0 ? '+' : '') + d.toFixed(1) + ' hPa' : '—';
   return `
@@ -1022,7 +993,7 @@ function makeStationSearch(container, inputEl, dropEl, initialId, onChange) {
       `<div class="station-option" data-id="${esc(s.station_id)}">
          ${esc(s.name)} <span class="sid">${esc(s.network)} · ${esc(s.station_id)}</span>
        </div>`
-    ).join('') || `<div class="station-option" style="color:#718096">No matches</div>`;
+    ).join('') || `<div class="station-option" style="color:#718096">${window.t('common.no_matches')}</div>`;
     dropEl.classList.add('open');
   }
 
@@ -1466,9 +1437,7 @@ for (const id of ['setupResetBtn', 'setupResetBtn2'])
 // BOOT
 // ═══════════════════════════════════════════════════════════════════════════════
 
-await initI18n();
-renderNavAuth('foehn');
-renderLangPicker();
+await bootstrapPage({ page: 'foehn' });
 document.getElementById('infoBox').innerHTML = window.t('foehn.info_box');
 buildTimeNav();
 load();

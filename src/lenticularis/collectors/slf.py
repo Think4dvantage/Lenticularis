@@ -21,6 +21,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from lenticularis.collectors.base import BaseCollector
+from lenticularis.collectors.utils import to_float as _to_float
 from lenticularis.models.weather import WeatherMeasurement, WeatherStation
 
 logger = logging.getLogger(__name__)
@@ -35,15 +36,6 @@ def _parse_timestamp(raw: str) -> Optional[datetime]:
     try:
         return datetime.fromisoformat(str(raw).replace("Z", "+00:00")).astimezone(timezone.utc)
     except ValueError:
-        return None
-
-
-def _to_float(value: object) -> Optional[float]:
-    if value is None:
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
         return None
 
 

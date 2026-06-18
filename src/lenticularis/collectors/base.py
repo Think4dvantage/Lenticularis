@@ -4,9 +4,10 @@
 #   - httpx (async HTTP client for API calls)
 #   - typing annotations (List, Optional, Dict, Any)
 #   - WeatherStation and WeatherMeasurement models from models.weather
+import asyncio
 from abc import ABC, abstractmethod
 import logging
-from typing import Optional
+from typing import Any, Callable, Optional
 import httpx
 
 from lenticularis.models.weather import WeatherStation, WeatherMeasurement
@@ -90,6 +91,29 @@ class BaseCollector(ABC):
         except httpx.HTTPError as exc:
             self.logger.error("HTTP error fetching %s: %s", url, exc)
             raise
+
+    async def _collect_concurrent(
+        self,
+        items: list,
+        fn: Callable,
+        *,
+        limit: int = 8,
+    ) -> list:
+        """Run ``fn(item)`` for each item with a bounded concurrency of *limit*.
+
+        Returns a flat list of results in the same order as *items*.
+        Exceptions are returned as ``Exception`` instances (not raised) so callers
+        can log per-item failures without aborting the whole batch.
+        """
+        semaphore = asyncio.Semaphore(limit)
+
+        async def _bounded(item: Any) -> Any:
+            async with semaphore:
+                return await fn(item)
+
+        return list(
+            await asyncio.gather(*[_bounded(item) for item in items], return_exceptions=True)
+        )
 
     async def close(self) -> None:
         """Close the underlying HTTP client. Call during application shutdown."""

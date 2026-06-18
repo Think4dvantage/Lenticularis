@@ -42,7 +42,7 @@ _VALID_LEVEL_M = sorted(ALTITUDE_TO_HPA.keys())
 
 
 @router.get("/grid")
-async def get_wind_forecast_grid(
+def get_wind_forecast_grid(
     request: Request,
     date_str: str = Query(
         None,

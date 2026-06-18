@@ -12,22 +12,6 @@
       background: #0f1117; color: #e2e8f0; min-height: 100vh; display: flex; flex-direction: column;
     }
 
-    /* ── Nav ── */
-    .top-nav { background: #1a1f2e; border-bottom: 1px solid #2d3748; padding: 0 24px; display: flex; align-items: center; flex-shrink: 0; height: 48px; }
-    .nav-brand { font-size: 1.1rem; font-weight: 600; color: #90cdf4; margin-right: 24px; white-space: nowrap; text-decoration: none; }
-    .nav-links { display: flex; gap: 2px; flex: 1; }
-    .nav-link { color: #718096; text-decoration: none; font-size: 0.85rem; padding: 6px 14px; border-radius: 6px; transition: background 0.15s, color 0.15s; }
-    .nav-link:hover { background: #2d3748; color: #e2e8f0; }
-    .nav-link.active { background: #2d4a6e; color: #90cdf4; font-weight: 500; }
-    .nav-user { display: flex; align-items: center; gap: 10px; margin-left: auto; }
-    .nav-user-name { font-size: 0.85rem; color: #90cdf4; }
-    .nav-btn { background: transparent; border: 1px solid #4a5568; color: #a0aec0; font-size: 0.8rem; padding: 4px 10px; border-radius: 5px; cursor: pointer; transition: background 0.15s; }
-    .nav-btn:hover { background: #2d3748; color: #e2e8f0; }
-    #navLangPicker { display: flex; gap: 2px; margin-left: 8px; }
-    .lang-btn { background: transparent; border: 1px solid #4a5568; color: #718096; font-size: 0.72rem; padding: 3px 7px; border-radius: 4px; cursor: pointer; transition: background 0.15s; }
-    .lang-btn:hover { background: #2d3748; color: #e2e8f0; }
-    .lang-btn.active { background: #2d4a6e; color: #90cdf4; border-color: #4a7bab; }
-
     /* ── Page ── */
     .page { max-width: 900px; margin: 0 auto; padding: 32px 20px; width: 100%; }
 
@@ -114,21 +98,7 @@
 </head>
 <body>
 
-<nav class="top-nav">
-  <a href="/" class="nav-brand" id="navBrand">🪁 Lenticularis</a>
-  <div class="nav-links" id="navLinks">
-    <a href="/" class="nav-link" data-i18n="nav.map">Map</a>
-    <a href="/stations" class="nav-link" data-i18n="nav.stations">Stations</a>
-    <a href="/rulesets" class="nav-link active" data-i18n="nav.rulesets">Rule Sets</a>
-    <a href="/stats" class="nav-link" data-i18n="nav.stats">Statistics</a>
-    <a href="/foehn" class="nav-link" data-i18n="nav.foehn">Föhn</a>
-    <a href="/wind-forecast" class="nav-link" data-i18n="nav.wind_forecast">Wind Forecast</a>
-    <a href="/forecast-analysis" class="nav-link" data-i18n="forecast_analysis.title">Forecast Analysis</a>
-    <a href="/help" class="nav-link" data-i18n="nav.help">Help</a>
-  </div>
-  <div id="navLangPicker"></div>
-  <div class="nav-user" id="navUser"></div>
-</nav>
+<div id="appNav"></div>
 
 <div class="page">
   <!-- Auth gate -->
@@ -194,11 +164,9 @@
 </div>
 
 <script type="module">
-  import { initI18n, renderLangPicker } from '/static/i18n.js';
-  import { getUser, renderNavAuth, isLoggedIn, fetchAuth } from '/static/auth.js';
-  await initI18n();
-  renderNavAuth('rulesets');
-  renderLangPicker();
+  import { bootstrapPage } from '/static/bootstrap.js';
+  import { getUser, isLoggedIn, fetchAuth } from '/static/auth.js';
+  await bootstrapPage({ page: 'rulesets' });
 
   console.log('[Lenti:rulesets] page init');
 

@@ -21,31 +21,44 @@
   <span>Signing in…</span>
 
   <script type="module">
-    import { storeAuth, isLoggedIn } from '/static/auth.js';
+    import { storeAuth } from '/static/auth.js';
 
-    console.log('[Lenti:oauth-callback] processing OAuth callback');
+    console.log('[Lenti:oauth] processing OAuth callback');
 
     const params = new URLSearchParams(location.search);
-    const accessToken  = params.get('access_token');
-    const refreshToken = params.get('refresh_token');
-    const userB64      = params.get('user');
-    const error        = params.get('error');
+    const code  = params.get('code');
+    const error = params.get('error');
 
     if (error) {
-      console.error('[Lenti:oauth-callback] error from server:', error);
+      console.error('[Lenti:oauth] error from server:', error);
       window.location.href = '/login?error=' + encodeURIComponent(error);
-    } else if (!accessToken || !refreshToken || !userB64) {
-      console.error('[Lenti:oauth-callback] missing token params');
+    } else if (!code) {
+      console.error('[Lenti:oauth] missing code param');
       window.location.href = '/login?error=oauth_missing_params';
     } else {
+      // Strip the code from the URL immediately so it never sits in history
+      history.replaceState(null, '', location.pathname);
+
       try {
-        const user = JSON.parse(atob(userB64.replace(/-/g, '+').replace(/_/g, '/')));
-        storeAuth(accessToken, refreshToken, user);
-        console.log('[Lenti:oauth-callback] tokens stored, redirecting to /');
+        console.log('[Lenti:oauth] exchanging one-time code for tokens');
+        const res = await fetch('/api/auth/oauth-exchange', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code }),
+        });
+        if (!res.ok) {
+          const detail = await res.text().catch(() => res.status);
+          console.error('[Lenti:oauth] exchange failed:', detail);
+          window.location.href = '/login?error=oauth_exchange_failed';
+          return;
+        }
+        const data = await res.json();
+        storeAuth(data.access_token, data.refresh_token, data.user);
+        console.log('[Lenti:oauth] tokens stored, redirecting to /');
         window.location.href = '/';
       } catch (e) {
-        console.error('[Lenti:oauth-callback] failed to parse user payload:', e);
-        window.location.href = '/login?error=oauth_parse_error';
+        console.error('[Lenti:oauth] exchange error:', e);
+        window.location.href = '/login?error=oauth_exchange_error';
       }
     }
   </script>

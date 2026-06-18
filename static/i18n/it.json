@@ -29,7 +29,8 @@
     "n_days_ago": "{n}g fa",
     "updated": "Aggiornato",
     "canton": "Cantone {name}",
-    "elevation_asl": "{m} m s.l.m."
+    "elevation_asl": "{m} m s.l.m.",
+    "no_matches": "Nessun risultato"
   },
   "decisions": {
     "green": "Verde",
@@ -177,6 +178,9 @@
     "search_station_b": "Cerca stazione B…",
     "station_b_label": "Confronta con stazione (B):",
     "no_matches": "Nessun risultato",
+    "foehn_status_active": "Attivo",
+    "foehn_status_partial_or_active": "Parziale o attivo",
+    "foehn_status_inactive": "Inattivo",
     "fields": {
       "wind_speed": "Velocità del vento",
       "wind_gust": "Raffica di vento",
@@ -342,7 +346,9 @@
       "partial_sub": "Alcune condizioni stazione soddisfatte, non tutte — monitorare attentamente.",
       "inactive_sub": "Tutte le condizioni stazione sono sotto le soglie del föhn.",
       "historical": " (Storico)",
-      "forecast": " (Previsioni)"
+      "forecast": " (Previsioni)",
+      "north_risk_title": "Rischio Favonio Nord{suffix}",
+      "north_risk_sub": "Gradiente di pressione Nord > Sud ≥ soglia — Favonio Nord possibile"
     },
     "pressure": {
       "no_risk": "Nessun rischio",

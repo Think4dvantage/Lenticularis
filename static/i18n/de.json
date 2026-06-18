@@ -29,7 +29,8 @@
     "n_days_ago": "vor {n}T",
     "updated": "Aktualisiert",
     "canton": "Kanton {name}",
-    "elevation_asl": "{m} m ü. M."
+    "elevation_asl": "{m} m ü. M.",
+    "no_matches": "Keine Treffer"
   },
   "decisions": {
     "green": "Grün",
@@ -173,6 +174,9 @@
     "search_station_b": "Station B suchen…",
     "station_b_label": "Mit Station (B) vergleichen:",
     "no_matches": "Keine Treffer",
+    "foehn_status_active": "Aktiv",
+    "foehn_status_partial_or_active": "Teilweise oder aktiv",
+    "foehn_status_inactive": "Inaktiv",
     "fields": {
       "wind_speed": "Windgeschwindigkeit",
       "wind_gust": "Windböen",
@@ -341,7 +345,9 @@
       "partial_sub": "Einige Stationsbedingungen erfüllt, nicht alle — aufmerksam beobachten.",
       "inactive_sub": "Alle Stationsbedingungen unter den Föhnschwellenwerten.",
       "historical": " (Historisch)",
-      "forecast": " (Vorhersage)"
+      "forecast": " (Vorhersage)",
+      "north_risk_title": "Nord-Föhn Risiko{suffix}",
+      "north_risk_sub": "Nord > Süd Druckgradient ≥ Schwellwert — Nord-Föhn möglich"
     },
     "pressure": {
       "no_risk": "Kein Risiko",

@@ -375,14 +375,14 @@ def _extract_json(text: str) -> dict:
     try:
         return json.loads(text)
     except json.JSONDecodeError:
-        pass
+        logger.warning("[Lenti:ai] direct JSON parse failed, trying block extraction", exc_info=True)
     # Find first {...} block
     match = re.search(r'\{[\s\S]*\}', text)
     if match:
         try:
             return json.loads(match.group())
         except json.JSONDecodeError:
-            pass
+            logger.warning("[Lenti:ai] could not parse JSON from model output, skipping", exc_info=True)
     raise ValueError(f"No valid JSON found in model response: {text[:200]}")
 
 

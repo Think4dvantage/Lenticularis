@@ -1,6 +1,6 @@
 [project]
 name = "lenticularis"
-version = "1.11.0"
+version = "1.17.0"
 description = "Weather Data tracking with focus on Ruleset for certain Locations and the surrounding Weather Data"
 authors = [
     {name = "Raphael Eymann, r+lenti@eymanns.ch"}
@@ -17,7 +17,6 @@ dependencies = [
     "httpx (>=0.28.1,<0.29.0)",
     "apscheduler (>=3.11.1,<4.0.0)",
     "sqlalchemy (>=2.0.45,<3.0.0)",
-    "alembic (>=1.17.2,<2.0.0)",
     "pyproj (>=3.7.0,<4.0.0)",
     "python-multipart (>=0.0.20,<0.1.0)",
     "python-jose[cryptography] (>=3.3.0,<4.0.0)",
@@ -33,5 +32,12 @@ build-backend = "poetry.core.masonry.api"
 [dependency-groups]
 dev = [
     "black (>=25.12.0,<26.0.0)",
-    "ruff (>=0.14.9,<0.15.0)"
+    "ruff (>=0.14.9,<0.15.0)",
+    "pytest (>=8,<9)",
+    "pytest-asyncio (>=0.24,<0.25)",
+    "coverage[toml] (>=7,<8)"
 ]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

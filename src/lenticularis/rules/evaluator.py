@@ -319,12 +319,14 @@ def run_evaluation(
     # ---- fetch latest data per station -------------------------------------
     station_data: dict[str, dict] = {}
     no_data: list[str] = []
+    plain_ids = [sid for sid in station_ids if not (virtual_members or {}).get(sid)]
+    batched = influx.query_latest_for_stations(plain_ids) if plain_ids else {}
     for sid in station_ids:
         members = (virtual_members or {}).get(sid)
         if members:
             d = influx.query_latest_virtual(members)
         else:
-            d = influx.query_latest(sid)
+            d = batched.get(sid)
         if d:
             station_data[sid] = d
         else:
