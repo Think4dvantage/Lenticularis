@@ -20,6 +20,7 @@ import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 import lenticularis.config as _lenti_config
 from lenticularis.config import (
@@ -68,6 +69,9 @@ class FakeInflux:
     def query_latest_for_stations(self, station_ids):
         return {}
 
+    def query_latest_all_stations(self):
+        return {}
+
     def query_latest_virtual(self, member_ids):
         return None
 
@@ -114,9 +118,15 @@ def _patch_config(monkeypatch):
 
 @pytest.fixture
 def db_engine():
+    # StaticPool is required, not cosmetic: an in-memory SQLite engine defaults to
+    # SingletonThreadPool, which opens a separate connection — and therefore a separate,
+    # empty database — per thread. FastAPI runs sync dependencies (get_current_user,
+    # require_pilot, …) in a worker threadpool, so they would not see the tables that
+    # create_all() built on the main thread. StaticPool shares the one connection.
     engine = create_engine(
         "sqlite:///:memory:",
         connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
     )
     Base.metadata.create_all(engine)
     yield engine
@@ -134,15 +144,20 @@ async def test_app(db_engine):
 
     @asynccontextmanager
     async def _test_lifespan(app):
-        app.state.influx = fake_influx
-        app.state.station_registry = {}
-        app.state.display_registry = {}
-        app.state.virtual_members = {}
-        app.state.dedup_distance_m = 50.0
+        """No-op stand-in for the real lifespan (scheduler, InfluxDB, collectors)."""
         yield
 
     app = create_app()
     app.router.lifespan_context = _test_lifespan
+
+    # Set app.state directly. It cannot be done from the lifespan: httpx's ASGITransport
+    # never emits ASGI lifespan events, so no lifespan_context ever runs under it — the
+    # state would stay unset and every route calling _get_influx() would 503.
+    app.state.influx = fake_influx
+    app.state.station_registry = {}
+    app.state.display_registry = {}
+    app.state.virtual_members = {}
+    app.state.dedup_distance_m = 50.0
 
     def _get_test_db():
         db = factory()

@@ -87,16 +87,31 @@ class FakeInflux:
 ```python
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from lenticularis.database.db import init_db
-from lenticularis.models.base import Base
+from sqlalchemy.pool import StaticPool
+from lenticularis.database.models import Base
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 def db_engine():
-    engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
-    init_db(engine)
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
     yield engine
+    Base.metadata.drop_all(engine)
     engine.dispose()
 ```
+
+**`poolclass=StaticPool` is mandatory, not cosmetic.** An in-memory SQLite engine defaults
+to `SingletonThreadPool`, which opens one connection *per thread* — and every in-memory
+SQLite connection is its own separate, empty database. FastAPI runs **sync** dependencies
+(`get_current_user`, `require_pilot`, `require_admin` — all `def`, not `async def`) in a
+worker threadpool, so they land on a different thread and see none of the tables
+`create_all()` built on the main thread, failing with `no such table: users`. Confusingly,
+`async def` handlers work fine, because their body runs on the event loop thread — so the
+bug only surfaces on endpoints that authenticate. `StaticPool` shares the one connection
+across all threads.
 
 ### 4. FastAPI test app (async fixture)
 
@@ -114,15 +129,18 @@ async def test_app(db_engine):
 
     @asynccontextmanager
     async def _test_lifespan(app):
-        app.state.influx = fake_influx
-        app.state.station_registry = {}
-        app.state.display_registry = {}
-        app.state.virtual_members = {}
-        app.state.dedup_distance_m = 50.0
+        """No-op stand-in for the real lifespan (scheduler, InfluxDB, collectors)."""
         yield
 
     app = create_app()
-    app.router.lifespan_context = _test_lifespan   # bypass real lifespan (scheduler, InfluxDB, etc.)
+    app.router.lifespan_context = _test_lifespan
+
+    # Set app.state DIRECTLY — see the warning below.
+    app.state.influx = fake_influx
+    app.state.station_registry = {}
+    app.state.display_registry = {}
+    app.state.virtual_members = {}
+    app.state.dedup_distance_m = 50.0
 
     def _get_test_db():
         db = factory()
@@ -140,7 +158,20 @@ async def client(test_app):
         yield ac
 ```
 
-**Key**: use `app.router.lifespan_context = _test_lifespan` — NOT `app.state`, not a context manager override on the `AsyncClient`. This correctly bypasses the real lifespan (scheduler, InfluxDB connections, collector startup) while still running the dependency injection.
+**Key**: set `app.state` **directly** in the fixture. Do **not** set it from inside
+`_test_lifespan` — httpx's `ASGITransport` never emits ASGI lifespan events, so **no
+`lifespan_context` ever runs under it**. State assigned there is silently never applied,
+`app.state.influx` stays unset, and every route that calls `_get_influx()` returns
+`503 InfluxDB not available`. (Routes that 404 earlier on a registry lookup still pass,
+which makes the failure look arbitrary.)
+
+Replacing `app.router.lifespan_context` with a no-op is still worth doing: it guarantees
+the real lifespan (scheduler, InfluxDB connections, collector startup) cannot fire if a
+test ever *does* drive the lifespan, e.g. via `asgi-lifespan`'s `LifespanManager`.
+
+**Stub every `InfluxClient` method a route under test calls.** A missing stub surfaces as
+`AttributeError: 'FakeInflux' object has no attribute '…'` — `query_latest_all_stations`
+was missed exactly this way, hidden behind the 503 above until the lifespan bug was fixed.
 
 ---
 
