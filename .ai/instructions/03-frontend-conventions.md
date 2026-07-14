@@ -6,6 +6,46 @@ Changes to `static/` are live immediately in dev (volume-mounted). **Never intro
 
 ---
 
+## No CDN — Third-Party Libraries Are Self-Hosted
+
+**Never add a `<script src="https://…">` or `<link href="https://…">` to any page.** Leaflet
+and Chart.js live in `static/vendor/` and are loaded from there:
+
+```html
+<link rel="stylesheet" href="/static/vendor/leaflet/leaflet.css" />
+<script src="/static/vendor/leaflet/leaflet.js"></script>
+<script src="/static/vendor/chartjs/chart.umd.min.js"></script>
+```
+
+The Content-Security-Policy in `api/main.py` sets `script-src 'self'` / `style-src 'self'`,
+so a CDN reference will be **blocked by the browser**, not merely discouraged.
+
+To add a new library: download the dist file into `static/vendor/<lib>/`, reference it with an
+absolute `/static/…` path, and nothing else. `.gitattributes` marks `static/vendor/** -text`
+so vendored files stay byte-exact.
+
+> Note: Leaflet's `marker-icon.png` / `layers.png` are intentionally **not** vendored. Every
+> marker in the app is an `L.divIcon` or `L.circleMarker` and no `L.control.layers` is used,
+> so `leaflet.css` never requests them. If you ever add a default marker or a layers control,
+> you must vendor `static/vendor/leaflet/images/` too.
+
+---
+
+## Static Asset Caching & Cache-Busting
+
+Handled entirely server-side — there is nothing to do in a page, but do not fight it:
+
+- `api/routers/pages.py` rewrites every local `href="/static/…"` / `src="/static/…"` in a page
+  at serve time to append `?v=<app-version>`.
+- `api/main.py` serves versioned `/static` URLs as `immutable, max-age=1y`; unversioned hits
+  (locale JSON, ES-module imports) get `max-age=600`.
+- HTML is served `no-cache` with an ETag and revalidates to `304`.
+
+**A deploy therefore requires a version bump in `pyproject.toml`** — the version *is* the cache
+key. Shipping changed assets without bumping it leaves stale files pinned in browsers for a year.
+
+---
+
 ## Internationalisation (i18n)
 
 Every user-visible string must have a key in all locale files simultaneously.

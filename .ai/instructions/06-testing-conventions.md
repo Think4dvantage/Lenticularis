@@ -260,5 +260,16 @@ jobs:
 | Rules evaluator | no conditions → green; worst_wins; majority_vote; AND groups; direction wrapping; pressure field mapping |
 | Station security | unknown ID → 404; special chars → 422/404; empty registry → `[]` |
 | Dedup | haversine sanity; proximity merge; priority (meteoswiss > holfuy); manual pairs; foehn exclusion; transitive cluster |
+| Static caching | HTML `no-cache` + ETag → 304; assets rewritten with `?v=`; no CDN refs remain; versioned assets immutable; vendored libs served |
+| JFB collector | knots → km/h; direction normalisation; unmappable params dropped; MeteoSwiss duplicates excluded; timestamp reconstruction + midnight rollover; staleness skip; `currentDateTime` always sent |
+
+Current suite: **59 passing**.
+
+### Time-dependent fixtures — do not hardcode a clock time
+
+A collector fixture that hardcodes an observation time (`"timeUTC": "11:30"`) will pass or fail
+depending on the hour the suite runs at, because collectors reject readings older than their
+staleness threshold. Build fixture timestamps **relative to `datetime.now(timezone.utc)`**.
+See `_fresh_time()` in `tests/backend/test_jfb_collector.py`.
 
 No frontend tests (Playwright) are set up yet — the no-build frontend makes this straightforward to add later via `tests/frontend/`.

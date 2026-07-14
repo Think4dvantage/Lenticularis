@@ -4,7 +4,11 @@ Paragliding weather decision-support system for Switzerland. Collects data from 
 
 ## Features
 
-- **Multi-source weather collection** — MeteoSwiss (10 min), SLF (30 min), METAR/AviationWeather (15 min), Wunderground/Ecowitt personal stations, Holfuy (5 min), Open-Meteo 5-day forecast
+- **Multi-source weather collection** — MeteoSwiss (10 min), SLF (30 min), METAR/AviationWeather (15 min), Wunderground/Ecowitt personal stations, Holfuy (5 min), Windline, FGA/Meteo Oberwallis (Valais), Jungfraubahn (Jungfrau region, 10 min)
+- **ICON-CH ensemble forecast** — 120 h station forecasts from SwissMeteo (`lsmfapi`), with probable + ensemble min/max spread per field; Open-Meteo retained as fallback
+- **Wind forecast grid map** — ICON-CH1 wind at 8 altitude levels (500–5000 m) on an interactive grid overlay with time navigation; cloud icons where humidity ≥ 90 %
+- **Forecast accuracy analysis** — per-station/field MAE + bias ranking over 90 days, D+1/D+2/D+3 lead-time buckets, worst-forecast station tables
+- **Station deduplication** — union-find over co-located stations (50 m GPS + manual override pairs); one canonical station per physical site, chosen by network priority
 - **Interactive map** — Leaflet.js with station markers, launch-site traffic lights, time-navigation replay (past + 5-day forecast), personal-station toggle
 - **Rule editor** — graphical condition builder: per-row station picker, field / operator / value, AND/OR nesting, direction compass, pressure-delta two-station mode, live preview
 - **Traffic light evaluation** — live + 120 h forecast evaluation; per-condition decision history with `ruleset-analysis.html`
@@ -18,8 +22,10 @@ Paragliding weather decision-support system for Switzerland. Collects data from 
 - **Help / FAQ** — `/help` page with 12 accordion sections and anchor deep-links; contextual `?` tooltip buttons on rule editor, Föhn page, and stats page
 - **Admin panel** — user management (roles: pilot / customer / admin / org_admin / org_pilot), organisation management (create org, assign users), collector status and runtime control, Föhn config editor, preset site management
 - **Multilanguage UI** — EN / DE / FR / IT; auto-detected from browser, switchable from nav, persisted to `localStorage`
-- **Auth** — JWT register/login; pilot-owned sites and rule sets; admin role for user/collector management; `org_id` embedded in JWT for org-scoped access
-- **Docker deployment** — single `docker-compose up -d` deploys app + InfluxDB; dev overlay with live volume mounts; Traefik multi-router label pattern for org subdomains
+- **Auth** — JWT register/login + Google OAuth; pilot-owned sites and rule sets; admin role for user/collector management; `org_id` embedded in JWT for org-scoped access
+- **Email alerts** — per-ruleset notification on traffic-light transitions (`notify_on` colours)
+- **Zero external dependencies at runtime** — Leaflet and Chart.js are self-hosted under `static/vendor/`; no CDN, no npm, no build step. Static assets are served immutable and cache-busted by app version
+- **Docker deployment** — single `docker-compose up -d` deploys app + InfluxDB; dev overlay with live volume mounts; Traefik multi-router label pattern for org subdomains; images published to `ghcr.io` on every `v*` tag
 
 ## Tech Stack
 
@@ -33,9 +39,11 @@ Paragliding weather decision-support system for Switzerland. Collects data from 
 | Relational DB | SQLite via SQLAlchemy |
 | Scheduler | APScheduler |
 | HTTP client | httpx (async) |
-| Auth | JWT via `python-jose` |
+| Auth | JWT via `python-jose`, passwords via `passlib`, Google OAuth |
 | Config | YAML (`config.yml`) validated by Pydantic |
-| Frontend | Vanilla JS + Leaflet.js + Chart.js |
+| Frontend | Vanilla JS + Leaflet.js + Chart.js — self-hosted, no build step |
+| Testing | pytest + pytest-asyncio (`tests/backend/`) |
+| CI/CD | GitHub Actions — pytest on every push; Docker image published to `ghcr.io` on `v*` tags |
 | Container | Docker + docker-compose |
 
 ## Getting Started
@@ -71,17 +79,23 @@ docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 ```
 src/lenticularis/
 ├── api/
-│   ├── main.py              # FastAPI app factory + lifespan
-│   ├── dependencies.py      # get_current_user, require_pilot, require_admin
-│   └── routers/             # auth, stations, rulesets, stats, foehn, admin, health
-├── collectors/              # MeteoSwiss, SLF, METAR, Wunderground, Ecowitt, forecast
+│   ├── main.py              # FastAPI app factory + lifespan; security headers, GZip, CSP
+│   ├── dependencies.py      # get_current_user, require_pilot, require_admin, require_org_*
+│   ├── errors.py            # api_error() — RFC 7807 problem-details envelope
+│   └── routers/             # auth, stations, rulesets, stats, foehn, org, ai,
+│                            #   wind_forecast, admin, health, pages
+├── collectors/              # One file per network: meteoswiss, slf, metar, holfuy,
+│                            #   windline, ecowitt, wunderground, fga, jfb, foehn,
+│                            #   forecast_swissmeteo, forecast_grid_swissmeteo, …
+│   ├── base.py              # BaseCollector ABC + bounded-concurrency helper
+│   └── utils.py             # Shared to_float() / normalize_wind_dir()
 ├── database/
 │   ├── models.py            # SQLAlchemy ORM
-│   ├── db.py                # init_db(), get_db(), column migrations
+│   ├── db.py                # init_db(), get_db(), column migrations, WAL pragmas
 │   └── influx.py            # InfluxDB client (write + all query methods)
 ├── models/                  # Pydantic schemas (weather, auth, rules)
 ├── rules/evaluator.py       # Live + forecast rule evaluation engine
-├── services/                # Auth helpers, weather stats
+├── services/                # Auth helpers, weather stats, station dedup
 ├── config.py                # YAML config loader (singleton)
 ├── scheduler.py             # APScheduler: collector + forecast + föhn jobs
 └── foehn_detection.py       # Föhn region definitions + pressure logic
@@ -91,16 +105,24 @@ static/
 ├── ruleset-editor.html      # Condition builder (supports ?org= mode)
 ├── ruleset-analysis.html    # Per-condition analysis (history + forecast)
 ├── org-dashboard.html       # Public traffic-light + authenticated org detail view
+├── wind-forecast.html       # ICON-CH1 wind grid map (8 altitude levels)
+├── forecast-accuracy.html   # Per-station forecast vs. actual
+├── forecast-analysis.html   # Worst-forecast station ranking (MAE + bias)
 ├── stats.html               # Flyability statistics dashboard
 ├── foehn.html               # Föhn monitor
 ├── admin.html               # Admin panel (users, orgs, collectors, föhn config)
 ├── stations.html + station-detail.html
+├── bootstrap.js             # renderNav() + bootstrapPage() — shared page bootstrap
 ├── i18n.js + i18n/          # Translation engine + EN/DE/FR/IT JSON files
-├── shared.css               # Mobile-responsive overrides
+├── shared.css               # Nav CSS + mobile-responsive overrides
+├── vendor/                  # Self-hosted Leaflet + Chart.js (no CDN, no npm)
 └── auth.js + login.html + register.html
+tests/backend/               # pytest suite (auth, rules, dedup, security, collectors)
 ```
 
 ## Development Status
+
+**Current version: v1.18.1** — published as `ghcr.io/Think4dvantage/Lenticularis:1.18.1` (and `:latest`).
 
 | Milestone | Status |
 |---|---|
@@ -123,8 +145,29 @@ static/
 | v1.6 — Help/FAQ page + AI input improvements + org ruleset isolation fix | ✅ Shipped |
 | v1.7 — Holfuy collector + forecast replay prefetch cache + map arrow fix | ✅ Shipped |
 | v1.8 — Replay performance: server cache, startup warm-up, 30m downsampling, all-button prefetch | ✅ Shipped |
+| v1.9 — Virtual station deduplication (union-find, 50 m GPS, manual overrides) | ✅ Shipped |
+| v1.10 — Replay cache correctness: post-collection invalidation + rewarm | ✅ Shipped |
+| v1.11 — Google OAuth login | ✅ Shipped |
+| v1.12 — Rules engine improvements, backtester, 30-day backfill, email notifications | ✅ Shipped |
+| v1.13 — Föhn Tracker rework: delta/trend conditions, per-user config | ✅ Shipped |
+| v1.14 — Ruleset gallery, FGA collector, wind forecast grid map | ✅ Shipped |
+| v1.15 — SwissMeteo (`lsmfapi`) ICON-CH ensemble forecast + band charts | ✅ Shipped |
+| v1.16 — lsmfapi full-stack fix: grid collector, dual Influx clients, 2-step replay query | ✅ Shipped |
+| v1.17 — Parallel forecast collect, chunked grid writes, stats table improvements | ✅ Shipped |
+| v1.18 — Security & performance batch, forecast accuracy analysis, Jungfraubahn collector, test harness | ✅ Shipped |
+| v1.18.1 — Self-hosted Leaflet/Chart.js, tightened CSP, static-asset caching | ✅ Shipped |
 
 Remaining work items are tracked as an unordered backlog in [.ai/context/features.md](.ai/context/features.md).
+
+## Testing
+
+```bash
+poetry install --with dev
+poetry run pytest -q
+```
+
+Backend tests live in `tests/backend/` and run on every push via GitHub Actions. They use an
+in-memory SQLite database and a stubbed InfluxDB client — no network, no real infrastructure.
 
 ## Configuration
 

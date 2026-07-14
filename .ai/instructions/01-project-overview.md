@@ -32,12 +32,17 @@ Core differentiator: **rules are fully pilot-owned and self-served** through a g
 ```
 src/lenticularis/
 ├── api/
-│   ├── main.py              # FastAPI app factory + lifespan; subdomain-aware root handler
+│   ├── main.py              # FastAPI app factory + lifespan; CSP/security headers, GZip,
+│   │                        #   static Cache-Control, global RFC 7807 exception handler
 │   ├── dependencies.py      # get_current_user, require_pilot, require_admin,
 │   │                        #   require_org_admin, require_org_member
+│   ├── errors.py            # api_error() — RFC 7807 problem-details envelope
 │   └── routers/             # One file per domain (auth, stations, rulesets, org, ai, …)
-│       └── org.py           # /api/org/{slug}/status|dashboard|rulesets
-├── collectors/              # One file per data network (meteoswiss, slf, metar, wunderground, …)
+│       ├── org.py           # /api/org/{slug}/status|dashboard|rulesets
+│       └── pages.py         # ALL HTML page routes + ?v= asset cache-busting
+├── collectors/              # One file per data network (meteoswiss, slf, metar, jfb, fga, …)
+│   ├── base.py              # BaseCollector ABC + _collect_concurrent()
+│   └── utils.py             # Shared to_float() / normalize_wind_dir() — never redefine
 ├── database/
 │   ├── models.py            # SQLAlchemy ORM (source of truth for SQLite schema)
 │   ├── db.py                # init_db(), get_db() dependency, column migrations
@@ -52,9 +57,12 @@ static/
 ├── i18n/{en,de,fr,it}.json  # Translation files — add a key to ALL 4 when needed
 ├── i18n.js                  # initI18n(), t(), applyDataI18n(), renderLangPicker()
 ├── auth.js                  # JWT storage, fetchAuth(), renderNavAuth()
-├── shared.css               # Mobile-responsive overrides (linked on every page)
+├── bootstrap.js             # renderNav(), bootstrapPage() — shared page bootstrap
+├── shared.css               # ALL nav CSS + mobile-responsive overrides (every page)
+├── vendor/                  # Self-hosted Leaflet + Chart.js — NO CDN, NO npm
 ├── org-dashboard.html       # Public traffic-light + authenticated detail for org subdomains
 └── *.html + *.js            # One HTML + inline <script type="module"> per page
+tests/backend/               # pytest suite — in-memory SQLite + FakeInflux, no network
 ```
 
 ---

@@ -226,6 +226,16 @@ Candidate integration surfaces:
 
 Implementation note: confirm schema stability with lsmfapi owner before writing to InfluxDB.
 
+**Observed counterpart (new, from the JFB collector):** the JFB stations form an 799 m → 3955 m
+elevation ladder within ~10 km (Lauterbrunnen-Heliport 799, Lauterbrunnen-Gässli 856, Grindelwald-Moos
+1267, Grütschalp 1469, Kleine Scheidegg 2071, Mittellegihütte 3340, Eiger 3955 — all reporting
+temperature + humidity). That gives a **measured vertical temperature profile**, i.e. a real lapse
+rate, and temperature−dewpoint spread converts directly to observed cloud base (~125 m per K). This
+is the observed counterpart to the forecast thermal grid above, and could validate it.
+
+Caveat: **exclude `jfb-hollandiahutte-sac`** — it declares 3248 m but reports ~928 hPa / 23 °C
+(a ~750 m reading). Upstream metadata/sensor bug, confirmed in the raw payload.
+
 ### Platform Features
 
 - **Org statistics page** — `/org/{slug}/stats`

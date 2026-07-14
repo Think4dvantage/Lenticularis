@@ -16,6 +16,15 @@
 
 **Never add npm or a build step.** The frontend is intentionally dependency-free. No webpack, vite, rollup, parcel, or any bundler. No `package.json`.
 
+**Never load a library from a CDN.** Leaflet and Chart.js are self-hosted in `static/vendor/`.
+The CSP in `api/main.py` is `script-src 'self'` / `style-src 'self'`, so any `unpkg.com` or
+`cdn.jsdelivr.net` reference is *blocked by the browser*, not just frowned upon. New libraries
+get downloaded into `static/vendor/<lib>/` and referenced by absolute `/static/…` path.
+
+**Bump the version in `pyproject.toml` whenever static assets change.** `pages.py` cache-busts
+assets with `?v=<app-version>` and `main.py` serves them `immutable, max-age=1y` — the version
+*is* the cache key. Changing an asset without bumping it pins the stale file in browsers for a year.
+
 ---
 
 ## Secrets

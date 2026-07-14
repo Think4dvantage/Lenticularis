@@ -174,3 +174,16 @@ New collector checklist:
 - Use `self._collect_concurrent(items, fn, limit=8)` for bounded parallel fetches (wraps asyncio gather with a semaphore).
 - Log every fetch with elapsed time and result count.
 - Use `asyncio.to_thread()` for any synchronous write to InfluxDB.
+- Register the class in `_COLLECTOR_REGISTRY` in `scheduler.py`, add a config block to
+  `config.yml.example`, and add the network to `NETWORK_PRIORITY` in `services/dedup.py`.
+- **Normalise units to the unified schema.** `WeatherMeasurement` is km/h, °C, %, hPa. Convert at
+  the collector boundary (e.g. `jfb.py` multiplies knots by 1.852) — never store a foreign unit.
+- **Map only what the schema already holds.** If a source field has no `WeatherMeasurement` field,
+  drop it — do not widen the model to fit one source. `jfb.py` drops `TD`/`DIFFTD` (derivable from
+  temperature + humidity) and `G1h` (1-hour gust ≠ `wind_gust`, which is the 10-min peak everywhere
+  else — storing it there would silently break cross-network comparability).
+- **Never synthesise a field the source does not measure.** JFB reports QFE only; `pressure_qff` is
+  left `None`, because QFF is not derivable from QFE + elevation (that is QNH) and a fake value
+  would corrupt the föhn pressure-gradient comparison. `fga.py` does the same.
+- **Guard against stale data.** Skip and `WARNING` any reading older than ~2 h. Some APIs return
+  hours-old data with a `200 OK` and no error (see the `currentDateTime` note in `jfb.py`).

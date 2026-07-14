@@ -147,7 +147,35 @@ Forecast evaluation reuses identical logic over hourly `valid_time` steps. Does 
 
 ---
 
+## Static Asset Delivery
+
+`api/routers/pages.py` + the security-headers middleware in `api/main.py`.
+
+| Concern | Behaviour |
+|---|---|
+| Libraries | Leaflet 1.9.4 + Chart.js v4 self-hosted in `static/vendor/`. **No CDN** — CSP is `script-src 'self'` / `style-src 'self'`, so external refs are browser-blocked. |
+| Cache-busting | `_page()` rewrites every local `href`/`src="/static/…"` to append `?v=<app-version>` at serve time. `_APP_VERSION` comes from `importlib.metadata.version("lenticularis")` → `pyproject.toml`. |
+| Versioned assets | `?v=` present → `Cache-Control: public, max-age=31536000, immutable` |
+| Unversioned assets | No `?v=` (locale JSON, ES-module imports) → `Cache-Control: public, max-age=600` |
+| HTML | `Cache-Control: no-cache` + `ETag: "<version>-<mtime>"`; revalidates to `304`. Re-read per request so dev volume-mount edits stay live. |
+
+**A version bump in `pyproject.toml` is mandatory when static assets change** — the version is
+the cache key. Without it, changed assets stay pinned in browsers for a year.
+
+---
+
 ## Deployment
+
+### Versioning & Image Publishing
+
+Version is single-sourced in `pyproject.toml`, read at runtime via `importlib.metadata`.
+
+Pushing a `v*` git tag triggers `.github/workflows/docker-publish.yml`, which builds multi-arch
+(amd64 + arm64) and publishes to `ghcr.io`. `docker/metadata-action` derives all tags from the
+one git tag — `v1.18.1` produces `:v1.18.1`, `:1.18.1`, `:1.18`, `:1`, **and `:latest`**. There
+is no separate "latest" tag to push.
+
+Tags must be 3-part semver (`v1.2.3`) or the semver patterns do not activate.
 
 ### Traefik Labels — list format only
 ```yaml
