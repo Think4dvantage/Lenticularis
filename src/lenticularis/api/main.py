@@ -286,10 +286,19 @@ def create_app() -> FastAPI:
             "Content-Security-Policy",
             "default-src 'self'; "
             "img-src 'self' data: https:; "
-            "script-src 'self' 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net; "
-            "style-src 'self' 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net; "
+            "script-src 'self' 'unsafe-inline'; "
+            "style-src 'self' 'unsafe-inline'; "
             "connect-src 'self'; frame-ancestors 'none'",
         )
+        # Static assets: versioned URLs (?v=<app-version>, injected by pages.py) are
+        # immutable for a year — a deploy bumps the version and busts them atomically.
+        # Unversioned hits (assets fetched directly by JS, e.g. locale JSON) get a short
+        # cache so they still refresh promptly after a deploy.
+        if request.url.path.startswith("/static/"):
+            if "v=" in (request.url.query or ""):
+                resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+            else:
+                resp.headers["Cache-Control"] = "public, max-age=600"
         return resp
 
     app.add_middleware(BaseHTTPMiddleware, dispatch=_security_headers)

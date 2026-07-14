@@ -13,3 +13,6 @@
 *.eot  binary
 *.gz   binary
 *.zip  binary
+
+# Vendored third-party assets — keep byte-exact, never normalize line endings
+static/vendor/** -text

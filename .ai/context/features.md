@@ -1,10 +1,26 @@
 # Feature History & Backlog
 
-## Current Version: v1.18 (shipped)
+## Current Version: v1.18.1 (shipped)
 
-Everything unreleased since v1.17 ships as one version: the security & performance
-remediation batch, the Forecast Accuracy Analysis page, the Jungfraubahn collector, and
-the test-harness repair. Tagged `v1.18.0` → image `ghcr.io/…/lenticularis:1.18.0` + `:latest`.
+Everything unreleased since v1.17: the security & performance remediation batch, the
+Forecast Accuracy Analysis page, the Jungfraubahn collector, the test-harness repair, and
+self-hosted frontend libraries + static-asset caching.
+
+### Static Asset Caching + Self-Hosted Libraries (v1.18.1)
+
+| Change | Detail |
+|---|---|
+| `static/vendor/` — new | Leaflet 1.9.4 (`leaflet.js`, `leaflet.css`) and Chart.js v4 (`chart.umd.min.js`, `chartjs-adapter-date-fns.bundle.min.js`) vendored locally. **All CDN references removed** — no page loads from `unpkg.com` or `cdn.jsdelivr.net` any more. |
+| `.gitattributes` | `static/vendor/** -text` — vendored assets must stay byte-exact; never line-ending-normalised. |
+| `api/main.py` — CSP tightened | `script-src` / `style-src` reduced to `'self' 'unsafe-inline'`; the `unpkg.com` and `cdn.jsdelivr.net` allowances are gone now that nothing is loaded cross-origin. |
+| `api/main.py` — `Cache-Control` on `/static/` | Versioned URLs (`?v=<app-version>`) → `public, max-age=31536000, immutable`. Unversioned hits (locale JSON, ES-module imports) → `public, max-age=600`. |
+| `api/routers/pages.py` — cache-busting | Every local `href="/static/…"` / `src="/static/…"` in a page is rewritten at serve time to append `?v=<app-version>`. A version bump busts every asset atomically on deploy. |
+| `api/routers/pages.py` — ETag | HTML is served `no-cache` with an ETag (`<version>-<mtime>`) and revalidates to `304`. HTML is re-read per request, so dev volume-mount edits stay live. |
+| `tests/backend/test_static_caching.py` | 6 tests: `no-cache` + ETag on HTML, 304 revalidation, assets versioned, no CDN refs remain, immutable on versioned assets, short cache on unversioned, vendored libs actually served. |
+
+Note: Leaflet's default `marker-icon.png` / `layers.png` are **not** vendored, and do not
+need to be — every marker in the app uses `L.divIcon` or `L.circleMarker`, and no
+`L.control.layers` is used, so those files are never requested.
 
 ### Jungfraubahn (JFB) Observation Collector
 

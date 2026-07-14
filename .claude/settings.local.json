@@ -33,7 +33,10 @@
       "WebFetch(domain:lsmfapi-dev.lg4.ch)",
       "Bash(ssh xpsex *)",
       "Bash(xargs wc -l)",
-      "Bash(sort -t: -k2 -rn)"
+      "Bash(sort -t: -k2 -rn)",
+      "WebFetch(domain:jfbmdlw-production.apps-customer.410400260094.ninegcp.ch)",
+      "Bash(poetry run *)",
+      "PowerShell(.venv\\\\Scripts\\\\python.exe -c \"import pyproj; print\\('ok', pyproj.__version__\\)\")"
     ]
   }
 }
