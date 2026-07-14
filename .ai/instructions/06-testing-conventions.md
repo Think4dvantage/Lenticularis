@@ -2,68 +2,232 @@
 
 ## Philosophy
 
-Testing is mandatory for any project built with this blueprint. It ensures that the AI-assisted development process remains reliable and that new changes don't introduce regressions.
+Backend logic must be test-gated. Tests give AI-assisted development a safety net — they catch regressions
+that static analysis misses and make refactors safe.
 
 ---
 
 ## Backend: Pytest
 
-Use `pytest` and `pytest-asyncio` for all backend tests.
+Framework: `pytest` + `pytest-asyncio`. Dev dependency group in `pyproject.toml`:
 
-### Location
-All backend tests live in `tests/backend/`.
+```toml
+[tool.pytest.ini_options]
+asyncio_mode = "auto"       # all async tests run automatically — no @pytest.mark.asyncio needed
+testpaths = ["tests"]
 
-### Standards
-- **Naming**: `test_*.py`
-- **Async**: Use `async def` and `@pytest.mark.asyncio` for any code that uses `await`.
-- **API Testing**: Use `httpx.AsyncClient` with the FastAPI `app` object.
-- **Database**: Use an in-memory SQLite database (`sqlite:///:memory:`) for fast, isolated tests.
+[tool.poetry.group.dev.dependencies]
+pytest = "^8"
+pytest-asyncio = "^0.24"
+httpx = "^0.27"
+```
 
-### Example API Test
+### File layout
 
-```python
-import pytest
-from httpx import AsyncClient
-from [package].api.main import app
-
-@pytest.mark.asyncio
-async def test_get_users():
-    async with AsyncClient(app=app, base_url="http://test") as ac:
-        response = await ac.get("/api/auth/users")
-    assert response.status_code == 200
+```
+tests/
+  __init__.py
+  backend/
+    __init__.py
+    conftest.py               # shared fixtures
+    test_auth.py
+    test_rules_evaluator.py
+    test_stations_security.py
+    test_dedup.py
 ```
 
 ---
 
-## Frontend: Playwright
+## conftest.py — core test harness
 
-Because this project uses a "no-build" frontend (Vanilla JS), we use `Playwright` for End-to-End (E2E) testing. This is the most reliable way to test that the UI behaves correctly in real browsers.
+Three concerns: config isolation, DB isolation, app wiring.
 
-### Location
-All frontend tests live in `tests/frontend/`.
-
-### Standards
-- **Naming**: `test_*.py` (using Playwright's Python library).
-- **Setup**: Playwright should point to the dev instance or a local test server.
-- **Interactions**: Use standard Playwright selectors (e.g., `page.get_by_text()`, `page.get_by_role()`).
-- **i18n**: Test with different locale settings to ensure translations load correctly.
-
-### Example E2E Test
+### 1. Config isolation (`autouse=True`)
 
 ```python
-import pytest
-from playwright.sync_api import Page, expect
+import lenticularis.config as _lenti_config
+from lenticularis.config import MainConfig, InfluxDBConfig, DatabaseConfig, AuthConfig, ...
 
-def test_login_page_renders(page: Page):
-    page.goto("http://localhost:8000/login")
-    expect(page.get_by_text("Email Address")).to_be_visible()
-    expect(page.locator("button[type='submit']")).to_be_visible()
+_JWT_SECRET = "test-secret-that-is-at-least-32-chars!!"
+_TEST_CONFIG = MainConfig(
+    influxdb=InfluxDBConfig(enabled=False),
+    collectors=[],
+    database=DatabaseConfig(path=":memory:"),
+    auth=AuthConfig(jwt_secret=_JWT_SECRET),
+    logging=LoggingConfig(level="warning", file=""),
+    api=APIConfig(),
+    ollama=OllamaConfig(enabled=False),
+)
+
+@pytest.fixture(autouse=True)
+def _patch_config(monkeypatch):
+    monkeypatch.setattr(_lenti_config, "_config", _TEST_CONFIG)
+```
+
+`get_config()` checks `_config` first, so setting it directly bypasses all file I/O at every call site.
+
+### 2. InfluxDB stub
+
+```python
+class FakeInflux:
+    """Safe no-op stand-in for InfluxClient. All methods return empty / None."""
+    def query_latest(self, station_id): return None
+    def query_latest_for_stations(self, station_ids): return {}
+    def query_history(self, *a, **kw): return []
+    def query_replay(self, *a, **kw): return []
+    def query_forecast_replay(self, *a, **kw): return {}
+    def query_forecast_for_stations(self, *a, **kw): return {}
+    def write_measurement(self, *a, **kw): pass
+    def write_forecast_grid(self, *a, **kw): pass
+    # add stubs for any new InfluxClient methods as needed
+```
+
+### 3. In-memory SQLite engine
+
+```python
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from lenticularis.database.db import init_db
+from lenticularis.models.base import Base
+
+@pytest.fixture(scope="session")
+def db_engine():
+    engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
+    init_db(engine)
+    yield engine
+    engine.dispose()
+```
+
+### 4. FastAPI test app (async fixture)
+
+```python
+from contextlib import asynccontextmanager
+import pytest_asyncio
+from httpx import AsyncClient, ASGITransport
+from lenticularis.api.main import create_app
+from lenticularis.api.dependencies import get_db
+
+@pytest_asyncio.fixture
+async def test_app(db_engine):
+    factory = sessionmaker(autocommit=False, autoflush=False, bind=db_engine)
+    fake_influx = FakeInflux()
+
+    @asynccontextmanager
+    async def _test_lifespan(app):
+        app.state.influx = fake_influx
+        app.state.station_registry = {}
+        app.state.display_registry = {}
+        app.state.virtual_members = {}
+        app.state.dedup_distance_m = 50.0
+        yield
+
+    app = create_app()
+    app.router.lifespan_context = _test_lifespan   # bypass real lifespan (scheduler, InfluxDB, etc.)
+
+    def _get_test_db():
+        db = factory()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    app.dependency_overrides[get_db] = _get_test_db
+    yield app
+
+@pytest_asyncio.fixture
+async def client(test_app):
+    async with AsyncClient(transport=ASGITransport(app=test_app), base_url="http://test") as ac:
+        yield ac
+```
+
+**Key**: use `app.router.lifespan_context = _test_lifespan` — NOT `app.state`, not a context manager override on the `AsyncClient`. This correctly bypasses the real lifespan (scheduler, InfluxDB connections, collector startup) while still running the dependency injection.
+
+---
+
+## Writing tests
+
+### API tests — use the `client` fixture
+
+```python
+async def test_login_returns_token(client):
+    await client.post("/api/auth/register", json={"username": "u", "email": "u@x.com", "password": "pw"})
+    r = await client.post("/api/auth/login", json={"username": "u", "password": "pw"})
+    assert r.status_code == 200
+    assert "access_token" in r.json()
+```
+
+### Pure-logic tests — use `SimpleNamespace` duck-typing
+
+For rules evaluator and dedup logic, avoid touching DB/Influx at all:
+
+```python
+from types import SimpleNamespace
+
+def _cond(station_id, field, operator, value_a, result_colour="red", **kw):
+    return SimpleNamespace(
+        station_id=station_id, field=field, operator=operator,
+        value_a=value_a, value_b=kw.get("value_b"),
+        result_colour=result_colour, group_id=None,
+    )
+
+def test_no_conditions_returns_green():
+    rs = SimpleNamespace(conditions=[], condition_groups=[], combination_logic="worst_wins")
+    result = evaluate_ruleset(rs, measurements={})
+    assert result.colour == "green"
+```
+
+### Auth helpers for protected endpoints
+
+```python
+_JWT_SECRET = "test-secret-that-is-at-least-32-chars!!"
+
+def _make_token(role="user"):
+    import jwt, time
+    payload = {"sub": "u1", "role": role, "exp": int(time.time()) + 3600}
+    return jwt.encode(payload, _JWT_SECRET, algorithm="HS256")
+
+async def test_admin_only_endpoint(client):
+    r = await client.get("/api/admin/users", headers={"Authorization": f"Bearer {_make_token('admin')}"})
+    assert r.status_code == 200
 ```
 
 ---
 
-## CI / Automation
+## CI
 
-- All tests should run automatically on every Pull Request via GitHub Actions.
-- Ensure the test suite is "green" before merging any new feature or fix.
-- **Coverage**: Aim for 80%+ coverage, but prioritize testing critical paths (Auth, Data Collection, API Contracts).
+GitHub Actions at `.github/workflows/test.yml`:
+
+```yaml
+name: Backend tests
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install poetry
+      - run: poetry install --with dev
+      - run: poetry run pytest --tb=short -q
+      - run: poetry run ruff check src/ tests/
+        continue-on-error: true
+```
+
+---
+
+## Coverage expectations
+
+| Area | What's tested |
+|---|---|
+| Auth | register, login, refresh, `/me`; duplicate user 409; wrong password 401 |
+| Rules evaluator | no conditions → green; worst_wins; majority_vote; AND groups; direction wrapping; pressure field mapping |
+| Station security | unknown ID → 404; special chars → 422/404; empty registry → `[]` |
+| Dedup | haversine sanity; proximity merge; priority (meteoswiss > holfuy); manual pairs; foehn exclusion; transitive cluster |
+
+No frontend tests (Playwright) are set up yet — the no-build frontend makes this straightforward to add later via `tests/frontend/`.

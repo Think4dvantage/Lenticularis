@@ -135,6 +135,19 @@ collectors:
     # Stations: Fieschertal, Bellwald Fleschen, Ried-Brig, Chaeserstatt,
     #           Jeizinen, Grimselpass, Hohbiel, Rothorli, Klaena
 
+  - name: "jfb"
+    enabled: false
+    interval_minutes: 10
+    config:
+      url: "https://jfbmdlw-production.apps-customer.410400260094.ninegcp.ch/api/weather/v01/observations/current"
+    # Jungfraubahn middleware API (Jungfrau region). No API key required.
+    # One request returns all stations. 13 collected; Interlaken and
+    # Jungfraujoch-Sphinx are skipped as duplicates of meteoswiss-INT / -JUN.
+    # Wind: Lauberhorn, Wengen-Dorf, Wengen-Lauberhorn (Ziel).
+    # Temp/humidity/pressure only: Eiger, Mittellegihütte, Hollandiahütte SAC,
+    #   Kleine Scheidegg, Grütschalp, Grindelwald-Moos, Jungfrau-Ostgrat,
+    #   Jungfraujoch, Lauterbrunnen-Gässli, Lauterbrunnen-Heliport
+
   - name: "ecowitt"
     enabled: false
     interval_minutes: 5

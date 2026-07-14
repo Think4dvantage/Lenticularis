@@ -117,7 +117,7 @@ Forecast evaluation reuses identical logic over hourly `valid_time` steps. Does 
 
 **Cache poisoning guard**: skip writing when `fc_frame_count == 0` and `include_forecast` is true — prevents obs-only entries from blocking forecast data.
 
-**Post-forecast invalidation**: `_patch_scheduler_forecast()` in `main.py` monkey-patches `scheduler._run_forecast_collector` to call `invalidate_forecast_replay_cache()` + fire new `warm_replay_cache()` after each successful run (`status == "ok"` and `measurement_count > 0`).
+**Post-forecast invalidation**: `main.py` lifespan wires a real async hook via `scheduler.on_forecast_run = _make_forecast_hook(influx, display_registry)`. After each successful forecast run (`status == "ok"` and `measurement_count > 0`), the hook calls `invalidate_forecast_replay_cache()` then spawns `warm_replay_cache()` as a background task.
 
 ---
 
@@ -140,7 +140,7 @@ Forecast evaluation reuses identical logic over hourly `valid_time` steps. Does 
 1. Exclude `foehn` network
 2. Union-find over pairs within 50 m (Haversine)
 3. Union manual pairs from `station_dedup_overrides`
-4. Pick canonical by priority: meteoswiss > slf > metar > holfuy > windline > ecowitt > wunderground
+4. Pick canonical by priority: meteoswiss > slf > metar > holfuy > windline > ecowitt > wunderground > jfb
 5. Non-canonical stations omitted from `display_registry`
 
 **History**: member must have data in 2 h slice BEFORE window to be included.

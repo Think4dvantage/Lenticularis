@@ -31,6 +31,7 @@ NETWORK_PRIORITY: list[str] = [
     "windline",
     "ecowitt",
     "wunderground",
+    "jfb",
 ]
 
 _EXCLUDED_NETWORKS = {"foehn"}

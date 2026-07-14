@@ -87,6 +87,7 @@ Frontend
 | SLF | None (open data) | wind speed/direction/gust, snow depth, temp | 30 min |
 | Wunderground/Ecowitt | API key | all personal weather station sensors | 5–15 min |
 | Holfuy | API key (`pw=` param) | wind speed/gust/direction, temp, humidity | 5 min |
+| Jungfraubahn (JFB) | None (open middleware API) | wind speed/gust/direction, temp, humidity, pressure_qfe | 10 min |
 | Open-Meteo | None (or commercial API key) | 5-day forecast (short + extended); grid forecast for wind-forecast map | layered schedule |
 | SwissMeteo (`lsmfapi-dev.lg4.ch`) | None (internal API) | ICON-CH ensemble forecast: probable + min/max for all fields; altitude-wind profiles per station | 60 min |
 

@@ -53,6 +53,50 @@ Each page has exactly **one** `<script type="module">` block that imports from `
 
 ---
 
+## Nav / Bootstrap
+
+`static/shared.css` owns **all** nav CSS (`.top-nav`, `.nav-brand`, `.nav-links`, `.nav-link`, `.nav-user`, `.nav-btn`, `.lang-btn`, `#navLangPicker`). **Never duplicate nav CSS in a page `<style>` block.**
+
+`static/bootstrap.js` provides two exports:
+
+| Export | Purpose |
+|---|---|
+| `renderNav(mount)` | Inject the standard 8-link `<nav>` into a mount element; marks current-page link `.active` by `pathname` match |
+| `bootstrapPage(opts)` | Full page bootstrap: `renderNav` (if `#appNav` found) → `initI18n` → `renderNavAuth` → `renderLangPicker` |
+
+### Standard pages — full migration
+
+Pages whose `<nav>` is exactly the standard 8-link nav use a `<div id="appNav"></div>` placeholder:
+
+```html
+<!-- In <body>, replaces <nav class="top-nav"> -->
+<div id="appNav"></div>
+```
+
+```javascript
+// module script — replaces manual initI18n + renderNavAuth + renderLangPicker calls
+import { bootstrapPage } from '/static/bootstrap.js';
+import { fetchAuth } from '/static/auth.js';   // keep other auth imports as needed
+await bootstrapPage({ page: 'pagename' });
+```
+
+### Non-standard pages — CSS-only migration
+
+Pages with page-specific nav content (extra status dot, extra nav links, auth-guarded redirect between init and auth render) **keep their own inline `<nav>`** — no `#appNav` div. `bootstrapPage` safely skips nav injection when `#appNav` is not found, but still runs initI18n/renderNavAuth/renderLangPicker.
+
+Pages and their variation:
+
+| Page | Reason for inline nav |
+|---|---|
+| `stations.html` | `nav-status` live-data dot + timestamp inside nav |
+| `index.html` | `nav-status` dot + `dispatchEvent('i18nReady')` between initI18n and renderNavAuth |
+| `admin.html` | Extra `/admin` nav link + `dispatchEvent('i18nReady')` |
+| `login.html` | Condensed 3-link nav |
+
+For these pages, remove any inline nav CSS block (now covered by `shared.css`) but leave the `<nav>` markup and the bootstrap script unchanged.
+
+---
+
 ## Dark Theme
 
 All pages share the same design system — match existing pages exactly:
@@ -70,6 +114,22 @@ All pages share the same design system — match existing pages exactly:
 ## Authentication
 
 Use `fetchAuth()` from `auth.js` for all authenticated API calls. It auto-refreshes the JWT and redirects to `/login` on session expiry.
+
+---
+
+## XSS — Rules That Must Not Be Broken
+
+**Never assign untrusted data to `element.innerHTML`, `element.outerHTML`, or `document.write()`.**
+
+Station names, ruleset names, user content from the API — all of it is untrusted. Use `element.textContent` for text. If markup must be rendered, pipe it through `sanitizeHTML()` (strip all tags except a known-safe allowlist defined per-page).
+
+```javascript
+// WRONG
+el.innerHTML = apiResponse.name;
+
+// RIGHT
+el.textContent = apiResponse.name;
+```
 
 ---
 

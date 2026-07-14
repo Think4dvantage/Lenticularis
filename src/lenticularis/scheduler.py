@@ -35,6 +35,7 @@ from lenticularis.collectors.forecast_grid_swissmeteo import ForecastGridSwissMe
 from lenticularis.collectors.forecast_openmeteo import ForecastOpenMeteoCollector
 from lenticularis.collectors.forecast_swissmeteo import ForecastSwissMeteoCollector
 from lenticularis.collectors.holfuy import HolfuyCollector
+from lenticularis.collectors.jfb import JfbCollector
 from lenticularis.collectors.metar import MetarCollector
 from lenticularis.collectors.meteoswiss import MeteoSwissCollector
 from lenticularis.collectors.slf import SlfCollector
@@ -58,6 +59,7 @@ _COLLECTOR_REGISTRY = {
     "ecowitt": EcowittCollector,
     "wunderground": WundergroundCollector,
     "fga": FgaCollector,
+    "jfb": JfbCollector,
 }
 
 # Registry: forecast collector name → class

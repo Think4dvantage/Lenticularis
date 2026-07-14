@@ -1,5 +1,34 @@
 # Feature History & Backlog
 
+## Shipped: Jungfraubahn (JFB) Observation Collector
+
+13 stations in the Jungfrau region from the Jungfraubahn middleware API. No auth, one
+request per cycle, 10 min interval. Zero schema change — every kept field maps onto the
+existing `WeatherMeasurement`.
+
+| Change | Detail |
+|---|---|
+| `collectors/jfb.py` — new | `JfbCollector(BaseCollector)`, `NETWORK = "jfb"`. Single JSON call returns all stations. Reuses `to_float` / `normalize_wind_dir` from `collectors/utils.py`. |
+| Field mapping | `FF`→`wind_speed`, `G10`→`wind_gust` (both **knots → km/h, ×1.852**), `DIR`→`wind_direction`, `TL`→`temperature`, `RH`→`humidity`, `QFE`→`pressure_qfe`. |
+| Dropped params | `TD` / `DIFFTD` (derivable from `TL`+`RH`); `G1h` (1-hour max gust — different semantics from `wind_gust`, which is the 10-min peak everywhere else in the stack). |
+| `pressure_qff` left `None` | QFF is **not** derivable from QFE + elevation (that is QNH). Synthesising it would inject several hPa of error at these altitudes — larger than the föhn gradients it would be compared against. Same choice as `fga.py`. |
+| New wind stations | `jfb-lauberhorn` (2315 m), `jfb-wengen-dorf` (1278 m), `jfb-wengen-lauberhorn-ziel` (1285 m) — the Wengen/Lauterbrunnen bowl, previously covered only by Jungfraujoch 8 km away. |
+| New atmosphere stations | Eiger (3955 m), Mittellegihütte, Hollandiahütte SAC, Kleine Scheidegg, Grütschalp, Grindelwald-Moos, Jungfrau-Ostgrat, Jungfraujoch, Lauterbrunnen-Gässli, Lauterbrunnen-Heliport — an 799 m → 3955 m elevation ladder within ~10 km. |
+| Excluded stations | `Interlaken` and `Jungfraujoch-Sphinx` skipped on ingest — exact duplicates of `meteoswiss-INT` / `meteoswiss-JUN` with fewer fields and coordinates rounded to 2–3 decimals (so 50 m proximity dedup would not catch them). |
+| `scheduler.py` / `services/dedup.py` | Registered in `_COLLECTOR_REGISTRY`; `"jfb"` appended to `NETWORK_PRIORITY` (lowest — MeteoSwiss wins any future proximity clash). |
+| `tests/backend/test_jfb_collector.py` | 15 tests: knots conversion, direction normalisation, dropped params, exclusions, timestamp reconstruction + midnight rollover, staleness skip, `currentDateTime` always sent. |
+
+**API quirks (must not regress):**
+- **`currentDateTime` is mandatory.** Called bare, the endpoint returns observations
+  ~8 h stale with no error. The collector always sends `?currentDateTime=<now>`.
+- `timeUTC` is time-only (`"11:30"`, no date) — reconstructed against the request date,
+  with midnight rollover. Readings older than 2 h are skipped.
+- **Known upstream data bug:** `Hollandiahütte SAC` declares elevation 3248 m but reports
+  ~928 hPa / 23 °C (a ~750 m reading). Their metadata or sensor mapping is wrong. Do not
+  build on that station's pressure or temperature.
+
+---
+
 ## In Progress: v1.18 (NOT YET VERIFIED — awaiting first successful data load)
 
 ### Forecast Accuracy Analysis Page
@@ -17,6 +46,21 @@
 | `i18n/en+de+fr+it.json` | `forecast_analysis.*` keys added. |
 
 See `.ai/context/forecast-analysis-wip.md` for full debug history and next steps.
+
+---
+
+## Security & Performance Remediation Batch (shipped alongside v1.17/v1.18 work)
+
+23-task security and performance pack (`specs/001-review-remediation/`). All tasks complete.
+
+| Phase | Tasks | Summary |
+|---|---|---|
+| Security | T01–T05 | Flux injection hardening; JWT fail-closed; webcam URL validation + XSS escaping; security-header + CORS middleware; OAuth tokens out of URL + `email_verified` check |
+| Performance | T06–T11 | GZip middleware; async event-loop unblocking in Influx handlers; scheduler writes offloaded via `asyncio.to_thread`; rule evaluator batches Influx fetch; bounded in-memory caches with lock; SQLite WAL + `busy_timeout=30000` |
+| Architecture | T12–T19 | RFC 7807 error envelope + global exception handler; pages router extracted from `main.py`; scheduler post-run hooks (replaces monkey-patching); Alembic dependency dropped; version single-sourced; SQLAlchemy 2.0 `select()` style; swallowed-exception fixes; InfluxDB duplicate field key + `_source` dedup no-op fixed |
+| Quality | T20–T23 | Pytest harness + GitHub Actions CI; collector `_to_float`/wind-dir/concurrency dedup (`collectors/utils.py`, `base._collect_concurrent`); frontend nav/bootstrap dedup (`static/bootstrap.js`, `static/shared.css`); remaining hardcoded strings → i18n keys |
+
+Key new files: `api/errors.py`, `api/routers/pages.py`, `collectors/utils.py`, `static/bootstrap.js`, `tests/backend/conftest.py + 4 test files`, `.github/workflows/test.yml`.
 
 ---
 

@@ -122,7 +122,55 @@ Add to `CollectorScheduler` in `scheduler.py`. Use `AsyncIOScheduler` + `Interva
 - **Async/await** for all I/O — HTTP calls, DB writes, InfluxDB queries.
 - **Pydantic v2** for all data schemas and config validation.
 - **SQLAlchemy 2.0 style** — use `select()`, not legacy `query()`.
-- **One router per domain** — never put all routes in `main.py`.
+- **One router per domain** — never put all routes in `main.py`; page routes go in `api/routers/pages.py`.
 - **Abstract base classes** (ABC + `@abstractmethod`) for collectors.
 - **Log extensively** — startup sequence, every request, every job run, every config value loaded. See `08-operability.md` for the full doctrine.
 - **No print statements** in production code — always use the `logging` module.
+
+---
+
+## Async Safety — Rules That Must Not Be Broken
+
+### Influx calls in async handlers
+
+InfluxDB client methods are **synchronous**. Calling them directly in an `async def` handler blocks the event loop and stalls all concurrent requests.
+
+```python
+# WRONG
+async def my_handler(..., request: Request):
+    data = request.app.state.influx.query_latest(station_id)
+
+# RIGHT
+data = await asyncio.to_thread(request.app.state.influx.query_latest, station_id)
+```
+
+The same rule applies to scheduler job methods that call influx `write_*`.
+
+### Batch before looping
+
+Never call `influx.query_latest(station_id)` in a per-station loop. Use `query_latest_for_stations(list[str])` once. See `rules/evaluator.py` for the canonical pattern.
+
+---
+
+## Error Responses
+
+Use `api_error()` from `api/errors.py` instead of `HTTPException(detail="string")`:
+
+```python
+from lenticularis.api.errors import api_error
+
+raise api_error(404, "not_found", "Station not found", f"No station '{station_id}'")
+```
+
+The global exception handler in `main.py` also wraps unhandled exceptions into the same RFC 7807 envelope.
+
+---
+
+## Collector Conventions
+
+New collector checklist:
+- Subclass `BaseCollector` from `collectors/base.py`.
+- Import `to_float` and `normalize_wind_dir` from `collectors/utils.py` — never redefine local copies.
+- Use `self._collect_concurrent(items, fn, limit=8)` for bounded parallel fetches (wraps asyncio gather with a semaphore).
+- Log every fetch with elapsed time and result count.
+- Use `asyncio.to_thread()` for any synchronous write to InfluxDB.
