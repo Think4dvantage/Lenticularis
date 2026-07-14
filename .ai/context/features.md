@@ -1,6 +1,12 @@
 # Feature History & Backlog
 
-## Shipped: Jungfraubahn (JFB) Observation Collector
+## Current Version: v1.18 (shipped)
+
+Everything unreleased since v1.17 ships as one version: the security & performance
+remediation batch, the Forecast Accuracy Analysis page, the Jungfraubahn collector, and
+the test-harness repair. Tagged `v1.18.0` → image `ghcr.io/…/lenticularis:1.18.0` + `:latest`.
+
+### Jungfraubahn (JFB) Observation Collector
 
 13 stations in the Jungfrau region from the Jungfraubahn middleware API. No auth, one
 request per cycle, 10 min interval. Zero schema change — every kept field maps onto the
@@ -29,9 +35,20 @@ existing `WeatherMeasurement`.
 
 ---
 
-## In Progress: v1.18 (NOT YET VERIFIED — awaiting first successful data load)
+### Backend Test Harness — two broken fixtures fixed
 
-### Forecast Accuracy Analysis Page
+| Change | Detail |
+|---|---|
+| `tests/backend/conftest.py` — `poolclass=StaticPool` | In-memory SQLite defaulted to `SingletonThreadPool` = one connection (and one empty DB) per thread. `create_all()` only populated the main thread's. Sync deps (`get_current_user`, `require_pilot`, `require_admin`) run in FastAPI's worker threadpool → `no such table: users`. `async def` handlers were unaffected, which made it look arbitrary. |
+| `tests/backend/conftest.py` — `app.state` set directly | httpx's `ASGITransport` never emits ASGI lifespan events, so `lifespan_context` never ran and `app.state.influx` was never set → `503 InfluxDB not available`. State is now assigned directly; the no-op lifespan is kept so the real scheduler/InfluxDB startup still cannot fire. |
+| `tests/backend/conftest.py` — `FakeInflux.query_latest_all_stations` | Missing stub, previously masked by the 503. |
+| `.ai/instructions/06-testing-conventions.md` | Corrected — it documented both broken patterns as the correct approach. |
+
+Backend suite: **59 passed, 0 failed** (was 57 passed, 2 failed).
+
+---
+
+### Forecast Accuracy Analysis Page (NOT YET VERIFIED — awaiting first successful data load)
 
 | Change | Detail |
 |---|---|
@@ -49,7 +66,7 @@ See `.ai/context/forecast-analysis-wip.md` for full debug history and next steps
 
 ---
 
-## Security & Performance Remediation Batch (shipped alongside v1.17/v1.18 work)
+### Security & Performance Remediation Batch
 
 23-task security and performance pack (`specs/001-review-remediation/`). All tasks complete.
 
@@ -64,7 +81,7 @@ Key new files: `api/errors.py`, `api/routers/pages.py`, `collectors/utils.py`, `
 
 ---
 
-## Current Version: v1.17 (shipped)
+## Previous Version: v1.17 (shipped)
 
 ### Replay fix, collector scheduling overhaul, stats table improvements
 
