@@ -127,6 +127,7 @@ This will sync the project's framework files with the central repository while k
     fix-bug.md                  ← Bug-fixing workflow (Reproduction First)
     add-api-router.md           ← Router scaffolding steps
     add-sqlite-table.md         ← Table + migration steps
+    add-collector.md            ← New weather network: collector + scheduler + dedup + UI + docs
     add-i18n-keys.md            ← Locale file update steps
     specify.md                  ← Write a feature specification
     clarify.md                  ← Resolve ambiguity in a spec
