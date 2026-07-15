@@ -1,6 +1,13 @@
 # Feature History & Backlog
 
-## Current Version: v1.18.1 (shipped)
+## Current Version: v1.18.2 (shipped)
+
+Patch: the Stations overview now lists **Jungfraubahn** as a filterable network, and the
+`jfb` badge is styled (dark-red) on every page that renders network badges (`stations`,
+`index` map popups, `station-detail`, `forecast-accuracy`, `forecast-analysis`) instead of
+falling through to grey `unknown`. Frontend-only; no backend change.
+
+## Previous Version: v1.18.1 (shipped)
 
 Everything unreleased since v1.17: the security & performance remediation batch, the
 Forecast Accuracy Analysis page, the Jungfraubahn collector, the test-harness repair, and
