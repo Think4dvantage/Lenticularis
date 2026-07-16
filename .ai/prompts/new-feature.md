@@ -7,8 +7,8 @@ Use this prompt as a checklist when implementing any non-trivial feature end-to-
 ## Backend Checklist
 
 - [ ] New SQLite table(s) → add ORM model in `models.py`, migration in `db.py:_run_column_migrations()` if adding columns to existing tables
-- [ ] New Pydantic schemas in `src/[package]/models/`
-- [ ] New router at `src/[package]/api/routers/{domain}.py` → register in `main.py`
+- [ ] New Pydantic schemas in `src/lenticularis/models/`
+- [ ] New router at `src/lenticularis/api/routers/{domain}.py` → register in `main.py`
 - [ ] Auth dependencies applied correctly (see `.ai/instructions/02-backend-conventions.md`)
 - [ ] New InfluxDB queries → add methods to `InfluxClient` in `influx.py`
 - [ ] Config keys for anything configurable → add to `config.py` Pydantic models AND `config.yml.example`

@@ -8,33 +8,37 @@ Standardizing API responses ensures that the frontend can handle both successes 
 
 ## Success Response
 
-For single entities, return the object directly. For collections, return a list wrapped in a `data` key.
+Single entities are returned directly, as the Pydantic `response_model`:
 
-### Single Entity
 ```json
-{
-  "id": "123",
-  "name": "Widget A",
-  "created_at": "2024-01-01T00:00:00Z"
-}
+{ "id": "123", "name": "Widget A", "created_at": "2024-01-01T00:00:00Z" }
 ```
 
-### Collection
-```json
-{
-  "data": [
-    { "id": "123", "name": "Widget A" },
-    { "id": "456", "name": "Widget B" }
-  ],
-  "total": 2
-}
-```
+**Collections have no single house style — this is a known inconsistency, not a rule.** Three shapes
+are in use today:
+
+| Shape | Where | Example |
+|---|---|---|
+| **Bare JSON array** (most common) | `response_model=list[X]` | `GET /api/rulesets`, `/gallery`, `/presets` → `[{...}, {...}]` |
+| `data` + endpoint-specific metadata | Composite/computed payloads | `/api/stations/replay` → `{start, end, station_count, obs_frame_count, data}`; `/{id}/history` → `{station_id, hours, count, data}` |
+| `data` + `total` | `admin.py` only | `{data: [...], total: N}` |
+
+Match the surrounding router rather than imposing a new shape. **Do not** retrofit an envelope onto
+an endpoint that returns a bare array — the frontend parses these shapes as they are, and changing
+one is a breaking change. Prefer a bare `response_model=list[X]` for a plain new collection.
+
+> The error envelope below **is** uniform and is enforced globally. Only the success shape varies.
 
 ---
 
-## Error Response (Problem Details)
+## Error Response (Typed Envelope)
 
-When an error occurs, the API must return a standardized error object. This is loosely based on [RFC 7807](https://datatracker.ietf.org/doc/html/rfc7807).
+When an error occurs, the API must return a standardized error object in the shape below.
+
+> This is the project's own envelope — **not** [RFC 7807](https://datatracker.ietf.org/doc/html/rfc7807),
+> which uses `type`/`title`/`status`/`detail`/`instance` under `application/problem+json`. Parts of the
+> codebase and older docs call it "RFC 7807"; that label is wrong and is being retired. Do not
+> reintroduce it.
 
 ### Format
 ```json
@@ -47,13 +51,19 @@ When an error occurs, the API must return a standardized error object. This is l
 }
 ```
 
-### Common Error Codes
-- `AUTH_REQUIRED`: Session expired or not provided.
-- `PERMISSION_DENIED`: User doesn't have the required role.
-- `ENTITY_NOT_FOUND`: Resource with the given ID does not exist.
-- `VALIDATION_FAILED`: Request payload is invalid (Pydantic error).
-- `CONFLICT`: Resource already exists or version mismatch.
-- `INTERNAL_ERROR`: Unexpected server-side failure.
+### Error Codes
+
+This is the complete vocabulary — `_STATUS_TO_CODE` in `main.py` emits nothing else.
+
+| Code | Status | Meaning |
+|---|---|---|
+| `VALIDATION_FAILED` | 400, 422 | Request payload invalid (also every Pydantic `RequestValidationError`) |
+| `AUTH_REQUIRED` | 401 | Session expired or not provided |
+| `PERMISSION_DENIED` | 403 | User lacks the required role |
+| `ENTITY_NOT_FOUND` | 404 | Resource with the given ID does not exist |
+| `CONFLICT` | 409 | Resource already exists or version mismatch |
+| `INTERNAL_ERROR` | ≥500 | Unexpected server-side failure |
+| `ERROR` | any other 4xx | Fallback for an unmapped non-5xx status (e.g. 429). Avoid relying on it — raise `AppException` with a real code instead |
 
 ### Example: Validation Error
 ```json
@@ -85,22 +95,25 @@ When an error occurs, the API must return a standardized error object. This is l
 
 ## Implementation (FastAPI)
 
-Use a global exception handler to catch common errors and return the standardized JSON format.
+`api/errors.py` defines `AppException` and the `_envelope(code, message, details)` helper.
+`create_app()` in `api/main.py` registers **three** handlers, all emitting that envelope:
+
+| Handler | Code source |
+|---|---|
+| `AppException` | `exc.code` verbatim — the only way to set a specific code |
+| `HTTPException` | Derived from status via `_STATUS_TO_CODE`; unmapped ≥500 → `INTERNAL_ERROR`, else `ERROR` |
+| `RequestValidationError` | Always 422 `VALIDATION_FAILED`, with `{"errors": exc.errors()}` as details |
+
+`_STATUS_TO_CODE` maps 400→`VALIDATION_FAILED`, 401→`AUTH_REQUIRED`, 403→`PERMISSION_DENIED`,
+404→`ENTITY_NOT_FOUND`, 409→`CONFLICT`. Both `AppException` and `HTTPException` handlers log at
+`ERROR` when the status is ≥500.
 
 ```python
-from fastapi import Request
-from fastapi.responses import JSONResponse
+from lenticularis.api.errors import AppException
 
-@app.exception_handler(AppException)
-async def app_exception_handler(request: Request, exc: AppException):
-    return JSONResponse(
-        status_code=exc.status_code,
-        content={
-            "error": {
-                "code": exc.code,
-                "message": exc.message,
-                "details": exc.details
-            }
-        }
-    )
+raise AppException(404, "ENTITY_NOT_FOUND", "Station not found", {"station_id": station_id})
 ```
+
+**Current state:** every router raises `HTTPException`, not `AppException`, so codes are
+status-derived in practice. That is acceptable — the envelope holds either way. Reach for
+`AppException` when the status alone does not identify the failure, or the frontend needs `details`.

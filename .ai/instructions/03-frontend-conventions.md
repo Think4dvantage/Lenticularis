@@ -48,10 +48,8 @@ key. Shipping changed assets without bumping it leaves stale files pinned in bro
 
 ## Internationalisation (i18n)
 
-Every user-visible string must have a key in all locale files simultaneously.
-[Adjust the locale list to match the project's supported languages.]
-
-Default: `static/i18n/en.json`, `de.json`, `fr.json`, `it.json`
+Every user-visible string must have a key in all four locale files simultaneously:
+`static/i18n/en.json`, `de.json`, `fr.json`, `it.json`
 
 English (`en.json`) is the source of truth. Use the same nested key structure as existing keys.
 
@@ -209,13 +207,14 @@ Each page: one `.html` file + inline `<script type="module">` or companion `.js`
 Every `console.*` call must start with a bracketed page/module prefix so logs can be filtered in DevTools:
 
 ```
-[App:map]      map page
-[App:auth]     auth / login page
-[App:admin]    admin panel
-[App:<page>]   derive from the HTML filename
+[Lenti:map]      map page
+[Lenti:auth]     auth / login page
+[Lenti:admin]    admin panel
+[Lenti:<page>]   derive from the HTML filename
 ```
 
-[Update the prefix namespace (`App`) to match the project name.]
+The namespace is `Lenti` — used by every page except `static/forecast-analysis.js`, which still
+emits `[App:…]` and is the odd one out. Match `Lenti` in new code.
 
 ### Throttling at high speed
 

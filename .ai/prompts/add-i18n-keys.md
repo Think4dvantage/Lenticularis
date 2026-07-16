@@ -12,8 +12,6 @@ Add i18n keys for `{feature}` following the project conventions:
    - `static/i18n/fr.json` — French
    - `static/i18n/it.json` — Italian
 
-   [Adjust locale list to match the project's supported languages.]
-
 2. Use the existing nested key structure. Example:
    ```json
    {

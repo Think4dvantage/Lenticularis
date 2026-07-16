@@ -39,7 +39,7 @@ Paragliding weather decision-support system for Switzerland. Collects data from 
 | Relational DB | SQLite via SQLAlchemy |
 | Scheduler | APScheduler |
 | HTTP client | httpx (async) |
-| Auth | JWT via `python-jose`, passwords via `passlib`, Google OAuth |
+| Auth | JWT via `python-jose`, passwords via `bcrypt`, Google OAuth |
 | Config | YAML (`config.yml`) validated by Pydantic |
 | Frontend | Vanilla JS + Leaflet.js + Chart.js — self-hosted, no build step |
 | Testing | pytest + pytest-asyncio (`tests/backend/`) |
@@ -57,7 +57,7 @@ Paragliding weather decision-support system for Switzerland. Collects data from 
 ### Quick start (Docker)
 
 ```bash
-git clone https://github.com/yourusername/lenticularis.git
+git clone https://github.com/Think4dvantage/Lenticularis.git
 cd lenticularis
 cp config.yml.example config.yml
 # Edit config.yml — set InfluxDB token, collector API keys, JWT secret
@@ -81,7 +81,7 @@ src/lenticularis/
 ├── api/
 │   ├── main.py              # FastAPI app factory + lifespan; security headers, GZip, CSP
 │   ├── dependencies.py      # get_current_user, require_pilot, require_admin, require_org_*
-│   ├── errors.py            # api_error() — RFC 7807 problem-details envelope
+│   ├── errors.py            # AppException + _envelope() — {"error":{code,message,details}}
 │   └── routers/             # auth, stations, rulesets, stats, foehn, org, ai,
 │                            #   wind_forecast, admin, health, pages
 ├── collectors/              # One file per network: meteoswiss, slf, metar, holfuy,

@@ -2,10 +2,10 @@
 
 ## New API Router
 
-Create `src/[package]/api/routers/<domain>.py`, register it in `main.py`.
+Create `src/lenticularis/api/routers/<domain>.py`, register it in `main.py`.
 
 ```python
-# src/[package]/api/routers/widgets.py
+# src/lenticularis/api/routers/widgets.py
 router = APIRouter(prefix="/api/widgets", tags=["widgets"])
 
 @router.get("")
@@ -15,7 +15,7 @@ def list_widgets(current_user: User = Depends(get_current_user), db: Session = D
 
 ```python
 # main.py
-from [package].api.routers import widgets as widgets_router
+from lenticularis.api.routers import widgets as widgets_router
 app.include_router(widgets_router.router)
 ```
 
@@ -93,14 +93,22 @@ Add a method to `InfluxClient` in `influx.py`. Keep Flux query strings inside th
 
 ## Auth Dependencies
 
-Import from `[package].api.dependencies`:
+Import from `lenticularis.api.dependencies`:
 
 | Dependency | Who passes |
 |---|---|
-| `get_current_user` | Any logged-in user |
-| `require_admin` | `admin` only |
+| `get_current_user` | Any user with a valid token **and `is_active`**; 401 otherwise |
+| `get_current_user_optional` | Same, but returns `None` instead of raising. For endpoints with both a public and an authenticated view. **Does not check `is_active`** — see the caveat below |
+| `require_pilot` | **Denylist, not an allowlist** — rejects `customer` and `org_pilot` only. `pilot`, `admin`, *and* `org_admin` all pass. Guards write operations |
+| `require_admin` | `role == "admin"` only |
+| `require_org_admin` | `admin` bypasses; otherwise `org_admin` **with `org_id` set** |
+| `require_org_member` | `admin` bypasses; otherwise `org_admin` or `org_pilot` **with `org_id` set** |
 
-[Add additional role-based dependencies here as they are introduced.]
+System `admin` bypasses both org guards. All rejections are 403 except `get_current_user`'s 401.
+
+> **Caveat:** `get_current_user_optional` resolves the user without an `is_active` check, so a
+> deactivated account still returns a `User` there while `get_current_user` 401s. Do not use it to
+> guard anything that depends on the account being live.
 
 ---
 
@@ -154,15 +162,23 @@ Never call `influx.query_latest(station_id)` in a per-station loop. Use `query_l
 
 ## Error Responses
 
-Use `api_error()` from `api/errors.py` instead of `HTTPException(detail="string")`:
+All errors leave the app as `{"error": {"code", "message", "details"}}`. Handlers in `api/main.py`
+enforce this for `AppException`, `HTTPException`, and `RequestValidationError` alike.
+
+Raise `AppException` from `api/errors.py` when you need a specific code or structured `details`:
 
 ```python
-from lenticularis.api.errors import api_error
+from lenticularis.api.errors import AppException
 
-raise api_error(404, "not_found", "Station not found", f"No station '{station_id}'")
+raise AppException(404, "ENTITY_NOT_FOUND", "Station not found", {"station_id": station_id})
 ```
 
-The global exception handler in `main.py` also wraps unhandled exceptions into the same RFC 7807 envelope.
+`code` is the UPPERCASE vocabulary from `07-api-conventions.md`; `details` is a dict.
+
+A plain `HTTPException` is also acceptable — `main.py` derives the code from the status
+(`_STATUS_TO_CODE`) and wraps it identically. Every router currently takes this path. Reach for
+`AppException` only when the status alone does not identify the failure, or the frontend needs
+`details`. See `04-constraints.md` for the full rule.
 
 ---
 

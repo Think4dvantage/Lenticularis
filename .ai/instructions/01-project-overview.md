@@ -20,7 +20,7 @@ Core differentiator: **rules are fully pilot-owned and self-served** through a g
 | Relational DB | SQLite via SQLAlchemy (no Alembic — see backend conventions) |
 | Scheduler | APScheduler |
 | HTTP client | httpx (async) |
-| Auth | JWT via `python-jose`, passwords via `passlib` |
+| Auth | JWT via `python-jose` (`from jose import jwt`), passwords via `bcrypt` directly (**not** `passlib` — it is not a dependency) |
 | Config | YAML (`config.yml`) validated by Pydantic |
 | Frontend | Vanilla JS + Leaflet.js + Chart.js |
 | Container | Docker + docker-compose |
@@ -33,10 +33,10 @@ Core differentiator: **rules are fully pilot-owned and self-served** through a g
 src/lenticularis/
 ├── api/
 │   ├── main.py              # FastAPI app factory + lifespan; CSP/security headers, GZip,
-│   │                        #   static Cache-Control, global RFC 7807 exception handler
-│   ├── dependencies.py      # get_current_user, require_pilot, require_admin,
-│   │                        #   require_org_admin, require_org_member
-│   ├── errors.py            # api_error() — RFC 7807 problem-details envelope
+│   │                        #   static Cache-Control, global error-envelope handlers
+│   ├── dependencies.py      # get_current_user, get_current_user_optional, require_pilot,
+│   │                        #   require_admin, require_org_admin, require_org_member
+│   ├── errors.py            # AppException + _envelope() — {"error":{code,message,details}}
 │   └── routers/             # One file per domain (auth, stations, rulesets, org, ai, …)
 │       ├── org.py           # /api/org/{slug}/status|dashboard|rulesets
 │       └── pages.py         # ALL HTML page routes + ?v= asset cache-busting

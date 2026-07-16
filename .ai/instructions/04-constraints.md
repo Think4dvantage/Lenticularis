@@ -210,17 +210,32 @@ except Exception:
 
 Background tasks that swallow exceptions silently stop doing their job with no visible signal.
 
-### RFC 7807 error envelope (T12)
+### Typed error envelope (T12)
 
-**Never return a raw `HTTPException(detail="plain string")`.** Use `api_error()` from `api/errors.py`:
+**Every error response must leave the app as `{"error": {"code", "message", "details"}}`.** Three
+handlers in `api/main.py` guarantee this — nothing else may return a bare `JSONResponse` for an error.
+
+To attach a *specific* error code, raise `AppException` from `api/errors.py`:
 
 ```python
-from lenticularis.api.errors import api_error
+from lenticularis.api.errors import AppException
 
-raise api_error(404, "not_found", "Station not found", f"No station with id '{station_id}'")
+raise AppException(404, "ENTITY_NOT_FOUND", "Station not found", {"station_id": station_id})
 ```
 
-The global exception handler in `main.py` catches unhandled exceptions and wraps them in the same envelope. Raw string `detail` fields break the contract the frontend depends on.
+`code` is the UPPERCASE vocabulary from `07-api-conventions.md`; `details` is a **dict**, not a string.
+
+Raising a plain `HTTPException` is also safe — the `HTTPException` handler in `main.py` maps the
+status onto a code via `_STATUS_TO_CODE` (400→`VALIDATION_FAILED`, 401→`AUTH_REQUIRED`,
+403→`PERMISSION_DENIED`, 404→`ENTITY_NOT_FOUND`, 409→`CONFLICT`, other 5xx→`INTERNAL_ERROR`,
+else `ERROR`) and wraps it in the same envelope. **This is what every router currently does.**
+
+Use `AppException` when the status code alone does not identify the failure (two different 409s,
+a 400 that is not a validation error) or when the frontend needs `details`. Otherwise `HTTPException`
+is fine — the envelope holds either way.
+
+> Not RFC 7807. RFC 7807 is `type`/`title`/`status`/`detail`/`instance` under
+> `application/problem+json`. This envelope is the project's own shape — do not rename it back.
 
 ---
 

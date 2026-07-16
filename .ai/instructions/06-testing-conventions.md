@@ -179,48 +179,71 @@ was missed exactly this way, hidden behind the 503 above until the lifespan bug 
 
 ### API tests — use the `client` fixture
 
+There is **no `username` field anywhere** — accounts are keyed on `email`, with a separate
+`display_name`. Register takes `email` + `display_name` + `password`; login takes `email` + `password`.
+
 ```python
 async def test_login_returns_token(client):
-    await client.post("/api/auth/register", json={"username": "u", "email": "u@x.com", "password": "pw"})
-    r = await client.post("/api/auth/login", json={"username": "u", "password": "pw"})
+    await client.post("/api/auth/register",
+                      json={"email": "u@x.com", "display_name": "U", "password": "pw"})
+    r = await client.post("/api/auth/login", json={"email": "u@x.com", "password": "pw"})
     assert r.status_code == 200
     assert "access_token" in r.json()
 ```
 
 ### Pure-logic tests — use `SimpleNamespace` duck-typing
 
-For rules evaluator and dedup logic, avoid touching DB/Influx at all:
+For rules evaluator and dedup logic, avoid touching DB/Influx at all. Duck-type the ORM rows with
+`SimpleNamespace` and call `_evaluate_from_station_data` directly — it returns a
+`(decision, results)` tuple. See `tests/backend/test_rules_evaluator.py` for the canonical helpers.
 
 ```python
 from types import SimpleNamespace
+from lenticularis.rules.evaluator import _evaluate_from_station_data
 
-def _cond(station_id, field, operator, value_a, result_colour="red", **kw):
+def _rs(conditions, site_type="launch", combination_logic="worst_wins"):
     return SimpleNamespace(
-        station_id=station_id, field=field, operator=operator,
-        value_a=value_a, value_b=kw.get("value_b"),
-        result_colour=result_colour, group_id=None,
+        id="rs-test", owner_id="owner", site_type=site_type,
+        combination_logic=combination_logic, conditions=conditions,
+    )
+
+def _cond(station_id, field, operator, value_a, result_colour, *,
+          value_b=None, group_id=None, station_b_id=None):
+    return SimpleNamespace(
+        id=f"{station_id}-{field}", station_id=station_id, station_b_id=station_b_id,
+        field=field, operator=operator, value_a=value_a, value_b=value_b,
+        result_colour=result_colour, group_id=group_id, sort_order=0,
     )
 
 def test_no_conditions_returns_green():
-    rs = SimpleNamespace(conditions=[], condition_groups=[], combination_logic="worst_wins")
-    result = evaluate_ruleset(rs, measurements={})
-    assert result.colour == "green"
+    decision, _ = _evaluate_from_station_data(_rs([]), station_data={})
+    assert decision == "green"
 ```
+
+The ruleset namespace needs **no** `condition_groups` attribute — the evaluator only reads
+`group_id` off each condition. There is no `evaluate_ruleset()` function.
 
 ### Auth helpers for protected endpoints
 
+Use the **`make_token` fixture** from `conftest.py`. It returns a ready `Authorization` header dict
+and mints the token through the real `create_access_token(user_id, role)`:
+
 ```python
-_JWT_SECRET = "test-secret-that-is-at-least-32-chars!!"
-
-def _make_token(role="user"):
-    import jwt, time
-    payload = {"sub": "u1", "role": role, "exp": int(time.time()) + 3600}
-    return jwt.encode(payload, _JWT_SECRET, algorithm="HS256")
-
-async def test_admin_only_endpoint(client):
-    r = await client.get("/api/admin/users", headers={"Authorization": f"Bearer {_make_token('admin')}"})
+async def test_admin_only_endpoint(client, make_token):
+    r = await client.get("/api/admin/users", headers=make_token("u1", "admin"))
     assert r.status_code == 200
 ```
+
+**Never hand-roll a JWT in a test.** Three reasons it will not work:
+
+1. The stack signs with **python-jose** (`from jose import jwt`), not PyJWT — `import jwt` is the
+   wrong library entirely.
+2. `decode_access_token()` rejects any token whose payload lacks `type: "access"`. A hand-built
+   `{"sub", "role", "exp"}` payload is refused even when the signature is valid.
+3. `get_current_user` resolves `db.get(User, payload["sub"])` and requires `is_active` — the user
+   row must **exist in the test DB**. A token for a fabricated `"u1"` yields 401, not 200.
+
+Passwords are hashed with **`bcrypt` directly** — `passlib` is not a dependency of this project.
 
 ---
 
