@@ -1,0 +1,182 @@
+openapi: 3.1.0
+info:
+  title: Public Rule Sets on the Map — contracts
+  version: 0.1.0
+  description: >
+    Contracts introduced by specs/002-public-rulesets. Two read routes and one admin toggle.
+    The anonymous route is the only unauthenticated route in the rule set surface, so its payload
+    is deliberately narrow (spec D2 / FR-007) and does not reuse RuleSetOut.
+
+paths:
+  /api/public/rulesets/map:
+    get:
+      summary: Curated example rule sets for the anonymous map
+      description: >
+        Returns rule sets that are BOTH curated by an admin (is_showcase) AND published by their
+        owner (is_public) — the conjunction is checked at read time, per D4/FR-012. Neither flag
+        alone grants anonymous visibility. An owner un-publishing hides the rule set here
+        immediately, while retaining the admin's curation choice (FR-013).
+
+        No authentication. Response is served from a shared 60 s cache, so cost does not scale with
+        visitors (NFR-002).
+
+        Rule sets are omitted when they are unpositioned, cannot be evaluated against real data
+        (FR-010 — any no_data_stations), or are opportunity sites that are not fully green (FR-009).
+
+        This route is identical for every caller and therefore safely cacheable. It never applies
+        proximity suppression — that is per-viewer and belongs to the authenticated route (research R6).
+      operationId: getPublicRulesetMap
+      security: []          # explicitly unauthenticated
+      tags: [public]
+      responses:
+        "200":
+          description: Curated markers. An empty list is a valid, expected response.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicMapResponse"
+        "503":
+          description: Time-series backend unavailable.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /api/rulesets/public-map:
+    get:
+      summary: Other people's published rule sets, for a signed-in viewer
+      description: >
+        Returns rule sets published by other owners (is_public), excluding any within 500 m of one of
+        the viewer's own rule sets (FR-005 / D1), and excluding the viewer's own rule sets entirely
+        (they are already drawn by the existing authenticated path).
+
+        Per-viewer output — MUST NOT share the anonymous cache (research R6). Broader than the
+        anonymous route: signed-in discovery is any published rule set, not only curated ones (FR-008).
+      operationId: getMemberPublicRulesetMap
+      tags: [rulesets]
+      responses:
+        "200":
+          description: Markers, after proximity suppression.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicMapResponse"
+        "401":
+          description: Not authenticated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /api/rulesets/{ruleset_id}/set_showcase:
+    put:
+      summary: Mark or unmark a rule set as a curated public example (admin only)
+      description: >
+        Admin-only curation toggle (FR-011). Distinct from is_preset, which serves a different
+        purpose (template offering).
+
+        Setting is_showcase=true REQUIRES the rule set to be published by its owner (is_public=true)
+        — see D4/FR-012. An admin may not place a private rule set on the public internet; the
+        owner's publish decision is consent, and consent is a precondition. Attempting it is refused
+        with 409, never silently accepted: an admin who believes they have curated something must
+        not be wrong about that.
+
+        Setting is_showcase=false is always allowed regardless of is_public — withdrawing curation
+        can never be blocked.
+      operationId: setRulesetShowcase
+      tags: [rulesets, admin]
+      parameters:
+        - name: ruleset_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: is_showcase
+          in: query
+          required: true
+          schema: { type: boolean }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RuleSetOut" }
+        "403":
+          description: Not an admin.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: No such rule set.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "409":
+          description: >
+            CONFLICT — is_showcase=true requested for a rule set whose owner has not published it
+            (is_public=false). The request conflicts with current state rather than being malformed,
+            hence 409 rather than 422. Resolve by asking the owner to publish it first.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+components:
+  schemas:
+    PublicRuleSetMarker:
+      type: object
+      description: >
+        The COMPLETE set of what an anonymous visitor may learn about a rule set (D2 / FR-007).
+        Adding a field here is a privacy decision and requires revisiting NFR-001.
+      required: [id, name, lat, lon, site_type, decision]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          description: Stable key for the client. Not sensitive — all other rule set routes require auth and ownership.
+        name:
+          type: string
+        lat:
+          type: number
+          format: double
+        lon:
+          type: number
+          format: double
+        site_type:
+          type: string
+          enum: [launch, landing, opportunity]
+        decision:
+          type: string
+          enum: [green, orange, red]
+          description: >
+            Always backed by real data. Rule sets resting on missing data are omitted rather than
+            reported green (FR-010) — the evaluator's "unknown = benefit of the doubt" green would
+            otherwise mislead visitors (research R4).
+
+    PublicMapResponse:
+      type: object
+      required: [data, generated_at]
+      additionalProperties: false
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/PublicRuleSetMarker" }
+        generated_at:
+          type: string
+          format: date-time
+          description: When the underlying evaluation ran, so the client can show freshness (NFR-004).
+
+    RuleSetOut:
+      type: object
+      description: Existing model, unchanged. Referenced only by the admin toggle response.
+
+    Error:
+      type: object
+      description: Standard envelope from api/errors.py — see .ai/instructions/07-api-conventions.md.
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum: [VALIDATION_FAILED, AUTH_REQUIRED, PERMISSION_DENIED, ENTITY_NOT_FOUND, CONFLICT, INTERNAL_ERROR, ERROR]
+            message: { type: string }
+            details: { type: object }

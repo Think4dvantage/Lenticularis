@@ -1,0 +1,173 @@
+openapi: 3.1.0
+info:
+  title: Named Condition Groups — contracts
+  version: 0.1.0
+  description: >
+    Contracts introduced by specs/003-condition-group-names. No new routes: this feature extends
+    two existing payloads. Groups are created, named and deleted through the same wholesale save the
+    editor already performs (research R3), because conditions are replaced atomically and groups must
+    be replaced with them.
+
+paths:
+  /api/rulesets/{ruleset_id}/conditions:
+    put:
+      summary: Replace a rule set's conditions AND its groups, atomically
+      description: >
+        EXTENDED, not new. Previously replaced only conditions; now replaces groups in the same call.
+
+        Both lists are a full replacement. Validation is fail-closed: every non-null
+        condition.group_id MUST appear in groups, or the request is rejected with VALIDATION_FAILED.
+
+        This strictness is deliberate. If groups were optional and defaulted to empty, any caller
+        omitting the field would silently delete every group name the pilot had typed. A 422 is
+        vastly preferable to silent data loss (research R3).
+      operationId: replaceConditions
+      tags: [rulesets]
+      parameters:
+        - name: ruleset_id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ConditionsReplaceRequest" }
+      responses:
+        "200":
+          description: Replaced. Returns the updated rule set detail, including groups.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RuleSetDetail" }
+        "422":
+          description: >
+            A condition references a group_id absent from `groups`, or a group is malformed.
+            Nothing is written — the replace is atomic.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: Read-only account, or not the owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: No such rule set.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /api/rulesets/{ruleset_id}:
+    get:
+      summary: Rule set detail — now includes groups
+      description: >
+        EXTENDED. RuleSetDetail gains `condition_groups`, so the editor can rebuild groups from
+        stored data rather than inferring them from group_id collisions.
+      operationId: getRuleset
+      tags: [rulesets]
+      parameters:
+        - name: ruleset_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Rule set detail.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RuleSetDetail" }
+
+components:
+  schemas:
+    ConditionGroupIn:
+      type: object
+      required: [id]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          description: >
+            Client-minted, matching how group_id is already produced today
+            (static/ruleset-editor.html:758). Must be unique within the rule set.
+        name:
+          type: [string, "null"]
+          maxLength: 120
+          description: >
+            The pilot's label. null means unnamed (FR-004). Legacy groups backfilled by the migration
+            are unnamed. Plain text, no formatting. Not required to be unique within a rule set —
+            it is a memo, not a key.
+        sort_order:
+          type: integer
+          default: 0
+
+    ConditionGroupOut:
+      allOf:
+        - $ref: "#/components/schemas/ConditionGroupIn"
+      description: >
+        A group MAY legitimately contain zero conditions (FR-011 / D1). Such a group is inert: it has
+        no effect whatsoever on the decision. Consumers must not treat an empty group as satisfied.
+
+    ConditionsReplaceRequest:
+      type: object
+      required: [conditions]
+      additionalProperties: false
+      properties:
+        conditions:
+          type: array
+          items: { $ref: "#/components/schemas/RuleConditionCreate" }
+        groups:
+          type: array
+          default: []
+          items: { $ref: "#/components/schemas/ConditionGroupIn" }
+          description: >
+            Full replacement, same as conditions. Every non-null condition.group_id must appear here.
+            May contain groups with no conditions — that is valid and inert.
+
+    RuleConditionCreate:
+      type: object
+      description: Existing model, unchanged. `group_id` now references ConditionGroupIn.id.
+      properties:
+        group_id:
+          type: [string, "null"]
+          description: null = standalone condition. Non-null MUST match a group in `groups`.
+
+    ConditionResult:
+      type: object
+      description: Existing model — gains one presentation-only field.
+      properties:
+        group_id:
+          type: [string, "null"]
+          description: Already present.
+        group_all_matched:
+          type: [boolean, "null"]
+          description: Already present.
+        group_name:
+          type: [string, "null"]
+          description: >
+            NEW. The group's label, for explaining a decision in words (FR-007). Populated by lookup;
+            cannot affect any decision (research R2). null when the group is unnamed or the condition
+            is standalone.
+
+    RuleSetDetail:
+      type: object
+      description: Existing model — gains the group list.
+      properties:
+        condition_groups:
+          type: array
+          items: { $ref: "#/components/schemas/ConditionGroupOut" }
+          description: NEW. Includes empty groups, which the editor must render as empty containers.
+
+    Error:
+      type: object
+      description: Standard envelope from api/errors.py — see .ai/instructions/07-api-conventions.md.
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum: [VALIDATION_FAILED, AUTH_REQUIRED, PERMISSION_DENIED, ENTITY_NOT_FOUND, CONFLICT, INTERNAL_ERROR, ERROR]
+            message: { type: string }
+            details: { type: object }
