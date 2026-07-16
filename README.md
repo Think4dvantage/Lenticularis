@@ -83,7 +83,8 @@ src/lenticularis/
 │   ├── dependencies.py      # get_current_user, require_pilot, require_admin, require_org_*
 │   ├── errors.py            # AppException + _envelope() — {"error":{code,message,details}}
 │   └── routers/             # auth, stations, rulesets, stats, foehn, org, ai,
-│                            #   wind_forecast, admin, health, pages
+│                            #   wind_forecast, admin, health, pages,
+│                            #   public (the only unauthenticated API surface)
 ├── collectors/              # One file per network: meteoswiss, slf, metar, holfuy,
 │                            #   windline, ecowitt, wunderground, fga, jfb, foehn,
 │                            #   forecast_swissmeteo, forecast_grid_swissmeteo, …
@@ -95,7 +96,8 @@ src/lenticularis/
 │   └── influx.py            # InfluxDB client (write + all query methods)
 ├── models/                  # Pydantic schemas (weather, auth, rules)
 ├── rules/evaluator.py       # Live + forecast rule evaluation engine
-├── services/                # Auth helpers, weather stats, station dedup
+├── services/                # Auth helpers, weather stats, station dedup,
+│                            #   public_map (batched + cached public map payload)
 ├── config.py                # YAML config loader (singleton)
 ├── scheduler.py             # APScheduler: collector + forecast + föhn jobs
 └── foehn_detection.py       # Föhn region definitions + pressure logic

@@ -1,9 +1,17 @@
 # Feature History & Backlog
 
-## Current Version: v1.19.0 (unreleased)
+## Current Version: v1.19.0 (shipped)
 
 Two features, specced and planned in `specs/002-public-rulesets/` and
 `specs/003-condition-group-names/`.
+
+**Deploy notes** (this release is not a drop-in restart):
+- The `condition_groups` backfill runs at container startup against real data.
+  It is designed not to touch a single `rule_conditions` row — take a DB copy anyway.
+- The anonymous map is **empty until rule sets are curated**. `is_showcase` defaults to
+  FALSE by design; nothing becomes public as a side-effect of deploying. Curate with
+  `PUT /api/rulesets/{id}/set_showcase?is_showcase=true` (admin; 409 if the owner has
+  not published it). There is no admin UI for this yet.
 
 ### Public Rule Sets on the Map (`specs/002-public-rulesets`)
 

@@ -3,6 +3,37 @@
 **Spec**: [spec.md](./spec.md) · **Plan**: [plan.md](./plan.md) · **Research**: [research.md](./research.md) · **Data model**: [data-model.md](./data-model.md) · **Contracts**: [contracts/condition-groups.yaml](./contracts/condition-groups.yaml)
 **Next step**: `analyze.md` → `implement.md`
 
+## Status — shipped in v1.19.0, all 21 done
+
+Implemented, tested (20 tests), committed, tagged `v1.19.0`, pushed.
+
+**One decision was reinterpreted during implementation — read this before extending the feature.**
+
+D1 says a group "keeps its identity and its name regardless of how many conditions it holds —
+including one, or none". Implementation revealed a UI fact the spec did not know: **every condition
+already lives in a group box.** Restoring a rule set calls `makeCondGroup([c])` even for standalone
+conditions, and `rows.length > 1 ? gid : null` maps a one-row box back to a standalone condition.
+That round-trip is intended, not a defect — so taking D1 literally would have turned *every*
+condition into a one-member group and written a `condition_groups` row for each.
+
+The rule actually shipped is narrower:
+
+> **A box the pilot has named is a real group at any size. An unnamed one-row box stays a standalone
+> condition.**
+
+This satisfies the real requirement (a name the pilot typed is never silently lost) and preserves the
+existing data shape. It is decision-neutral either way — a one-condition group and a standalone
+condition evaluate identically, and there is a test pinning that.
+
+**Consequence for the "collapse defect"**: it is fixed *for named groups only*. An unnamed group
+reduced to one condition still becomes a standalone condition on save, silently — but nothing the
+pilot typed is lost, which was the actual complaint.
+
+If you want the literal D1 behaviour, that is a UI change (a box would need to be a group in its own
+right, distinct from a bare condition), not a data-model change.
+
+---
+
 ## Summary
 
 - **Total tasks**: 21
@@ -47,11 +78,11 @@ writing.
 moved. No user-visible change.
 **Blocks**: all stories.
 
-- [ ] T001 Add the `ConditionGroup` model to `src/lenticularis/database/models.py`: `id` (String PK), `ruleset_id` (FK → `rulesets.id`, `ondelete="CASCADE"`, indexed), `name` (String, **nullable** — NULL means never named), `sort_order` (Integer, default 0). This is the table the comment at `models.py:253` has been predicting
-- [ ] T002 Add the `RuleSet.condition_groups` relationship in `src/lenticularis/database/models.py` with `cascade="all, delete-orphan"` and `order_by="ConditionGroup.sort_order"`, mirroring `RuleSet.conditions` at `models.py:154-157`. **The cascade is load-bearing, not decorative**: SQLite enforces no foreign keys here (`db.py:97-99` sets no `PRAGMA foreign_keys=ON`), so `ondelete="CASCADE"` is documentation only and the ORM does the real work (research R6). Without it, groups outlive their rule set forever
-- [ ] T003 Update the stale comment at `src/lenticularis/database/models.py:253` — it says a `condition_groups` table is "future"; it is now present
-- [ ] T004 Add the guarded backfill to `_run_column_migrations()` in `src/lenticularis/database/db.py`: for every distinct non-NULL `(ruleset_id, group_id)` in `rule_conditions`, insert a `condition_groups` row **reusing the existing `group_id` as the row id**, with `name = NULL`. Guard on `SELECT COUNT(*) FROM condition_groups == 0` so it is safe to re-run. Reusing the id means **no condition row is touched**, so the evaluator's buckets are byte-for-byte identical (research R4). Do not wrap in a bare `except` — fail loudly (constraint T18)
-- [ ] T005 [P] Tests in `tests/backend/test_condition_groups.py`: backfill creates exactly one unnamed group per distinct `group_id`; is idempotent across two runs; **decisions are identical before and after the migration** (NFR-001 — build a rule set with groups, evaluate, migrate, evaluate again, assert equal); deleting a rule set removes its groups (T002's cascade)
+- [x] T001 Add the `ConditionGroup` model to `src/lenticularis/database/models.py`: `id` (String PK), `ruleset_id` (FK → `rulesets.id`, `ondelete="CASCADE"`, indexed), `name` (String, **nullable** — NULL means never named), `sort_order` (Integer, default 0). This is the table the comment at `models.py:253` has been predicting
+- [x] T002 Add the `RuleSet.condition_groups` relationship in `src/lenticularis/database/models.py` with `cascade="all, delete-orphan"` and `order_by="ConditionGroup.sort_order"`, mirroring `RuleSet.conditions` at `models.py:154-157`. **The cascade is load-bearing, not decorative**: SQLite enforces no foreign keys here (`db.py:97-99` sets no `PRAGMA foreign_keys=ON`), so `ondelete="CASCADE"` is documentation only and the ORM does the real work (research R6). Without it, groups outlive their rule set forever
+- [x] T003 Update the stale comment at `src/lenticularis/database/models.py:253` — it says a `condition_groups` table is "future"; it is now present
+- [x] T004 Add the guarded backfill to `_run_column_migrations()` in `src/lenticularis/database/db.py`: for every distinct non-NULL `(ruleset_id, group_id)` in `rule_conditions`, insert a `condition_groups` row **reusing the existing `group_id` as the row id**, with `name = NULL`. Guard on `SELECT COUNT(*) FROM condition_groups == 0` so it is safe to re-run. Reusing the id means **no condition row is touched**, so the evaluator's buckets are byte-for-byte identical (research R4). Do not wrap in a bare `except` — fail loudly (constraint T18)
+- [x] T005 [P] Tests in `tests/backend/test_condition_groups.py`: backfill creates exactly one unnamed group per distinct `group_id`; is idempotent across two runs; **decisions are identical before and after the migration** (NFR-001 — build a rule set with groups, evaluate, migrate, evaluate again, assert equal); deleting a rule set removes its groups (T002's cascade)
 
 ---
 
@@ -61,15 +92,15 @@ moved. No user-visible change.
 **Independent test criteria**: name three groups, save, reload — names are still there. Reduce a
 named group to one condition, save, reload — the group and its name still exist.
 
-- [ ] T006 [P] [US1] Add `ConditionGroupIn` / `ConditionGroupOut` (id, name, sort_order) to `src/lenticularis/models/rules.py`; add `condition_groups: list[ConditionGroupOut]` to `RuleSetDetail`
-- [ ] T007 [US1] Add `groups: list[ConditionGroupIn]` to `ConditionsReplaceRequest` in `src/lenticularis/models/rules.py` with a **fail-closed validator**: every non-null `condition.group_id` must appear in `groups`, else `VALIDATION_FAILED` (422). Without this, any caller omitting `groups` **silently deletes every group name the pilot typed** — a 422 is vastly preferable to silent data loss (research R3)
-- [ ] T008 [US1] Extend `replace_conditions` in `src/lenticularis/api/routers/rulesets.py:383` to replace groups and conditions **atomically** in one transaction. Groups cannot be inferred from conditions, because a group may legitimately hold zero (FR-011) and would leave no trace
-- [ ] T009 [P] [US1] Tests in `tests/backend/test_condition_groups.py`: group round-trips through save/reload with its name; a dangling `condition.group_id` → 422 and **nothing is written**; a group with zero conditions round-trips and persists
-- [ ] T010 [US1] Add a name input per group in `static/ruleset-editor.html` and send `groups` on save. Use `textContent` when rendering names — they are untrusted free text (constraint T03). Add `[Lenti:editor]` logging to new paths
-- [ ] T011 [US1] **Remove the collapse defect** — delete `group_id: rows.length > 1 ? gid : null` at `static/ruleset-editor.html:988` and always send the group id. This single expression is why a group holding one condition is silently discarded on save today
-- [ ] T012 [US1] Rebuild groups from `condition_groups` in `static/ruleset-editor.html:1125-1129` rather than inferring them by bucketing shared `group_id`s. Render an empty group as an empty container (FR-011) — it must be visible and nameable, not hidden
-- [ ] T013 [US1] Make group deletion explicit in `static/ruleset-editor.html`: tell the pilot what happens to the conditions inside before it happens (FR-013). Never silently destroy or orphan them
-- [ ] T014 [P] [US1] Add group-name i18n keys to **all four** of `static/i18n/{en,de,fr,it}.json`
+- [x] T006 [P] [US1] Add `ConditionGroupIn` / `ConditionGroupOut` (id, name, sort_order) to `src/lenticularis/models/rules.py`; add `condition_groups: list[ConditionGroupOut]` to `RuleSetDetail`
+- [x] T007 [US1] Add `groups: list[ConditionGroupIn]` to `ConditionsReplaceRequest` in `src/lenticularis/models/rules.py` with a **fail-closed validator**: every non-null `condition.group_id` must appear in `groups`, else `VALIDATION_FAILED` (422). Without this, any caller omitting `groups` **silently deletes every group name the pilot typed** — a 422 is vastly preferable to silent data loss (research R3)
+- [x] T008 [US1] Extend `replace_conditions` in `src/lenticularis/api/routers/rulesets.py:383` to replace groups and conditions **atomically** in one transaction. Groups cannot be inferred from conditions, because a group may legitimately hold zero (FR-011) and would leave no trace
+- [x] T009 [P] [US1] Tests in `tests/backend/test_condition_groups.py`: group round-trips through save/reload with its name; a dangling `condition.group_id` → 422 and **nothing is written**; a group with zero conditions round-trips and persists
+- [x] T010 [US1] Add a name input per group in `static/ruleset-editor.html` and send `groups` on save. Use `textContent` when rendering names — they are untrusted free text (constraint T03). Add `[Lenti:editor]` logging to new paths
+- [x] T011 [US1] **Remove the collapse defect** — delete `group_id: rows.length > 1 ? gid : null` at `static/ruleset-editor.html:988` and always send the group id. This single expression is why a group holding one condition is silently discarded on save today
+- [x] T012 [US1] Rebuild groups from `condition_groups` in `static/ruleset-editor.html:1125-1129` rather than inferring them by bucketing shared `group_id`s. Render an empty group as an empty container (FR-011) — it must be visible and nameable, not hidden
+- [x] T013 [US1] Make group deletion explicit in `static/ruleset-editor.html`: tell the pilot what happens to the conditions inside before it happens (FR-013). Never silently destroy or orphan them
+- [x] T014 [P] [US1] Add group-name i18n keys to **all four** of `static/i18n/{en,de,fr,it}.json`
 
 ---
 
@@ -78,8 +109,8 @@ named group to one condition, save, reload — the group and its name still exis
 **Goal**: the group's name is available to whatever presents a decision.
 **Independent test criteria**: evaluate a rule set with a named group; the result carries the name.
 
-- [ ] T015 [US2] Add `group_name: Optional[str]` to `ConditionResult` in `src/lenticularis/models/rules.py`, and populate it in `src/lenticularis/rules/evaluator.py` from a `{group_id: name}` map built off the rule set. **Output enrichment only — do not touch the decision logic, and do not iterate group rows.** Keep the group buckets derived from conditions (`evaluator.py:201-205`). Doing so keeps FR-011/FR-012 true for free and makes NFR-001 true by construction; iterating group rows instead reaches `_worst([])` → `ValueError` on an empty group and kills the whole rule set's evaluation (research R2)
-- [ ] T016 [P] [US2] Tests in `tests/backend/test_condition_groups.py`: **a rule set with an empty group evaluates identically to one without it** (pins the R2 constraint so a future refactor toward group-row iteration fails loudly); a one-condition named group evaluates identically to a standalone condition (FR-012); `group_name` is `None` for standalone and for unnamed groups
+- [x] T015 [US2] Add `group_name: Optional[str]` to `ConditionResult` in `src/lenticularis/models/rules.py`, and populate it in `src/lenticularis/rules/evaluator.py` from a `{group_id: name}` map built off the rule set. **Output enrichment only — do not touch the decision logic, and do not iterate group rows.** Keep the group buckets derived from conditions (`evaluator.py:201-205`). Doing so keeps FR-011/FR-012 true for free and makes NFR-001 true by construction; iterating group rows instead reaches `_worst([])` → `ValueError` on an empty group and kills the whole rule set's evaluation (research R2)
+- [x] T016 [P] [US2] Tests in `tests/backend/test_condition_groups.py`: **a rule set with an empty group evaluates identically to one without it** (pins the R2 constraint so a future refactor toward group-row iteration fails loudly); a one-condition named group evaluates identically to a standalone condition (FR-012); `group_name` is `None` for standalone and for unnamed groups
 
 ---
 
@@ -89,16 +120,16 @@ named group to one condition, save, reload — the group and its name still exis
 **Independent test criteria**: clone a rule set with named groups; rename the source's group; the
 clone's name is unchanged.
 
-- [ ] T017 [US3] Fix `clone_ruleset` in `src/lenticularis/api/routers/rulesets.py:557-604`: create **new** `condition_groups` rows for the clone, build an `{old_id: new_id}` map, and remap each condition's `group_id` through it. Line 597 currently copies `group_id=c.group_id` verbatim — harmless while `group_id` is an opaque marker, but once groups are rows owned by a `ruleset_id` the clone would point at the **source's** groups: renaming the source renames the copy, and deleting the source orphans it (research R5)
-- [ ] T018 [P] [US3] Tests in `tests/backend/test_condition_groups.py`: a clone gets its own group rows; **renaming a source group leaves the clone's name unchanged** (FR-008); deleting the source rule set leaves the clone's groups intact
+- [x] T017 [US3] Fix `clone_ruleset` in `src/lenticularis/api/routers/rulesets.py:557-604`: create **new** `condition_groups` rows for the clone, build an `{old_id: new_id}` map, and remap each condition's `group_id` through it. Line 597 currently copies `group_id=c.group_id` verbatim — harmless while `group_id` is an opaque marker, but once groups are rows owned by a `ruleset_id` the clone would point at the **source's** groups: renaming the source renames the copy, and deleting the source orphans it (research R5)
+- [x] T018 [P] [US3] Tests in `tests/backend/test_condition_groups.py`: a clone gets its own group rows; **renaming a source group leaves the clone's name unchanged** (FR-008); deleting the source rule set leaves the clone's groups intact
 
 ---
 
 ## Final Phase — Polish
 
-- [ ] T019 [P] Correct `.ai/context/architecture.md`: the SQLite section currently states `condition_groups` **never existed** and that grouping is `group_id`-only — both become false with T001. Update the table list and the "Rules Engine Design" section. (That section was rewritten this session to fix the *opposite* error; it now needs updating for the same reason it needed fixing — the docs must track the code)
-- [ ] T020 [P] Add the milestone to `.ai/context/features.md`, noting that the one-condition collapse defect is fixed as a by-product
-- [ ] T021 **Bump the version in `pyproject.toml`.** Phase 3 changes `static/`, and the version *is* the cache key — without a bump, changed assets stay pinned in browsers for a year
+- [x] T019 [P] Correct `.ai/context/architecture.md`: the SQLite section currently states `condition_groups` **never existed** and that grouping is `group_id`-only — both become false with T001. Update the table list and the "Rules Engine Design" section. (That section was rewritten this session to fix the *opposite* error; it now needs updating for the same reason it needed fixing — the docs must track the code)
+- [x] T020 [P] Add the milestone to `.ai/context/features.md`, noting that the one-condition collapse defect is fixed as a by-product
+- [x] T021 **Bump the version in `pyproject.toml`.** Phase 3 changes `static/`, and the version *is* the cache key — without a bump, changed assets stay pinned in browsers for a year
 
 ---
 

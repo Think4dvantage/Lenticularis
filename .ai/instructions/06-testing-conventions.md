@@ -285,8 +285,10 @@ jobs:
 | Dedup | haversine sanity; proximity merge; priority (meteoswiss > holfuy); manual pairs; foehn exclusion; transitive cluster |
 | Static caching | HTML `no-cache` + ETag → 304; assets rewritten with `?v=`; no CDN refs remain; versioned assets immutable; vendored libs served |
 | JFB collector | knots → km/h; direction normalisation; unmappable params dropped; MeteoSwiss duplicates excluded; timestamp reconstruction + midnight rollover; staleness skip; `currentDateTime` always sent |
+| Public rule sets | `is_showcase AND is_public` gate; curated-but-unpublished never appears; **no-data omitted, not green**; payload carries no owner fields; **one Influx call regardless of rule set count**; cache isolation between viewers; 500 m proximity boundary; 409 on curating an unpublished rule set |
+| Condition groups | backfill idempotency; **decisions identical across the migration**; **empty group is inert**; one-condition group ≡ standalone; fail-closed 422 on a dangling `group_id`; re-saving the same group id; clone gets independent groups |
 
-Current suite: **59 passing**.
+Current suite: **96 passing**.
 
 ### Time-dependent fixtures — do not hardcode a clock time
 

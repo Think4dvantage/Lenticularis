@@ -39,6 +39,7 @@ src/lenticularis/
 │   ├── errors.py            # AppException + _envelope() — {"error":{code,message,details}}
 │   └── routers/             # One file per domain (auth, stations, rulesets, org, ai, …)
 │       ├── org.py           # /api/org/{slug}/status|dashboard|rulesets
+│       ├── public.py        # /api/public — the ONLY unauthenticated API surface
 │       └── pages.py         # ALL HTML page routes + ?v= asset cache-busting
 ├── collectors/              # One file per data network (meteoswiss, slf, metar, jfb, fga, …)
 │   ├── base.py              # BaseCollector ABC + _collect_concurrent()
@@ -50,6 +51,8 @@ src/lenticularis/
 ├── models/                  # Pydantic request/response schemas
 ├── rules/evaluator.py       # Live + forecast rule evaluation engine
 ├── services/                # Auth helpers, stats, AI analysis, FCM push
+│   ├── dedup.py             # build_deduped_registry() + haversine_m() — reuse, never redefine
+│   └── public_map.py        # Batched+cached public map payload; is_showcase AND is_public gate
 ├── config.py                # Pydantic-validated YAML config loader (singleton)
 ├── scheduler.py             # APScheduler: observation + forecast + derived jobs
 └── foehn_detection.py       # Föhn region definitions + pressure gradient logic
