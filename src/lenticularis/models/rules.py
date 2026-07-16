@@ -6,7 +6,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 SiteType = Literal["launch", "landing", "opportunity"]
 
@@ -124,6 +124,7 @@ class RuleSetOut(BaseModel):
     combination_logic: CombinationLogic
     is_public: bool
     is_preset: bool
+    is_showcase: bool = False
     clone_count: int
     cloned_from_id: Optional[str]
     linked_landing_ids: list[str] = []
@@ -136,14 +137,84 @@ class RuleSetOut(BaseModel):
 
 
 class RuleSetDetail(RuleSetOut):
-    """Full rule set including all conditions and webcams."""
+    """Full rule set including all conditions, groups and webcams."""
     conditions: list[RuleConditionOut] = []
     webcams: list[WebcamOut] = []
+    # Included so the editor rebuilds groups from stored data rather than
+    # inferring them from group_id collisions. May contain empty groups.
+    condition_groups: list[ConditionGroupOut] = []
+
+
+class PublicRuleSetMarker(BaseModel):
+    """
+    The COMPLETE set of what a visitor may learn about a rule set.
+
+    Deliberately NOT derived from RuleSetOut: that model carries owner_display_name
+    and would leak owner identity by default.  Every field here is an explicit
+    decision to expose; adding one is a privacy decision.
+    """
+    id: str
+    name: str
+    lat: float
+    lon: float
+    site_type: SiteType
+    decision: ResultColour
+
+
+class PublicMapResponse(BaseModel):
+    """Public map payload.  `generated_at` lets the client show data freshness."""
+    data: list[PublicRuleSetMarker] = []
+    generated_at: str
+
+
+class ConditionGroupIn(BaseModel):
+    """A condition group as sent by the editor.  `id` is client-minted, as group_id already is."""
+    id: str
+    name: Optional[str] = Field(default=None, max_length=120)
+    sort_order: int = 0
+
+
+class ConditionGroupOut(BaseModel):
+    id: str
+    name: Optional[str] = None
+    sort_order: int = 0
+
+    model_config = {"from_attributes": True}
 
 
 class ConditionsReplaceRequest(BaseModel):
-    """Replace the full condition list for a rule set in one call."""
+    """
+    Replace the full condition list — and the groups — for a rule set in one call.
+
+    Groups cannot be inferred from the conditions, because a group may legitimately
+    hold none, which would leave no trace.  So they are sent explicitly and replaced
+    atomically alongside the conditions.
+    """
     conditions: list[RuleConditionCreate]
+    groups: list[ConditionGroupIn] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _groups_cover_conditions(self):
+        """
+        Fail closed: every group a condition points at must be present.
+
+        A permissive default here would let any caller that omits `groups` silently
+        delete every group name the pilot typed.  A 422 is vastly preferable to
+        silent data loss.
+        """
+        known = {g.id for g in self.groups}
+        referenced = {c.group_id for c in self.conditions if c.group_id}
+        missing = referenced - known
+        if missing:
+            raise ValueError(
+                "conditions reference unknown group_id(s): "
+                + ", ".join(sorted(missing))
+                + " — send them in `groups` or set group_id to null"
+            )
+        dupes = [g.id for g in self.groups if [x.id for x in self.groups].count(g.id) > 1]
+        if dupes:
+            raise ValueError(f"duplicate group id(s): {', '.join(sorted(set(dupes)))}")
+        return self
 
 
 class LandingLinksRequest(BaseModel):
@@ -169,6 +240,9 @@ class ConditionResult(BaseModel):
     result_colour: ResultColour
     group_id: Optional[str] = None
     group_all_matched: Optional[bool] = None
+    # Presentation only — lets a decision be explained as "Föhn risk" rather than
+    # a list of numbers. Populated by lookup; never affects a decision.
+    group_name: Optional[str] = None
 
 
 class LandingDecision(BaseModel):

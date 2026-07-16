@@ -28,6 +28,7 @@ except PackageNotFoundError:
     _APP_VERSION = "0.0.0+dev"
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -51,6 +52,7 @@ from lenticularis.api.routers import admin as admin_router
 from lenticularis.api.routers import ai as ai_router
 from lenticularis.api.routers import org as org_router
 from lenticularis.api.routers import wind_forecast as wind_forecast_router
+from lenticularis.api.routers import public as public_router
 from lenticularis.database.db import init_db, get_session_factory
 from lenticularis.collectors.foehn import _VIRTUAL_WEATHER_STATIONS
 from lenticularis.services.dedup import build_deduped_registry
@@ -331,7 +333,18 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(RequestValidationError)
     async def _validation_exc(request: Request, exc: RequestValidationError):
-        return JSONResponse(status_code=422, content=_envelope("VALIDATION_FAILED", "Request validation failed", {"errors": exc.errors()}))
+        # jsonable_encoder is required, not cosmetic: when a validator raises
+        # ValueError, Pydantic v2 puts the exception object itself in ctx.error,
+        # which JSONResponse cannot serialise — the handler would 500 while
+        # reporting a 422.
+        return JSONResponse(
+            status_code=422,
+            content=_envelope(
+                "VALIDATION_FAILED",
+                "Request validation failed",
+                {"errors": jsonable_encoder(exc.errors())},
+            ),
+        )
 
     # Cross-origin clients (e.g. the mobile app) — add explicit origins here, never "*":
     # app.add_middleware(CORSMiddleware, allow_origins=["https://lenti.cloud"],
@@ -348,6 +361,7 @@ def create_app() -> FastAPI:
     app.include_router(ai_router.router)
     app.include_router(org_router.router)
     app.include_router(wind_forecast_router.router)
+    app.include_router(public_router.router)
 
     # Static files (frontend) + page routes
     static_dir = Path(__file__).parent.parent.parent.parent / "static"

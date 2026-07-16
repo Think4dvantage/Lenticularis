@@ -102,6 +102,13 @@ class FakeInflux:
     def query_observation_snapshot_for_stations(self, station_ids, at_time):
         return {}
 
+    def query_decision_history(self, ruleset_id, hours=24):
+        # Deliberately non-empty and old: routes treat "no history" (or history
+        # younger than 48 h) as a cue to schedule a 30-day backfill, which spawns a
+        # background task needing a real engine that init_db() never built here.
+        # A long-lived rule set with existing history is the representative default.
+        return [{"timestamp": "2020-01-01T00:00:00+00:00", "decision": "green"}]
+
     def close(self):
         pass
 

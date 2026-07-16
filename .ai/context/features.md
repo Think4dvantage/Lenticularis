@@ -1,6 +1,53 @@
 # Feature History & Backlog
 
-## Current Version: v1.18.2 (shipped)
+## Current Version: v1.19.0 (unreleased)
+
+Two features, specced and planned in `specs/002-public-rulesets/` and
+`specs/003-condition-group-names/`.
+
+### Public Rule Sets on the Map (`specs/002-public-rulesets`)
+
+Visitors who are not signed in now see curated example rule sets with live traffic lights, and a
+prompt to sign up. Signed-in pilots additionally see other people's published rule sets, except at
+sites they have already configured.
+
+| Change | Detail |
+|---|---|
+| `rulesets.is_showcase` — new column | Admin curation, independent of the owner's `is_public` and of `is_preset`: three flags, three different people's decisions. Guarded `ALTER TABLE`, default FALSE — nothing becomes public as a side-effect of the migration |
+| **Owner consent gates curation** | Anonymous visibility is the read-time conjunction `is_showcase AND is_public`. `set_showcase(true)` on an unpublished rule set → **409**. Un-publishing hides but does **not** clear curation, so re-publishing restores it with no admin action. `is_public=false, is_showcase=true` is a legitimate state |
+| `services/public_map.py` — new | One `query_latest_for_stations()` for **every** station across **all** rule sets, then `_evaluate_from_station_data()` in memory. `run_evaluation()` batches only within one rule set, so looping it would have been an unauthenticated N+1 (constraint T09) |
+| **No-data rule sets omitted** | The evaluator returns green when nothing triggers, including on no data. Defensible for a pilot who sees `no_data_stations`; a lie to a visitor. Omitted entirely rather than shown as a confident green |
+| `PublicRuleSetMarker` | id, name, lat, lon, site_type, decision — and nothing else. Deliberately not derived from `RuleSetOut`, which carries `owner_display_name` and would have leaked owner identity by default |
+| 500 m proximity suppression | Signed-in only, reusing `haversine_m()` from `services/dedup.py`. Per-viewer, so never served from the anonymous cache |
+| `api/routers/public.py` — new | `/api/public` — the only unauthenticated surface. 60 s shared cache with a poisoning guard (an empty build is never cached, so a transient Influx failure cannot blank the map for the TTL) |
+| `static/index.html` | The ruleset layer was entirely inside `if (isLoggedIn())`; now branches by auth state |
+| `tests/backend/test_public_rulesets.py` | 17 tests — the D4 gate, no-data omission, owner-field leakage, one-Influx-call batching, cache isolation between viewers, 500 m boundary |
+
+### Named Condition Groups (`specs/003-condition-group-names`)
+
+Condition groups can be named, so a pilot returning to a rule set remembers which risk each group
+guards against.
+
+| Change | Detail |
+|---|---|
+| `condition_groups` — new table | `id`, `ruleset_id`, `name` (nullable = never named), `sort_order`. The table `models.py:253` had predicted since the beginning |
+| Backfill migration | One unnamed group per distinct existing `group_id`, **reusing the id as the row's primary key** — so no `rule_conditions` row is touched and the evaluator's buckets are byte-for-byte identical. Decisions provably cannot move |
+| **Evaluator decision logic untouched** | Groups are still bucketed from conditions, never iterated from rows. That keeps an empty group inert by construction, and makes "decisions unchanged" true by construction rather than something to prove. Iterating rows would reach `_worst([])` → `ValueError` and kill the rule set's evaluation |
+| `group_name` on `ConditionResult` | Output enrichment only, via `_group_names()`. Lets a decision be explained as "Föhn risk" instead of a list of numbers — this is what the tooltip rework will consume |
+| Fail-closed save | `ConditionsReplaceRequest.groups` is validated: any condition pointing at an absent group → 422. A permissive default would have let a caller omitting `groups` silently delete every name the pilot typed |
+| Atomic replace | Groups and conditions are replaced together, with a `flush()` between deletes and inserts — the editor re-sends the same group ids, and SQLAlchemy emits INSERTs before DELETEs within a flush |
+| **Clone remap** | `clone_ruleset` copied `group_id` verbatim (`rulesets.py:597`). Harmless while `group_id` was an opaque marker; once groups are rows owned by a `ruleset_id`, the clone pointed at the **source's** groups — renaming the source would rename the copy. Now remapped through `{old: new}` |
+| `static/ruleset-editor.html` | Name input per group; groups rebuilt from stored rows rather than inferred from `group_id` collisions; a *named* box is a real group at any size; empty groups render as empty containers; deleting a group with conditions asks first |
+| `tests/backend/test_condition_groups.py` | 20 tests — backfill idempotency, decisions identical across the migration, empty-group inertness, one-condition equivalence, fail-closed validation, clone independence |
+
+### Fixed along the way
+
+| Fix | Detail |
+|---|---|
+| **422 handler crashed on any `ValueError` validator** | `main.py`'s `RequestValidationError` handler passed `exc.errors()` straight to `JSONResponse`. Pydantic v2 puts the **exception object** in `ctx.error`, which is not JSON serialisable — so the handler 500'd while reporting a 422. Pre-existing and latent: `WebcamBase._http_only` raises `ValueError` the same way and no test had ever posted a bad URL. Fixed with `jsonable_encoder` |
+| `FakeInflux.query_decision_history` | Missing stub, exactly the failure `06-testing-conventions.md` warns about |
+
+## Previous Version: v1.18.2 (shipped)
 
 Patch: the Stations overview now lists **Jungfraubahn** as a filterable network, and the
 `jfb` badge is styled (dark-red) on every page that renders network badges (`stations`,
@@ -97,7 +144,7 @@ See `.ai/context/forecast-analysis-wip.md` for full debug history and next steps
 |---|---|---|
 | Security | T01–T05 | Flux injection hardening; JWT fail-closed; webcam URL validation + XSS escaping; security-header + CORS middleware; OAuth tokens out of URL + `email_verified` check |
 | Performance | T06–T11 | GZip middleware; async event-loop unblocking in Influx handlers; scheduler writes offloaded via `asyncio.to_thread`; rule evaluator batches Influx fetch; bounded in-memory caches with lock; SQLite WAL + `busy_timeout=30000` |
-| Architecture | T12–T19 | RFC 7807 error envelope + global exception handler; pages router extracted from `main.py`; scheduler post-run hooks (replaces monkey-patching); Alembic dependency dropped; version single-sourced; SQLAlchemy 2.0 `select()` style; swallowed-exception fixes; InfluxDB duplicate field key + `_source` dedup no-op fixed |
+| Architecture | T12–T19 | Typed error envelope + global exception handlers (labelled "RFC 7807" at the time — a misnomer; see `07-api-conventions.md`); pages router extracted from `main.py`; scheduler post-run hooks (replaces monkey-patching); Alembic dependency dropped; version single-sourced; SQLAlchemy 2.0 `select()` style; swallowed-exception fixes; InfluxDB duplicate field key + `_source` dedup no-op fixed |
 | Quality | T20–T23 | Pytest harness + GitHub Actions CI; collector `_to_float`/wind-dir/concurrency dedup (`collectors/utils.py`, `base._collect_concurrent`); frontend nav/bootstrap dedup (`static/bootstrap.js`, `static/shared.css`); remaining hardcoded strings → i18n keys |
 
 Key new files: `api/errors.py`, `api/routers/pages.py`, `collectors/utils.py`, `static/bootstrap.js`, `tests/backend/conftest.py + 4 test files`, `.github/workflows/test.yml`.

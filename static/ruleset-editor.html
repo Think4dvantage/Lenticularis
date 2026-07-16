@@ -59,6 +59,13 @@
       padding: 7px 14px; background: #1a1f2e; border-bottom: 1px solid #2d3748;
     }
     .condition-group-label { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: #718096; }
+    .group-name-input {
+      flex: 1; min-width: 0; margin: 0 10px;
+      background: #0f1117; border: 1px solid #2d3748; border-radius: 5px;
+      color: #e2e8f0; font-size: 0.78rem; padding: 3px 8px;
+    }
+    .group-name-input::placeholder { color: #4a5568; }
+    .group-name-input:focus { outline: none; border-color: #90cdf4; }
     .condition-group-body { padding: 10px 12px 4px; background: #0a0d14; }
     .condition-group-footer { padding: 6px 12px 10px; background: #0a0d14; display: flex; justify-content: flex-end; }
     .btn-remove-group {
@@ -749,8 +756,9 @@
 
   let groupSeq = 0;
 
-  function makeCondGroup(conditions = []) {
-    const gid = 'g' + (++groupSeq);
+  function makeCondGroup(conditions = [], group = null) {
+    // Reuse the stored id when restoring, so a group's name survives a reload.
+    const gid = group?.id || ('g' + (++groupSeq));
     // Colour is shared across all conditions in the group; read from first condition if restoring
     const initialColour = conditions[0]?.result_colour || 'red';
     const groupEl = document.createElement('div');
@@ -759,6 +767,9 @@
     groupEl.innerHTML = `
       <div class="condition-group-header">
         <span class="condition-group-label">${window.t('editor.condition_group')}</span>
+        <input class="group-name-input" type="text" maxlength="120"
+               placeholder="${window.t('editor.group_name_placeholder')}"
+               title="${window.t('editor.group_name_hint')}" />
         <div style="display:flex;align-items:center;gap:10px">
           <select class="group-colour-select">
             <option value="green"  ${initialColour === 'green'  ? 'selected' : ''}>${window.t('editor.colours.green')}</option>
@@ -773,14 +784,27 @@
         <button class="btn btn-add btn-add-cond">${window.t('editor.add_condition')}</button>
       </div>`;
     document.getElementById('conditionList').appendChild(groupEl);
+
+    // textContent, not innerHTML — a group name is untrusted free text.
+    const nameInput = groupEl.querySelector('.group-name-input');
+    nameInput.value = group?.name || '';
+
     const body = groupEl.querySelector('.condition-group-body');
-    if (conditions.length === 0) {
+    if (conditions.length === 0 && !group) {
+      // A brand-new group opens with one blank row. A *restored* empty group
+      // stays empty — the pilot has not filled it in yet, and it is inert.
       makeCondRow({}, body);
     } else {
       for (const c of conditions) makeCondRow(c, body);
     }
     groupEl.querySelector('.group-colour-select').addEventListener('change', redrawMapOverlays);
     groupEl.querySelector('.btn-remove-group').addEventListener('click', () => {
+      const n = groupEl.querySelectorAll('.condition-row').length;
+      if (n > 0 && !confirm(window.t('editor.remove_group_confirm', { count: n }))) {
+        console.log(`[Lenti:editor] group ${gid} removal cancelled`);
+        return;
+      }
+      console.log(`[Lenti:editor] removing group ${gid} with ${n} condition(s)`);
       groupEl.remove();
       redrawMapOverlays();
     });
@@ -985,11 +1009,38 @@
           value_b:       valB,
           result_colour: colour,
           sort_order:    sortOrder++,
-          group_id:      rows.length > 1 ? gid : null,
+          group_id:      isRealGroup(groupEl) ? gid : null,
         });
       });
     });
     return valid ? result : null;
+  }
+
+  // Every condition lives in a box, so a lone unnamed box is just a standalone
+  // condition — that is the existing round-trip and it stays. A box the pilot has
+  // named is a real group whatever its size: the name must survive, and a
+  // one-condition group evaluates identically to a standalone condition anyway.
+  function isRealGroup(groupEl) {
+    const rows = groupEl.querySelectorAll('.condition-row').length;
+    const named = (groupEl.querySelector('.group-name-input')?.value || '').trim() !== '';
+    return rows > 1 || named;
+  }
+
+  function readGroups() {
+    const groups = [];
+    let order = 0;
+    document.querySelectorAll('.condition-group').forEach(groupEl => {
+      if (!isRealGroup(groupEl)) return;
+      const name = (groupEl.querySelector('.group-name-input')?.value || '').trim();
+      groups.push({
+        id:         groupEl.dataset.groupId,
+        name:       name || null,
+        sort_order: order++,
+      });
+    });
+    console.log(`[Lenti:editor] readGroups: ${groups.length} group(s)`,
+                groups.map(g => g.name ?? '(unnamed)'));
+    return groups;
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────
@@ -1118,17 +1169,28 @@
     // Place pin on map after filling in coordinates
     initPinFromInputs();
 
-    // Reconstruct visual groups from flat condition list
+    // Rebuild groups from the stored group rows so names and ids survive; the
+    // conditions only say which group they belong to.
     const sorted = [...rs.conditions].sort((a, b) => a.sort_order - b.sort_order);
+    const storedGroups = rs.condition_groups || [];
+    const groupById = new Map(storedGroups.map(g => [g.id, g]));
     const seenGroupIds = new Set();
     for (const c of sorted) {
       if (!c.group_id) {
         makeCondGroup([c]);
       } else if (!seenGroupIds.has(c.group_id)) {
         seenGroupIds.add(c.group_id);
-        makeCondGroup(sorted.filter(x => x.group_id === c.group_id));
+        makeCondGroup(
+          sorted.filter(x => x.group_id === c.group_id),
+          groupById.get(c.group_id) || { id: c.group_id, name: null },
+        );
       }
     }
+    // Groups the pilot created but has not filled in yet. They hold no conditions,
+    // so nothing above would render them, and they are inert at evaluation.
+    const emptyGroups = storedGroups.filter(g => !seenGroupIds.has(g.id));
+    for (const g of emptyGroups) makeCondGroup([], g);
+    console.log(`[Lenti:editor] restored ${seenGroupIds.size} group(s) + ${emptyGroups.length} empty`);
     redrawMapOverlays();
   }
 
@@ -1190,11 +1252,12 @@
         history.replaceState(null, '', newUrl);
       }
 
-      // Replace conditions
+      // Replace conditions and groups together — one atomic save. The server
+      // rejects the payload if a condition points at a group that is not here.
       const cr = await fetchAuth(`/api/rulesets/${rsId}/conditions`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ conditions }),
+        body: JSON.stringify({ conditions, groups: readGroups() }),
       });
       if (!cr.ok) throw new Error(await extractError(cr));
 

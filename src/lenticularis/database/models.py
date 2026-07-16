@@ -8,6 +8,7 @@ users                — pilot and admin accounts (local + social login)
 oauth_identities     — one row per linked social provider per user
 rulesets             — pilot's rule set (includes site name + coordinates)
 rule_conditions      — individual condition rows within a rule set
+condition_groups     — named bundles of ANDed conditions within a rule set
 launch_landing_links — links a launch ruleset to one or more landing rulesets
 ruleset_webcams      — webcam URLs linked to a ruleset for visual reference
 """
@@ -131,6 +132,12 @@ class RuleSet(Base):
     # Preset — admin-curated template visible to all pilots in the new-ruleset form
     is_preset = Column(Boolean, nullable=False, default=False)
 
+    # Showcase — admin-curated example for the public (anonymous) map.
+    # Anonymous visibility is the read-time conjunction is_showcase AND is_public:
+    # is_showcase is the admin's editorial choice, is_public the owner's consent.
+    # An owner un-publishing hides the rule set without clearing this flag.
+    is_showcase = Column(Boolean, nullable=False, default=False)
+
     # Email notifications — comma-separated colours that trigger a notification
     # on state-change, e.g. "green" or "green,orange". NULL = disabled.
     notify_on = Column(String, nullable=True)
@@ -159,6 +166,14 @@ class RuleSet(Base):
     webcams = relationship(
         "RuleSetWebcam", back_populates="ruleset", cascade="all, delete-orphan",
         order_by="RuleSetWebcam.sort_order",
+    )
+
+    # The cascade is load-bearing, not decorative: SQLite foreign keys are not
+    # enforced here (no PRAGMA foreign_keys=ON), so ondelete="CASCADE" above is
+    # documentation and the ORM does the actual cleanup.
+    condition_groups = relationship(
+        "ConditionGroup", back_populates="ruleset", cascade="all, delete-orphan",
+        order_by="ConditionGroup.sort_order",
     )
 
     # Landing links — only populated/meaningful when site_type == "launch"
@@ -196,6 +211,29 @@ class LaunchLandingLink(Base):
     landing_ruleset = relationship(
         "RuleSet", foreign_keys=[landing_ruleset_id]
     )
+
+
+class ConditionGroup(Base):
+    """
+    A named bundle of conditions that must all hold together.
+
+    Groups survive at any size — five conditions, one, or none.  An empty group is
+    a container the pilot has not filled yet and is inert at evaluation: the
+    evaluator buckets conditions by group_id, so a group with no conditions never
+    becomes a bucket and contributes nothing.
+    """
+
+    __tablename__ = "condition_groups"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    ruleset_id = Column(
+        String, ForeignKey("rulesets.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    # NULL means never named — distinct from "" which would mean the pilot cleared it.
+    name = Column(String, nullable=True)
+    sort_order = Column(Integer, nullable=False, default=0)
+
+    ruleset = relationship("RuleSet", back_populates="condition_groups")
 
 
 class RuleSetWebcam(Base):
@@ -250,7 +288,8 @@ class RuleCondition(Base):
         String, ForeignKey("rulesets.id", ondelete="CASCADE"), nullable=False, index=True
     )
 
-    # Grouping (NULL = top-level flat list; future: group_id references a condition_groups table)
+    # Grouping — NULL = standalone condition; otherwise references condition_groups.id.
+    # Conditions sharing a group_id are ANDed together by the evaluator.
     group_id = Column(String, nullable=True)
 
     # Station reference (per-condition — this is the key design)

@@ -88,7 +88,13 @@
     },
     "toggle_personal": "Personal Stations",
     "toggle_personal_on": "⚠ Personal stations: ON",
-    "toggle_personal_off": "⚠ Personal stations: OFF"
+    "toggle_personal_off": "⚠ Personal stations: OFF",
+    "public": {
+      "example_badge": "Example",
+      "example_hint": "This is an example rule set built by another pilot. Sign up to create your own rules for the sites you fly.",
+      "cta": "Sign up to build your own →",
+      "shared_badge": "Shared by another pilot"
+    }
   },
   "stations": {
     "search_placeholder": "Search station or canton…",
@@ -250,7 +256,10 @@
     "notify_green": "Green",
     "notify_orange": "Orange",
     "notify_red": "Red",
-    "notify_sending_to": "Emails will be sent to {email}"
+    "notify_sending_to": "Emails will be sent to {email}",
+    "group_name_placeholder": "Name this group (optional)",
+    "group_name_hint": "Name the risk this group covers, e.g. \"Föhn risk\" — so you remember why it is here.",
+    "remove_group_confirm": "Remove this group and its {count} condition(s)?"
   },
   "forecast_analysis": {
     "title": "Forecast Accuracy Analysis",

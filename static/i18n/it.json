@@ -89,7 +89,13 @@
     },
     "toggle_personal": "Stazioni personali",
     "toggle_personal_on": "⚠ Stazioni pers.: ON",
-    "toggle_personal_off": "⚠ Stazioni pers.: OFF"
+    "toggle_personal_off": "⚠ Stazioni pers.: OFF",
+    "public": {
+      "example_badge": "Esempio",
+      "example_hint": "Questo è un insieme di regole di esempio creato da un altro pilota. Registrati per creare le tue regole per i tuoi siti di volo.",
+      "cta": "Registrati e crea le tue →",
+      "shared_badge": "Condiviso da un altro pilota"
+    }
   },
   "stations": {
     "search_placeholder": "Cerca stazione o cantone…",
@@ -251,7 +257,10 @@
     "notify_green": "Verde",
     "notify_orange": "Arancione",
     "notify_red": "Rosso",
-    "notify_sending_to": "Le e-mail verranno inviate a {email}"
+    "notify_sending_to": "Le e-mail verranno inviate a {email}",
+    "group_name_placeholder": "Dai un nome a questo gruppo (facoltativo)",
+    "group_name_hint": "Indica il rischio coperto da questo gruppo, es. «Rischio föhn» — per ricordare perché esiste.",
+    "remove_group_confirm": "Rimuovere questo gruppo e le sue {count} condizioni?"
   },
   "forecast_analysis": {
     "title": "Analisi precisione previsioni",

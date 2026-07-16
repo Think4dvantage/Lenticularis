@@ -96,6 +96,18 @@ def _worst(colours: list[str]) -> str:
     return max(colours, key=lambda c: COLOUR_RANK.get(c, 0))
 
 
+def _group_names(ruleset: RuleSet) -> dict[str, Optional[str]]:
+    """
+    Map group_id → name, for explaining a decision in words.
+
+    Presentation only: this is layered onto the output and never feeds the
+    decision.  Groups are bucketed from the conditions themselves, never iterated
+    from these rows — that is what keeps an empty group inert instead of
+    vacuously true.
+    """
+    return {g.id: g.name for g in getattr(ruleset, "condition_groups", None) or []}
+
+
 def _in_direction_range(actual: float, start: float, end: float) -> bool:
     """
     Return True if compass direction ``actual`` lies within the clockwise arc
@@ -222,10 +234,12 @@ def _evaluate_from_station_data(
             "result_colour":     cond.result_colour,
             "group_id":          None,
             "group_all_matched": None,
+            "group_name":        None,
         })
         if matched:
             triggered_colours.append(cond.result_colour)
 
+    group_names = _group_names(ruleset)
     for group_id, group_conds in groups.items():
         evals: list[tuple[bool, Optional[float]]] = [
             _eval_condition(c, station_data) for c in group_conds
@@ -245,6 +259,7 @@ def _evaluate_from_station_data(
                 "result_colour":     cond.result_colour,
                 "group_id":          group_id,
                 "group_all_matched": all_matched,
+                "group_name":        group_names.get(group_id),
             })
         if all_matched:
             triggered_colours.append(_worst([c.result_colour for c in group_conds]))
@@ -361,11 +376,13 @@ def run_evaluation(
             "result_colour": cond.result_colour,
             "group_id":      None,
             "group_all_matched": None,
+            "group_name":    None,
         })
         if matched:
             triggered_colours.append(cond.result_colour)
 
     # ---- evaluate AND groups -----------------------------------------------
+    group_names = _group_names(ruleset)
     for group_id, group_conds in groups.items():
         evals: list[tuple[bool, Optional[float]]] = [
             _eval_condition(c, station_data) for c in group_conds
@@ -386,6 +403,7 @@ def run_evaluation(
                 "result_colour":     cond.result_colour,
                 "group_id":          group_id,
                 "group_all_matched": all_matched,
+                "group_name":        group_names.get(group_id),
             })
 
         if all_matched:
@@ -517,10 +535,12 @@ def run_evaluation_at(
             "result_colour":     cond.result_colour,
             "group_id":          None,
             "group_all_matched": None,
+            "group_name":        None,
         })
         if matched:
             triggered_colours.append(cond.result_colour)
 
+    group_names = _group_names(ruleset)
     for group_id, group_conds in groups.items():
         evals: list[tuple[bool, Optional[float]]] = [
             _eval_condition(c, station_data) for c in group_conds
@@ -540,6 +560,7 @@ def run_evaluation_at(
                 "result_colour":     cond.result_colour,
                 "group_id":          group_id,
                 "group_all_matched": all_matched,
+                "group_name":        group_names.get(group_id),
             })
         if all_matched:
             group_colour = _worst([c.result_colour for c in group_conds])
@@ -660,10 +681,12 @@ def run_forecast_evaluation(
                 "result_colour":     cond.result_colour,
                 "group_id":          None,
                 "group_all_matched": None,
+                "group_name":        None,
             })
             if matched:
                 triggered_colours.append(cond.result_colour)
 
+        group_names = _group_names(ruleset)
         for group_id, group_conds in groups.items():
             evals = [_eval_condition(c, station_data) for c in group_conds]
             all_matched = all(m for m, _ in evals)
@@ -681,6 +704,7 @@ def run_forecast_evaluation(
                     "result_colour":     cond.result_colour,
                     "group_id":          group_id,
                     "group_all_matched": all_matched,
+                    "group_name":        group_names.get(group_id),
                 })
             if all_matched:
                 triggered_colours.append(_worst([c.result_colour for c in group_conds]))

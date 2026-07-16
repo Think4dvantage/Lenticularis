@@ -166,6 +166,14 @@
       font-size: 0.75rem;
       margin-bottom: 8px;
     }
+    .popup-public-hint {
+      color: #a0aec0;
+      font-size: 0.75rem;
+      line-height: 1.45;
+      border-top: 1px solid #2d3748;
+      padding-top: 8px;
+      margin-top: 8px;
+    }
     .popup-row {
       display: flex;
       justify-content: space-between;
@@ -570,8 +578,6 @@ window._stationsReady.then(async () => {
   renderNavAuth('map');
   renderLangPicker();
 
-  if (isLoggedIn()) {
-
   // ── Decision colour palette ─────────────────────────────────────────────
   const DC = { green: '#68d391', orange: '#f6ad55', red: '#fc8181', null: '#4a5568' };
 
@@ -803,16 +809,132 @@ window._stationsReady.then(async () => {
         }
       });
 
+      await loadOthersRulesetMarkers();
+
       console.log(`[Lenti:index] loadRulesetMarkers done in ${(performance.now() - t0).toFixed(0)} ms`, counts);
     } catch (err) {
       console.error('[Lenti:index] loadRulesetMarkers error:', err);
     }
   }
 
-  loadRulesetMarkers();
-  setInterval(loadRulesetMarkers, 60_000);
+  // ── Other pilots' published rule sets ───────────────────────────────────
+  // Rendered dimmed so they never compete visually with your own. The server
+  // already drops any within 500 m of one of yours.
+  function othersIcon(m) {
+    const c = decisionColor(m.decision);
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34" viewBox="0 0 34 34">
+      <circle cx="17" cy="17" r="10" fill="${c}" fill-opacity="0.30"
+              stroke="${c}" stroke-width="1.5" stroke-dasharray="3 2" stroke-opacity="0.85"/>
+    </svg>`;
+    return L.divIcon({ html: svg, className: '', iconSize: [34, 34], iconAnchor: [17, 17], popupAnchor: [0, -18] });
+  }
 
-  } // end if (isLoggedIn())
+  function othersPopup(m) {
+    const lc = decisionColor(m.decision);
+    const typeLabel = m.site_type === 'landing'
+      ? window.t('map.popup.landing_zone')
+      : m.site_type === 'opportunity'
+        ? window.t('map.popup.opportunity')
+        : window.t('map.popup.launch');
+    return `
+      <div class="popup-name">${escHtml(m.name)}</div>
+      <div class="popup-meta">${typeLabel} · ${window.t('map.public.shared_badge')}</div>
+      <div class="popup-row" style="margin-bottom:6px">
+        <span>${window.t('map.popup.status')}</span>
+        <span style="color:${lc};font-weight:700">${m.decision.toUpperCase()}</span>
+      </div>`;
+  }
+
+  async function loadOthersRulesetMarkers() {
+    const t0 = performance.now();
+    console.log('[Lenti:index] loadOthersRulesetMarkers start');
+    try {
+      const res = await fetchAuth('/api/rulesets/public-map');
+      if (!res.ok) {
+        console.warn('[Lenti:index] loadOthersRulesetMarkers: returned', res.status);
+        return;
+      }
+      const payload = await res.json();
+      const markers = payload.data || [];
+      console.log(`[Lenti:index] loadOthersRulesetMarkers: ${markers.length} shared rule sets`);
+
+      for (const m of markers) {
+        L.marker([m.lat, m.lon], { icon: othersIcon(m), pane: 'rulesetPane' })
+          .addTo(rulesetLayer)
+          .bindPopup(() => othersPopup(m), { maxWidth: 280 });
+      }
+      console.log(`[Lenti:index] loadOthersRulesetMarkers done in ${(performance.now() - t0).toFixed(0)} ms`);
+    } catch (err) {
+      console.error('[Lenti:index] loadOthersRulesetMarkers error:', err);
+    }
+  }
+
+  // ── Public / anonymous map ──────────────────────────────────────────────
+  // Visitors see curated examples only: name, location and colour. No
+  // conditions, no thresholds, no owner — the server never sends them.
+  function publicPopup(m) {
+    const lc = decisionColor(m.decision);
+    const typeLabel = m.site_type === 'landing'
+      ? window.t('map.popup.landing_zone')
+      : m.site_type === 'opportunity'
+        ? window.t('map.popup.opportunity')
+        : window.t('map.popup.launch');
+    return `
+      <div class="popup-name">${escHtml(m.name)}</div>
+      <div class="popup-meta">${typeLabel} · ${window.t('map.public.example_badge')}</div>
+      <div class="popup-row" style="margin-bottom:6px">
+        <span>${window.t('map.popup.status')}</span>
+        <span style="color:${lc};font-weight:700">${m.decision.toUpperCase()}</span>
+      </div>
+      <div class="popup-public-hint">${window.t('map.public.example_hint')}</div>
+      <div style="margin-top:10px">
+        <a class="popup-link" href="/register">${window.t('map.public.cta')}</a>
+      </div>`;
+  }
+
+  function publicIcon(m) {
+    if (m.site_type === 'landing')     return landingIcon(m.decision);
+    if (m.site_type === 'opportunity') return opportunityIcon();
+    return launchIcon(m.decision, null);
+  }
+
+  async function loadPublicRulesetMarkers() {
+    const t0 = performance.now();
+    console.log('[Lenti:index] loadPublicRulesetMarkers start');
+    try {
+      const res = await fetch('/api/public/rulesets/map');
+      if (!res.ok) {
+        console.warn('[Lenti:index] loadPublicRulesetMarkers: returned', res.status);
+        return;
+      }
+      const payload = await res.json();
+      const markers = payload.data || [];
+      console.log(`[Lenti:index] loadPublicRulesetMarkers: ${markers.length} markers, generated_at=${payload.generated_at}`);
+
+      rulesetLayer.clearLayers();
+      for (const m of markers) {
+        L.marker([m.lat, m.lon], { icon: publicIcon(m), pane: 'rulesetPane' })
+          .addTo(rulesetLayer)
+          .bindPopup(() => publicPopup(m), { maxWidth: 300 });
+      }
+
+      if (markers.length === 0) {
+        console.warn('[Lenti:index] loadPublicRulesetMarkers: no curated examples available');
+      }
+      console.log(`[Lenti:index] loadPublicRulesetMarkers done in ${(performance.now() - t0).toFixed(0)} ms`);
+    } catch (err) {
+      console.error('[Lenti:index] loadPublicRulesetMarkers error:', err);
+    }
+  }
+
+  // Signed-in pilots see their own rule sets; visitors see curated examples.
+  if (isLoggedIn()) {
+    loadRulesetMarkers();
+    setInterval(loadRulesetMarkers, 60_000);
+  } else {
+    loadPublicRulesetMarkers();
+    setInterval(loadPublicRulesetMarkers, 60_000);
+  }
 </script>
 </body>
 </html>

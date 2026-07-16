@@ -2,19 +2,48 @@
 
 ## SQLite Tables
 
+Source of truth: `database/models.py`. **These ten tables are all of them.**
+
 | Table | Key columns |
 |---|---|
-| `organizations` | `id`, `slug` (unique), `name`, `description`, `created_at` |
-| `users` | `id`, `username`, `email`, `hashed_password`, `role`, `org_id` FK → organizations, `created_at` |
-| `weather_stations` | `station_id`, `name`, `network`, `latitude`, `longitude`, `elevation`, `canton`, `active` |
-| `launch_sites` | `id`, `name`, `latitude`, `longitude`, `owner_id` FK → users |
-| `rulesets` | `id`, `name`, `description`, `launch_site_id`, `owner_id`, `org_id` FK → organizations, `site_type` (launch/landing/opportunity), `combination_logic`, `is_public`, `is_preset`, `clone_count`, `cloned_from_id`, `notify_on` (nullable CSV of colours e.g. `"green,orange"`), `last_notified_decision` (nullable), `created_at`, `updated_at` |
-| `rule_conditions` | `id`, `ruleset_id`, `group_id` (nullable), `station_id`, `station_b_id` (nullable), `field`, `operator`, `value_a`, `value_b` (nullable), `result_colour`, `sort_order` |
-| `condition_groups` | `id`, `ruleset_id`, `parent_group_id` (nullable), `logic` (AND/OR), `sort_order` |
-| `ruleset_webcams` | `id`, `ruleset_id`, `url`, `label`, `sort_order` |
-| `notification_configs` | `id`, `user_id`, `launch_site_id`, `channel`, `config_json`, `on_transitions_json` |
-| `station_dedup_overrides` | `id`, `station_id_a`, `station_id_b`, `note`, `created_at` — manually-defined co-location pairs; pre-seeded with Lehn pair (holfuy-1850 ↔ windline-6116) |
-| `user_foehn_configs` | `user_id` PK FK → users, `config_json` (full föhn config blob), `updated_at` — per-user föhn config overrides |
+| `organizations` | `id`, `slug` (unique, indexed), `name`, `description`, `created_at` |
+| `users` | `id`, `email` (unique, indexed), `display_name`, `hashed_password` (**nullable** — NULL for social-login-only accounts), `role`, `is_active`, `org_id` FK → organizations (SET NULL), `created_at`, `updated_at` |
+| `oauth_identities` | `id`, `user_id` FK → users (CASCADE), `provider` (`google`/`github`), `provider_user_id`, `provider_email`, `created_at`; UNIQUE(`provider`, `provider_user_id`) |
+| `rulesets` | `id`, `owner_id` FK → users (CASCADE, indexed), `name`, `description`, **`lat`, `lon`, `altitude_m`** (site identity is embedded here), `site_type` (launch/landing/opportunity), `combination_logic`, `is_public`, `is_preset`, **`is_showcase`**, `clone_count`, `cloned_from_id` FK → rulesets (SET NULL), `notify_on` (nullable CSV of colours e.g. `"green,orange"`), `last_notified_decision`, `org_id` FK → organizations (SET NULL), `created_at`, `updated_at` |
+| `rule_conditions` | `id`, `ruleset_id` FK → rulesets (CASCADE, indexed), `group_id` (nullable → `condition_groups.id`), `station_id`, `station_b_id` (nullable — `pressure_delta` only), `field`, `operator`, `value_a`, `value_b` (nullable), `result_colour`, `sort_order` |
+| `condition_groups` | `id`, `ruleset_id` FK → rulesets (CASCADE, indexed), `name` (**nullable** — NULL = never named), `sort_order`. Added v1.19.0 |
+| `launch_landing_links` | `id`, `launch_ruleset_id` FK → rulesets (CASCADE, indexed), `landing_ruleset_id` FK → rulesets (CASCADE); UNIQUE(pair). Many-to-many; meaningful only when `site_type == "launch"` |
+| `ruleset_webcams` | `id`, `ruleset_id` FK → rulesets (CASCADE, indexed), `url`, `label`, `sort_order` |
+| `station_dedup_overrides` | `id`, `station_id_a`, `station_id_b`, `note`, `created_at` — manually-defined co-location pairs |
+| `user_foehn_configs` | `user_id` PK FK → users (CASCADE), `config_json` (full föhn config blob), `updated_at` |
+
+### The three publish/curate flags on `rulesets` are independent
+
+| Flag | Whose decision | Means |
+|---|---|---|
+| `is_public` | **Owner** | Published — visible in the gallery, and to signed-in viewers on the map |
+| `is_preset` | **Admin** | Offered as a starting template in the new-rule-set form |
+| `is_showcase` | **Admin** | Curated as an example for the **anonymous** map |
+
+Anonymous map visibility is the **read-time conjunction `is_showcase AND is_public`**. An admin
+cannot showcase an unpublished rule set (409 on `set_showcase`), and an owner un-publishing hides it
+immediately **without** clearing `is_showcase` — so re-publishing restores it with no admin action.
+`is_public=false, is_showcase=true` is therefore a legitimate, reachable state, not a broken row.
+
+### Foreign keys are NOT enforced
+
+`db.py` sets `journal_mode`, `synchronous` and `busy_timeout` — but **no `PRAGMA foreign_keys=ON`**.
+Every `ondelete="CASCADE"` in `models.py` is therefore documentation, not enforcement: the ORM
+relationship's `cascade="all, delete-orphan"` is what actually deletes children. Any new child table
+**must** declare that cascade or its rows outlive their parent forever.
+
+### Tables that do NOT exist — do not code against them
+
+| Assumed table | Reality |
+|---|---|
+| `launch_sites` | **Never existed.** Site identity (`name`, `description`, `lat`, `lon`, `altitude_m`) is embedded directly in `rulesets`. There is no `rulesets.launch_site_id`. See `models.py:113` |
+| `weather_stations` | Station metadata is **not** in SQLite. The registry is built in memory by the collectors at startup and lives on `app.state.station_registry` / `app.state.display_registry` |
+| `notification_configs` | Email notification state is two columns on `rulesets` (`notify_on`, `last_notified_decision`), not a separate table |
 
 ---
 
@@ -40,8 +69,9 @@
 - Altitude → hPa: 500→950, 1000→900, 1500→850, 2000→800, 2500→750, 3000→700, 4000→600, 5000→500
 
 ### `rule_decisions`
-- **Tags**: `launch_site_id`, `ruleset_id`, `owner_id`, `site_type`
-- **Fields**: `decision` (green/orange/red), `condition_results` (JSON array), `blocking_conditions` (JSON array of condition IDs)
+- **Tags**: `ruleset_id`, `owner_id`, `site_type` — there is **no `launch_site_id` tag** (no launch-site entity exists; the ruleset *is* the site)
+- **Fields**: `decision` (green/orange/red), `condition_results` (JSON array). There is **no `blocking_conditions` field** — it appears nowhere in the codebase
+- Written by two paths in `rules/evaluator.py`, both emitting the identical tag/field set: `run_evaluation` (live, one point) and `write_decisions_batch` (history backfill, batched with original timestamps)
 
 **Removed**: `station_wind_profile` measurement was removed (v1.16). Altitude wind data is served by the wind forecast grid map, not per-station.
 
@@ -90,20 +120,76 @@ Config keys: `influxdb.timeout` (ms, default 10000), `influxdb.slow_query_timeou
 ### Wind Forecast Grid
 - `GET /api/wind-forecast/grid?date=YYYY-MM-DD&level_m=1500` — requires `require_pilot`; maps `level_m` → `level_hpa` via `ALTITUDE_TO_HPA`; returns `{date, level_m, level_hpa, grid:[{lat,lon},...], frames:[{t, ws:[...], wd:[...], rh:[...]},...]}`; **grid is built dynamically from InfluxDB data** (not hardcoded 171-point assumption); `grid_id` tag used as canonical key (avoids float-precision issues); grid sorted lat desc, lon asc; arrows show cloud icon when `rh >= 90`
 
-### Launch Sites, Rule Sets, Org, Gallery, Statistics, Föhn, Admin, AI, System
-- (unchanged from previous versions — see `.ai/instructions/07-api-conventions.md`)
+### Public (unauthenticated)
+
+- `GET /api/public/rulesets/map` — **the only unauthenticated route in the rule set surface.**
+  Curated examples for visitors: `is_showcase AND is_public`, positioned, evaluated against real
+  data. Returns `{data: [{id, name, lat, lon, site_type, decision}], generated_at}` — a narrow
+  payload that deliberately does **not** reuse `RuleSetOut` (which carries `owner_display_name` and
+  would leak owner identity by default). Served from a shared 60 s cache in
+  `services/public_map.py`, so cost does not scale with visitors.
+- `GET /api/rulesets/public-map` — signed-in equivalent: other owners' published rule sets, minus
+  any within **500 m** of one of the viewer's own (`haversine_m` from `services/dedup.py`).
+  Per-viewer, therefore **never** served from the anonymous cache entry.
+- `PUT /api/rulesets/{id}/set_showcase` — admin curation toggle. **409** if the owner has not
+  published it; un-curating is always allowed.
+
+**Rule sets resting on missing data are omitted, not shown green.** `run_evaluation` returns green
+when nothing triggers, including on no data ("unknown = benefit of the doubt") — fine for a pilot who
+can see `no_data_stations`, a lie to a visitor. The public builder drops any rule set with a missing
+station. Note the frontend's `if (!dec) return;` guard catches only *failed requests*, not this.
+
+### Remaining routers
+
+Not enumerated here — read the router file, which is the source of truth. (`07-api-conventions.md`
+defines the response/error *format*, not the route list; it is not a route reference.)
+
+| Prefix | File | Routes |
+|---|---|---|
+| `/api/auth` | `routers/auth.py` | 10 |
+| `/api/rulesets` | `routers/rulesets.py` | 15 — rulesets carry site identity, gallery, presets, webcams, landing links |
+| `/api/admin` | `routers/admin.py` | 10 |
+| `/api/foehn` | `routers/foehn.py` | 7 |
+| `/api/stats` | `routers/stats.py` | 6 |
+| `/api/org` | `routers/org.py` | 3 — `/{slug}/status\|dashboard\|rulesets` |
+| `/api/ai` | `routers/ai.py` | 1 |
+| `/api/health` | `routers/health.py` | 1 |
+| — | `routers/pages.py` | 20 HTML page routes (no `/api` prefix) |
+
+There is **no launch-sites API** — a "launch site" is a `ruleset` with `site_type="launch"`.
 
 ---
 
 ## Rules Engine Design
 
 `rules/evaluator.py`:
-1. Load condition tree from SQLite
-2. Fetch latest measurement from InfluxDB per `station_id`
+1. Load the flat condition list from SQLite (not a tree — see below)
+2. Fetch latest measurements from InfluxDB for **all** stations in one batch (`query_latest_for_stations`)
 3. Apply operator/value logic → per-condition colour
-4. Walk AND/OR group nesting
+4. Bucket conditions by `group_id`: same non-NULL `group_id` → ANDed; `group_id = NULL` → standalone
 5. Apply `combination_logic` (`worst_wins` or `majority_vote`)
 6. Return `TrafficLightDecision` + write to `rule_decisions` InfluxDB
+
+**Grouping is one level deep — AND only.** There is no OR-group and no nesting. Do not document or
+build against a "condition tree".
+
+**The evaluator buckets groups from the conditions — never from `condition_groups` rows.** This is
+load-bearing and must not be "cleaned up":
+
+- An empty group contributes no conditions, so it never becomes a bucket, never counts toward
+  `total_units`, and is inert **by construction** rather than by a guard someone must remember.
+- Iterating group rows instead would hit `all([]) → True` (vacuous) and then `_worst([])`, which is
+  `max()` of an empty sequence → **`ValueError`**, killing evaluation for the whole rule set.
+- `group_name` on `ConditionResult` is populated by a lookup layered onto the *output* only
+  (`_group_names()`); it can never influence a decision.
+
+A one-condition group evaluates identically to a standalone condition: `total_units` is
+`len(standalone) + len(groups)`, so which bucket a lone condition lands in does not change the count,
+and a one-member group contributes `_worst([c])` — that same colour.
+
+Public entry points: `run_evaluation`, `run_evaluation_at`, `run_forecast_evaluation`,
+`run_history_backfill`, `write_decisions_batch`. The core is `_evaluate_from_station_data(ruleset,
+station_data) -> (decision, results)`. There is **no** `evaluate_ruleset()` function.
 
 Forecast evaluation reuses identical logic over hourly `valid_time` steps. Does NOT write to InfluxDB.
 

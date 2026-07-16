@@ -18,6 +18,7 @@ POST   /api/rulesets/{id}/clone       — clone a public rule set
 """
 from __future__ import annotations
 
+import asyncio
 import uuid
 import logging
 from datetime import datetime, timezone
@@ -28,18 +29,23 @@ from sqlalchemy import delete as _delete, select
 from sqlalchemy.orm import Session
 
 from lenticularis.api.dependencies import get_current_user, require_admin, require_pilot
+from lenticularis.api.errors import AppException
 from lenticularis.database.db import get_db
-from lenticularis.database.models import LaunchLandingLink, Organization, RuleCondition, RuleSet, RuleSetWebcam, User
+from lenticularis.database.models import (
+    ConditionGroup, LaunchLandingLink, Organization, RuleCondition, RuleSet, RuleSetWebcam, User,
+)
 from lenticularis.models.rules import (
     ConditionsReplaceRequest,
     EvaluationResult,
     LandingLinksRequest,
+    PublicMapResponse,
     RuleSetCreate,
     RuleSetDetail,
     RuleSetOut,
     RuleSetUpdate,
     WebcamsReplaceRequest,
 )
+from lenticularis.services.public_map import build_public_map
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/rulesets", tags=["rulesets"])
@@ -116,6 +122,42 @@ def list_presets(
         .order_by(RuleSet.name)
     ).scalars().all()
     return rows
+
+
+# ---------------------------------------------------------------------------
+# Other owners' published rule sets, for the signed-in map
+#
+# MUST stay above the "/{ruleset_id}" route below — FastAPI matches in
+# declaration order and would otherwise read "public-map" as a ruleset id.
+# ---------------------------------------------------------------------------
+
+@router.get("/public-map", response_model=PublicMapResponse)
+async def member_public_map(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Published rule sets belonging to other pilots, minus any at a site the viewer
+    has already configured.  The viewer's own rule sets are drawn by the existing
+    authenticated path and are never suppressed.
+
+    Per-viewer output — deliberately not served from the anonymous cache, which
+    would hand one viewer another viewer's suppression result.
+    """
+    influx = getattr(request.app.state, "influx", None)
+    if influx is None:
+        raise AppException(503, "INTERNAL_ERROR", "InfluxDB not available")
+
+    virtual_members = getattr(request.app.state, "virtual_members", {})
+    payload = await asyncio.to_thread(
+        build_public_map, db, influx, current_user, virtual_members
+    )
+    logger.info(
+        "GET /api/rulesets/public-map → %d markers for user %s",
+        len(payload.data), current_user.id,
+    )
+    return payload
 
 
 # ---------------------------------------------------------------------------
@@ -390,9 +432,26 @@ def replace_conditions(
 ):
     rs = _get_own_ruleset(ruleset_id, current_user, db)
 
-    # Delete all existing conditions
+    # Delete all existing conditions and groups — they are replaced together, as
+    # one atomic save. Groups cannot be inferred from conditions, because a group
+    # may legitimately hold none.
     for c in list(rs.conditions):
         db.delete(c)
+    for g in list(rs.condition_groups):
+        db.delete(g)
+
+    # Flush the deletes before inserting. The editor sends the same group ids
+    # back, and SQLAlchemy emits INSERTs before DELETEs within a flush, so the
+    # re-inserted group would collide with the row still on disk.
+    db.flush()
+
+    for grp in body.groups:
+        db.add(ConditionGroup(
+            id=grp.id,
+            ruleset_id=rs.id,
+            name=grp.name,
+            sort_order=grp.sort_order,
+        ))
 
     # Insert new ones
     for i, cond in enumerate(body.conditions):
@@ -551,6 +610,49 @@ def set_preset(
 
 
 # ---------------------------------------------------------------------------
+# Toggle is_showcase flag (admin only)
+# ---------------------------------------------------------------------------
+
+@router.put("/{ruleset_id}/set_showcase", response_model=RuleSetOut)
+def set_showcase(
+    ruleset_id: str,
+    is_showcase: bool,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """
+    Curate a rule set as an example for the anonymous map.
+
+    Curating requires the owner to have published the rule set: an admin may not
+    put someone's private rule set on the public internet.  Un-curating is always
+    allowed — withdrawing curation must never be blocked.
+
+    This guard is belt-and-braces; the read path is authoritative and filters on
+    is_showcase AND is_public.  Refusing here means an admin who believes they
+    curated something is never wrong about that.
+    """
+    rs = db.get(RuleSet, ruleset_id)
+    if rs is None:
+        raise HTTPException(status_code=404, detail="Rule set not found")
+    if is_showcase and not rs.is_public:
+        logger.warning(
+            "Admin %s tried to showcase unpublished ruleset %s", current_user.id, rs.id
+        )
+        raise AppException(
+            409,
+            "CONFLICT",
+            "Rule set is not published by its owner and cannot be showcased",
+            {"ruleset_id": ruleset_id},
+        )
+    rs.is_showcase = is_showcase
+    rs.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(rs)
+    logger.info("RuleSet %s is_showcase set to %s by admin %s", rs.id, is_showcase, current_user.id)
+    return rs
+
+
+# ---------------------------------------------------------------------------
 # Clone a public rule set
 # ---------------------------------------------------------------------------
 
@@ -582,6 +684,21 @@ def clone_ruleset(
     )
     db.add(clone)
 
+    # Give the clone its own groups and point its conditions at them. Copying
+    # group_id verbatim would leave the clone referencing the SOURCE's groups:
+    # renaming the source's group would rename the clone's, and deleting the
+    # source would orphan them.
+    group_id_map: dict[str, str] = {}
+    for g in source.condition_groups:
+        new_gid = str(uuid.uuid4())
+        group_id_map[g.id] = new_gid
+        db.add(ConditionGroup(
+            id=new_gid,
+            ruleset_id=new_id,
+            name=g.name,
+            sort_order=g.sort_order,
+        ))
+
     for c in source.conditions:
         db.add(RuleCondition(
             id=str(uuid.uuid4()),
@@ -594,7 +711,7 @@ def clone_ruleset(
             value_b=c.value_b,
             result_colour=c.result_colour,
             sort_order=c.sort_order,
-            group_id=c.group_id,
+            group_id=group_id_map.get(c.group_id) if c.group_id else None,
         ))
 
     source.clone_count += 1

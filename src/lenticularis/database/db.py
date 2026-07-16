@@ -30,6 +30,10 @@ def _run_column_migrations(engine) -> None:
             conn.execute(text("ALTER TABLE rulesets ADD COLUMN is_preset BOOLEAN NOT NULL DEFAULT FALSE"))
             conn.commit()
             logger.info("Migration: added rulesets.is_preset column")
+        if "is_showcase" not in cols:
+            conn.execute(text("ALTER TABLE rulesets ADD COLUMN is_showcase BOOLEAN NOT NULL DEFAULT FALSE"))
+            conn.commit()
+            logger.info("Migration: added rulesets.is_showcase column")
         if "org_id" not in cols:
             conn.execute(text("ALTER TABLE rulesets ADD COLUMN org_id TEXT REFERENCES organizations(id)"))
             conn.commit()
@@ -49,6 +53,52 @@ def _run_column_migrations(engine) -> None:
             conn.execute(text("ALTER TABLE users ADD COLUMN org_id TEXT REFERENCES organizations(id)"))
             conn.commit()
             logger.info("Migration: added users.org_id column")
+
+        _backfill_condition_groups(conn)
+
+
+def _backfill_condition_groups(conn) -> None:
+    """
+    Give every pre-existing group a real row.
+
+    Before condition_groups existed, a "group" was just conditions sharing an
+    opaque group_id.  Each distinct group_id becomes an unnamed row, reusing the
+    id itself as the primary key.
+
+    Reusing the id is the point: no rule_conditions row is touched, so the
+    evaluator's buckets are byte-for-byte what they were and no decision can move.
+    Regenerating ids would mean rewriting every condition — more work, more risk,
+    no benefit.
+    """
+    tables = {
+        row[0] for row in conn.execute(
+            text("SELECT name FROM sqlite_master WHERE type='table'")
+        ).fetchall()
+    }
+    if "condition_groups" not in tables or "rule_conditions" not in tables:
+        return
+
+    already = conn.execute(text("SELECT COUNT(*) FROM condition_groups")).scalar()
+    if already:
+        return
+
+    rows = conn.execute(text(
+        "SELECT DISTINCT ruleset_id, group_id FROM rule_conditions "
+        "WHERE group_id IS NOT NULL AND group_id != ''"
+    )).fetchall()
+    if not rows:
+        return
+
+    for ruleset_id, group_id in rows:
+        conn.execute(
+            text(
+                "INSERT INTO condition_groups (id, ruleset_id, name, sort_order) "
+                "VALUES (:id, :rs, NULL, 0)"
+            ),
+            {"id": group_id, "rs": ruleset_id},
+        )
+    conn.commit()
+    logger.info("Migration: backfilled %d condition_groups from existing group_ids", len(rows))
 
 
 def _seed_dedup_overrides(engine) -> None:

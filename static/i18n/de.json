@@ -88,7 +88,13 @@
     },
     "toggle_personal": "Privatstationen",
     "toggle_personal_on": "⚠ Privatstationen: AN",
-    "toggle_personal_off": "⚠ Privatstationen: AUS"
+    "toggle_personal_off": "⚠ Privatstationen: AUS",
+    "public": {
+      "example_badge": "Beispiel",
+      "example_hint": "Dies ist ein Beispiel-Regelsatz eines anderen Piloten. Registriere dich, um eigene Regeln für deine Fluggebiete zu erstellen.",
+      "cta": "Registrieren und eigene erstellen →",
+      "shared_badge": "Von einem anderen Piloten geteilt"
+    }
   },
   "stations": {
     "search_placeholder": "Station oder Kanton suchen…",
@@ -250,7 +256,10 @@
     "notify_green": "Grün",
     "notify_orange": "Orange",
     "notify_red": "Rot",
-    "notify_sending_to": "E-Mails werden gesendet an {email}"
+    "notify_sending_to": "E-Mails werden gesendet an {email}",
+    "group_name_placeholder": "Gruppe benennen (optional)",
+    "group_name_hint": "Benenne das Risiko, das diese Gruppe abdeckt, z. B. „Föhn-Risiko“ — damit du dich erinnerst, warum sie da ist.",
+    "remove_group_confirm": "Diese Gruppe und ihre {count} Bedingung(en) entfernen?"
   },
   "forecast_analysis": {
     "title": "Vorhersagegenauigkeitsanalyse",

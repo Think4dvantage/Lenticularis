@@ -88,7 +88,13 @@
     },
     "toggle_personal": "Stations personnelles",
     "toggle_personal_on": "⚠ Stations perso : ON",
-    "toggle_personal_off": "⚠ Stations perso : OFF"
+    "toggle_personal_off": "⚠ Stations perso : OFF",
+    "public": {
+      "example_badge": "Exemple",
+      "example_hint": "Ceci est un jeu de règles d'exemple créé par un autre pilote. Inscrivez-vous pour créer vos propres règles pour vos sites de vol.",
+      "cta": "S'inscrire et créer les vôtres →",
+      "shared_badge": "Partagé par un autre pilote"
+    }
   },
   "stations": {
     "search_placeholder": "Rechercher station ou canton…",
@@ -250,7 +256,10 @@
     "notify_green": "Vert",
     "notify_orange": "Orange",
     "notify_red": "Rouge",
-    "notify_sending_to": "Les e-mails seront envoyés à {email}"
+    "notify_sending_to": "Les e-mails seront envoyés à {email}",
+    "group_name_placeholder": "Nommer ce groupe (facultatif)",
+    "group_name_hint": "Nommez le risque couvert par ce groupe, p. ex. « Risque de foehn » — pour vous rappeler pourquoi il est là.",
+    "remove_group_confirm": "Supprimer ce groupe et ses {count} condition(s) ?"
   },
   "forecast_analysis": {
     "title": "Analyse de précision des prévisions",
