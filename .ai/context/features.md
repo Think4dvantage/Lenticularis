@@ -348,3 +348,15 @@ Caveat: **exclude `jfb-hollandiahutte-sac`** — it declares 3248 m but reports 
 - **Performance pass** — InfluxDB query profiling; downsampling for data >90 days
 - **Auto-clone preset on nearby site creation**
 - **lsmfapi grid — add `ws_min`/`ws_max`, `wd_min`/`wd_max`, `vw`/`vw_min`/`vw_max`** — extend `/api/forecast/grid` response with ensemble spread + vertical wind so the wind forecast map can show ensemble bands and vertical wind component
+
+### Tech debt (discovered v1.20.0)
+
+- **Deduplicate the evaluator decision block** — the condition/group bucketing + combination logic is
+  copied verbatim across `_evaluate_from_station_data`, `run_evaluation`, `run_evaluation_at`, and
+  `run_forecast_evaluation` in `rules/evaluator.py`. Any decision-logic change (e.g. the v1.20.0
+  green-requirement rule) must be made in all four. Route the live/snapshot/forecast paths through the
+  shared core so it lives once. See `specs/004-green-requirement-semantics/plan.md` follow-up.
+- **Fix `pyproject.toml` `requires-python`** — it is `"^3.11"`, a Poetry caret that is invalid in a
+  PEP 621 `[project]` table. `ruff check` cannot parse the file (CI hides this with
+  `continue-on-error: true`); run `ruff check --isolated` to lint until fixed. Change to
+  `">=3.11,<4.0"`; verify the Docker build still resolves before relying on it.
