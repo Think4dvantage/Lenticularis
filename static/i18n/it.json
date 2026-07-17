@@ -158,7 +158,7 @@
     "site_type": "Tipo di sito",
     "launch_site": "▲ Sito di decollo",
     "landing_zone_btn": "⚑ Zona di atterraggio",
-    "combination_hint": "Logica di combinazione: il peggio vince — se una condizione attiva ROSSO il sito è ROSSO; se ARANCIONE, è ARANCIONE.",
+    "combination_hint": "Logica di combinazione: il peggio vince — il sito è ROSSO se una condizione attiva ROSSO o se una condizione VERDE richiesta non è soddisfatta; ARANCIONE se una condizione attiva ARANCIONE.",
     "opportunity_site": "✦ Opportunità",
     "opportunity_btn": "✦ Opportunità",
     "opportunity_hint": "Un luogo speciale o una finestra di condizioni — es. uno spot termico, una finestra di volo di distanza, o qualsiasi condizione favorevole da monitorare.",

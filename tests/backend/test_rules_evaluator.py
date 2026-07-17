@@ -172,3 +172,87 @@ def test_pressure_field_maps_to_qff():
     station_data = {"s1": {"pressure_qff": 1013.0}}
     decision, _ = _evaluate_from_station_data(_rs([cond]), station_data)
     assert decision == "green"
+
+
+# ---------------------------------------------------------------------------
+# GREEN conditions are requirements (spec 004)
+# ---------------------------------------------------------------------------
+
+def test_green_requirement_unmet_returns_red():
+    # GREEN confirmation: direction must be in the usable arc. Data present but
+    # the threshold fails → requirement unmet → red (not benefit-of-the-doubt green).
+    cond = _cond("s1", "wind_direction", "in_direction_range", 270.0, "green", value_b=90.0)
+    station_data = {"s1": {"wind_direction": 180.0}}  # S — outside 270→90 arc
+    decision, results = _evaluate_from_station_data(_rs([cond]), station_data)
+    assert decision == "red"
+    assert results[0]["matched"] is False
+
+
+def test_green_requirement_no_data_returns_red():
+    # D3: a GREEN requirement whose station is offline fails safe to red.
+    cond = _cond("s1", "wind_speed", "<", 25.0, "green")
+    decision, results = _evaluate_from_station_data(_rs([cond]), {})
+    assert decision == "red"
+    assert results[0]["actual_value"] is None
+
+
+def test_green_requirement_met_returns_green():
+    cond = _cond("s1", "wind_speed", "<", 25.0, "green")
+    station_data = {"s1": {"wind_speed": 12.0}}
+    decision, _ = _evaluate_from_station_data(_rs([cond]), station_data)
+    assert decision == "green"
+
+
+def test_green_requirement_applies_to_landing():
+    cond = _cond("s1", "wind_speed", "<", 25.0, "green")
+    station_data = {"s1": {"wind_speed": 40.0}}
+    decision, _ = _evaluate_from_station_data(_rs([cond], site_type="landing"), station_data)
+    assert decision == "red"
+
+
+def test_all_green_group_unmet_returns_red():
+    # All-green AND group: one member fails → group unmet → red (D2).
+    conds = [
+        _cond("s1", "wind_speed", "<", 25.0, "green", group_id="g1"),   # matches
+        _cond("s1", "wind_gust", "<", 30.0, "green", group_id="g1"),    # fails (gust=45)
+    ]
+    station_data = {"s1": {"wind_speed": 12.0, "wind_gust": 45.0}}
+    decision, _ = _evaluate_from_station_data(_rs(conds), station_data)
+    assert decision == "red"
+
+
+def test_mixed_group_unmet_stays_green():
+    # Mixed group (worst = orange, not a green requirement) not fully met → silent → green (D2).
+    conds = [
+        _cond("s1", "wind_speed", "<", 25.0, "green", group_id="g1"),   # matches
+        _cond("s1", "wind_gust", ">", 100.0, "orange", group_id="g1"),  # fails
+    ]
+    station_data = {"s1": {"wind_speed": 12.0, "wind_gust": 20.0}}
+    decision, _ = _evaluate_from_station_data(_rs(conds), station_data)
+    assert decision == "green"
+
+
+def test_exception_only_calm_returns_green():
+    # FR-004 regression: a rule set with only RED/ORANGE exceptions, none triggered,
+    # still defaults to green (benefit of the doubt survives for exception-only sets).
+    conds = [
+        _cond("s1", "wind_gust", ">", 50.0, "red"),
+        _cond("s1", "wind_speed", ">", 35.0, "orange"),
+    ]
+    station_data = {"s1": {"wind_speed": 10.0, "wind_gust": 15.0}}
+    decision, _ = _evaluate_from_station_data(_rs(conds), station_data)
+    assert decision == "green"
+
+
+def test_opportunity_unmet_green_unaffected_by_requirement_rule():
+    # FR-006: opportunity already forces red when not all units trigger; the new
+    # launch/landing rule must not double-count or alter that path.
+    conds = [
+        _cond("s1", "wind_speed", ">", 10.0, "green"),   # triggers
+        _cond("s1", "wind_gust", "<", 5.0, "green"),     # fails
+    ]
+    station_data = {"s1": {"wind_speed": 15.0, "wind_gust": 20.0}}
+    decision, _ = _evaluate_from_station_data(
+        _rs(conds, site_type="opportunity"), station_data
+    )
+    assert decision == "red"

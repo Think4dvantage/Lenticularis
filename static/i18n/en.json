@@ -157,7 +157,7 @@
     "site_type": "Site type",
     "launch_site": "▲ Launch site",
     "landing_zone_btn": "⚑ Landing zone",
-    "combination_hint": "Combination logic: worst wins — if any condition triggers RED the site is RED; any ORANGE and it's ORANGE.",
+    "combination_hint": "Combination logic: worst wins — the site is RED if any condition triggers RED or a required GREEN condition is not met; ORANGE if any condition triggers ORANGE.",
     "private_label": "Private (only you)",
     "public_label": "Public (gallery)",
     "description_placeholder": "Short description shown in the gallery (optional)",

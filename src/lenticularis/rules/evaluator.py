@@ -19,8 +19,17 @@ Combination logic
 ``worst_wins``   — the worst (most restrictive) triggered colour becomes the decision.
 ``majority_vote`` — the colour with the most votes wins.
 
-If no conditions trigger (either because none matched or no data), the decision
-defaults to ``"green"`` (benefit of the doubt) for launch/landing sites.
+GREEN conditions are requirements
+---------------------------------
+For launch/landing sites a GREEN unit (a standalone GREEN condition, or an AND
+group whose worst member colour is green) is a *requirement*: when it does not
+trigger it contributes ``"red"``.  "Not triggered" covers both a failed threshold
+and a station with no data, so an unconfirmable requirement fails safe to red.
+
+RED and ORANGE conditions keep *exception* semantics: they contribute their colour
+only when they match and stay silent otherwise.  A site built only from exception
+conditions therefore still defaults to ``"green"`` when nothing triggers (benefit
+of the doubt) — that default survives for exception-only rule sets, and only there.
 
 Opportunity sites
 -----------------
@@ -238,6 +247,9 @@ def _evaluate_from_station_data(
         })
         if matched:
             triggered_colours.append(cond.result_colour)
+        elif ruleset.site_type != "opportunity" and cond.result_colour == "green":
+            # Unmet GREEN requirement (incl. no data) fails safe to red for launch/landing.
+            triggered_colours.append("red")
 
     group_names = _group_names(ruleset)
     for group_id, group_conds in groups.items():
@@ -263,6 +275,9 @@ def _evaluate_from_station_data(
             })
         if all_matched:
             triggered_colours.append(_worst([c.result_colour for c in group_conds]))
+        elif ruleset.site_type != "opportunity" and _worst([c.result_colour for c in group_conds]) == "green":
+            # All-green group not fully met fails safe to red for launch/landing (D2).
+            triggered_colours.append("red")
 
     total_units = len(standalone) + len(groups)
     if ruleset.site_type == "opportunity":
@@ -380,6 +395,9 @@ def run_evaluation(
         })
         if matched:
             triggered_colours.append(cond.result_colour)
+        elif ruleset.site_type != "opportunity" and cond.result_colour == "green":
+            # Unmet GREEN requirement (incl. no data) fails safe to red for launch/landing.
+            triggered_colours.append("red")
 
     # ---- evaluate AND groups -----------------------------------------------
     group_names = _group_names(ruleset)
@@ -409,6 +427,9 @@ def run_evaluation(
         if all_matched:
             group_colour = _worst([c.result_colour for c in group_conds])
             triggered_colours.append(group_colour)
+        elif ruleset.site_type != "opportunity" and _worst([c.result_colour for c in group_conds]) == "green":
+            # All-green group not fully met fails safe to red for launch/landing (D2).
+            triggered_colours.append("red")
 
     # ---- apply combination logic -------------------------------------------
     # Opportunity sites use inverted semantics: RED by default, GREEN only when
@@ -539,6 +560,9 @@ def run_evaluation_at(
         })
         if matched:
             triggered_colours.append(cond.result_colour)
+        elif ruleset.site_type != "opportunity" and cond.result_colour == "green":
+            # Unmet GREEN requirement (incl. no data) fails safe to red for launch/landing.
+            triggered_colours.append("red")
 
     group_names = _group_names(ruleset)
     for group_id, group_conds in groups.items():
@@ -565,6 +589,9 @@ def run_evaluation_at(
         if all_matched:
             group_colour = _worst([c.result_colour for c in group_conds])
             triggered_colours.append(group_colour)
+        elif ruleset.site_type != "opportunity" and _worst([c.result_colour for c in group_conds]) == "green":
+            # All-green group not fully met fails safe to red for launch/landing (D2).
+            triggered_colours.append("red")
 
     total_units = len(standalone) + len(groups)
     if ruleset.site_type == "opportunity":
@@ -685,6 +712,9 @@ def run_forecast_evaluation(
             })
             if matched:
                 triggered_colours.append(cond.result_colour)
+            elif ruleset.site_type != "opportunity" and cond.result_colour == "green":
+                # Unmet GREEN requirement (incl. no data) fails safe to red for launch/landing.
+                triggered_colours.append("red")
 
         group_names = _group_names(ruleset)
         for group_id, group_conds in groups.items():
@@ -708,6 +738,9 @@ def run_forecast_evaluation(
                 })
             if all_matched:
                 triggered_colours.append(_worst([c.result_colour for c in group_conds]))
+            elif ruleset.site_type != "opportunity" and _worst([c.result_colour for c in group_conds]) == "green":
+                # Unmet all-green group (incl. no data) fails safe to red for launch/landing (D2).
+                triggered_colours.append("red")
 
         total_units = len(standalone) + len(groups)
         if ruleset.site_type == "opportunity":

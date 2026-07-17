@@ -124,7 +124,7 @@ tests/backend/               # pytest suite (auth, rules, dedup, security, colle
 
 ## Development Status
 
-**Current version: v1.18.1** — published as `ghcr.io/Think4dvantage/Lenticularis:1.18.1` (and `:latest`).
+**Current version: v1.20.0** — published as `ghcr.io/Think4dvantage/Lenticularis:1.20.0` (and `:latest`).
 
 | Milestone | Status |
 |---|---|
@@ -158,6 +158,8 @@ tests/backend/               # pytest suite (auth, rules, dedup, security, colle
 | v1.17 — Parallel forecast collect, chunked grid writes, stats table improvements | ✅ Shipped |
 | v1.18 — Security & performance batch, forecast accuracy analysis, Jungfraubahn collector, test harness | ✅ Shipped |
 | v1.18.1 — Self-hosted Leaflet/Chart.js, tightened CSP, static-asset caching | ✅ Shipped |
+| v1.19.0 — Public rule sets on the map, named condition groups | ✅ Shipped |
+| v1.20.0 — Green conditions are requirements (fail-safe launch/landing) | ✅ Shipped |
 
 Remaining work items are tracked as an unordered backlog in [.ai/context/features.md](.ai/context/features.md).
 

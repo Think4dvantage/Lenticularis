@@ -1,6 +1,38 @@
 # Feature History & Backlog
 
-## Current Version: v1.19.0 (shipped)
+## Current Version: v1.20.0 (shipped)
+
+Specced and planned in `specs/004-green-requirement-semantics/`.
+
+### Green Conditions Are Requirements (`specs/004`)
+
+Fixes a decision flaw: a launch/landing site whose only rule was a positive GREEN confirmation
+(e.g. "wind direction in the usable arc → green") read **green 100% of the time**, including when the
+direction was dead wrong. A GREEN condition only fires when it matches, so when it did *not* match,
+nothing triggered and the site fell back to the "benefit of the doubt" green default — the opposite of
+the pilot's intent.
+
+| Change | Detail |
+|---|---|
+| **GREEN is now a requirement** | For launch/landing, a GREEN unit (standalone GREEN condition, or an AND group whose effective `_worst` colour is green) that does **not** trigger contributes `red`. One `elif` per decision block; the existing `worst_wins` / `majority_vote` / green-default logic then produces the right answer unchanged |
+| **No-data fails safe** | "Not triggered" folds no-data into threshold-failure (`_eval_condition` returns `(False, …)` for both), so an unconfirmable GREEN requirement → **red** with no special branch. `no_data_stations` still lists the station so the pilot sees *why* (D3) |
+| **Exception semantics preserved** | RED/ORANGE contribute only when matched; a rule set built only from exceptions still defaults to green on a calm day. The benefit-of-the-doubt default survives for exception-only sets, and only there |
+| **Opportunity untouched** | Gated on `site_type != "opportunity"` — opportunity already forces red when not all units trigger; the rule would double-count and could flip its `< total_units` guard |
+| **Mixed groups stay exception-style** (D2) | Only a unit whose effective colour is green is a requirement, mirroring how `worst_wins` collapses a group to one colour |
+| Applied to all four decision blocks | `_evaluate_from_station_data`, `run_evaluation`, `run_evaluation_at`, `run_forecast_evaluation`. The four-way duplication is flagged as a follow-up cleanup, not refactored here |
+| `help.html` + i18n ×4 | Green = requirement rewritten (colour meanings, result-colour guidance, worst-wins section); `combination_hint` reworded in en/de/fr/it |
+| `tests/backend/test_rules_evaluator.py` | +8 cases: unmet green → red, no-data green → red, landing variant, all-green group unmet → red, mixed group stays green, exception-only calm → green, opportunity guard |
+
+**Deploy note** — behavioural change, not a drop-in restart of logic:
+- **Decisions change for any launch/landing rule set that contains a GREEN condition.** They change in
+  the pilot's intended direction (a required green now gates the site), but a site that used to read
+  green whenever its green condition was unmet will now read red. Exception-only rule sets are
+  unaffected.
+- Public map: no-data sets are already dropped before evaluation, so no false red reaches anonymous
+  visitors.
+- `help.html` changed → `pyproject.toml` bumped to 1.20.0 (asset cache key).
+
+## Previous Version: v1.19.0 (shipped)
 
 Two features, specced and planned in `specs/002-public-rulesets/` and
 `specs/003-condition-group-names/`.

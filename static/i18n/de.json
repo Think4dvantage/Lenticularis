@@ -157,7 +157,7 @@
     "site_type": "Platztyp",
     "launch_site": "▲ Startplatz",
     "landing_zone_btn": "⚑ Landezone",
-    "combination_hint": "Kombinationslogik: Schlechtestes gewinnt — wenn eine Bedingung ROT auslöst, ist der Platz ROT; bei ORANGE entsprechend.",
+    "combination_hint": "Kombinationslogik: Schlechtestes gewinnt — der Platz ist ROT, wenn eine Bedingung ROT auslöst oder eine erforderliche GRÜNE Bedingung nicht erfüllt ist; ORANGE, wenn eine Bedingung ORANGE auslöst.",
     "private_label": "Privat (nur du)",
     "public_label": "Öffentlich (Galerie)",
     "description_placeholder": "Kurzbeschreibung für die Galerie (optional)",

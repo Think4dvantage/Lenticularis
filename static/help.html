@@ -266,9 +266,9 @@
       <div class="faq-answer">
         <p>Each colour reflects the outcome of evaluating <em>all</em> conditions in your rule set against live station data:</p>
         <ul>
-          <li><span class="tl-green">GREEN</span> — all conditions pass. Conditions at this site look favourable according to your rules.</li>
-          <li><span class="tl-orange">ORANGE</span> — at least one condition returned ORANGE. Caution; monitor closely.</li>
-          <li><span class="tl-red">RED</span> — at least one condition returned RED. Activity not recommended by your rules.</li>
+          <li><span class="tl-green">GREEN</span> — every required (GREEN) condition is met and no ORANGE or RED limit is crossed. Conditions at this site look favourable according to your rules.</li>
+          <li><span class="tl-orange">ORANGE</span> — at least one condition returned ORANGE (and none RED). Caution; monitor closely.</li>
+          <li><span class="tl-red">RED</span> — at least one condition returned RED, <em>or a required GREEN condition is not met</em> (including a station that has no current data). Activity not recommended by your rules.</li>
         </ul>
         <div class="tip-box"><strong>Remember:</strong> traffic lights reflect your rule set only. Always apply your own judgement and check official forecasts before making any go/no-go decision.</div>
       </div>
@@ -390,12 +390,13 @@
     <details>
       <summary>What result colour should I assign to a condition?</summary>
       <div class="faq-answer">
-        <p>Each condition row has a result colour (<span class="pill pill-green">GREEN</span> / <span class="pill pill-orange">ORANGE</span> / <span class="pill pill-red">RED</span>) that is used <em>when the condition is triggered</em> (i.e. when the threshold is crossed).</p>
+        <p>Each condition row has a result colour (<span class="pill pill-green">GREEN</span> / <span class="pill pill-orange">ORANGE</span> / <span class="pill pill-red">RED</span>). RED and ORANGE are <em>exceptions</em> — they apply only when the threshold is crossed. GREEN is a <em>requirement</em> — see the important note below.</p>
         <ul>
-          <li>Assign <span class="pill pill-red">RED</span> to hard limits that make conditions dangerous (e.g. wind gust &gt; 50 km/h).</li>
-          <li>Assign <span class="pill pill-orange">ORANGE</span> to advisory limits that warrant caution (e.g. wind gust &gt; 35 km/h).</li>
-          <li>Assign <span class="pill pill-green">GREEN</span> to positive confirmation conditions (e.g. wind direction in the usable arc) — the condition is triggered only when the direction IS correct, contributing GREEN to the overall result.</li>
+          <li>Assign <span class="pill pill-red">RED</span> to hard limits that make conditions dangerous (e.g. wind gust &gt; 50 km/h). Applies only when crossed; otherwise silent.</li>
+          <li>Assign <span class="pill pill-orange">ORANGE</span> to advisory limits that warrant caution (e.g. wind gust &gt; 35 km/h). Applies only when crossed; otherwise silent.</li>
+          <li>Assign <span class="pill pill-green">GREEN</span> to conditions that <strong>must be true to fly</strong> (e.g. wind direction in the usable arc). A GREEN condition is a <strong>requirement</strong>: if it is <em>not</em> met — wrong value, or the station has no current data — the site turns <span class="tl-red">RED</span>. It does not sit silently.</li>
         </ul>
+        <div class="tip-box"><strong>GREEN = requirement.</strong> Use GREEN for what must hold for the site to be flyable. RED/ORANGE describe what makes it dangerous. A launch built only from GREEN requirements is red until every one of them is confirmed — this is deliberate, so a site is never shown as flyable just because you only wrote positive rules.</div>
       </div>
     </details>
   </div>
@@ -407,13 +408,13 @@
     <details open>
       <summary>What is "Worst wins"?</summary>
       <div class="faq-answer">
-        <p><strong>Worst wins</strong> is the default and most conservative logic. The overall site colour equals the worst individual condition result:</p>
+        <p><strong>Worst wins</strong> is the default and most conservative logic. The overall site colour equals the worst individual result:</p>
         <ul>
-          <li>Any condition returns <span class="tl-red">RED</span> → site is <span class="tl-red">RED</span>.</li>
+          <li>Any condition returns <span class="tl-red">RED</span>, or a required <span class="tl-green">GREEN</span> condition is not met → site is <span class="tl-red">RED</span>.</li>
           <li>No RED but any <span class="tl-orange">ORANGE</span> → site is <span class="tl-orange">ORANGE</span>.</li>
-          <li>All <span class="tl-green">GREEN</span> → site is <span class="tl-green">GREEN</span>.</li>
+          <li>Every required <span class="tl-green">GREEN</span> condition met and nothing worse triggered → site is <span class="tl-green">GREEN</span>.</li>
         </ul>
-        <p>Use this when <em>all</em> conditions must be met simultaneously for a go decision.</p>
+        <p>Use this when <em>all</em> requirements must be met simultaneously for a go decision. A launch/landing site with no conditions defined, or with only exception conditions that are not triggered, stays <span class="tl-green">GREEN</span> (benefit of the doubt).</p>
       </div>
     </details>
 

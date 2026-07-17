@@ -134,10 +134,14 @@ Config keys: `influxdb.timeout` (ms, default 10000), `influxdb.slow_query_timeou
 - `PUT /api/rulesets/{id}/set_showcase` — admin curation toggle. **409** if the owner has not
   published it; un-curating is always allowed.
 
-**Rule sets resting on missing data are omitted, not shown green.** `run_evaluation` returns green
-when nothing triggers, including on no data ("unknown = benefit of the doubt") — fine for a pilot who
-can see `no_data_stations`, a lie to a visitor. The public builder drops any rule set with a missing
-station. Note the frontend's `if (!dec) return;` guard catches only *failed requests*, not this.
+**Rule sets resting on missing data are omitted, not shown.** For an *exception-only* rule set,
+`run_evaluation` still returns green when nothing triggers, including on no data ("unknown = benefit
+of the doubt") — fine for a pilot who can see `no_data_stations`, a lie to a visitor. (A rule set with
+a GREEN requirement instead evaluates *red* on no data since v1.20.0 — but that is also not something
+to assert to an anonymous visitor about a site whose stations are down.) Either way the public builder
+**drops any rule set with a missing station** before evaluation, so neither false-green nor
+questionable-red reaches the anonymous map. Note the frontend's `if (!dec) return;` guard catches only
+*failed requests*, not this.
 
 ### Remaining routers
 
@@ -167,11 +171,38 @@ There is **no launch-sites API** — a "launch site" is a `ruleset` with `site_t
 2. Fetch latest measurements from InfluxDB for **all** stations in one batch (`query_latest_for_stations`)
 3. Apply operator/value logic → per-condition colour
 4. Bucket conditions by `group_id`: same non-NULL `group_id` → ANDed; `group_id = NULL` → standalone
-5. Apply `combination_logic` (`worst_wins` or `majority_vote`)
+5. Apply the requirement rule (below), then `combination_logic` (`worst_wins` or `majority_vote`)
 6. Return `TrafficLightDecision` + write to `rule_decisions` InfluxDB
 
 **Grouping is one level deep — AND only.** There is no OR-group and no nesting. Do not document or
 build against a "condition tree".
+
+### GREEN conditions are requirements (v1.20.0, `specs/004`)
+
+For **launch/landing** sites, a GREEN unit (a standalone GREEN condition, or an AND group whose
+effective colour `_worst(members)` is green) is a **requirement**. When it does **not** trigger it
+contributes `"red"` to `triggered_colours`:
+
+```python
+if matched:
+    triggered_colours.append(cond.result_colour)
+elif ruleset.site_type != "opportunity" and cond.result_colour == "green":
+    triggered_colours.append("red")   # unmet green requirement (incl. no data) → red
+```
+
+- **"Not triggered" folds no-data into threshold-failure.** `_eval_condition` returns `(False, …)`
+  for both a missing station and a failed comparison, so an unconfirmable GREEN requirement **fails
+  safe to red** — no separate no-data branch (spec 004 D3).
+- **RED/ORANGE keep exception semantics.** They contribute only when matched; otherwise silent. A
+  rule set built only from exception conditions therefore still defaults to `"green"` when nothing
+  triggers — **the benefit-of-the-doubt default survives for exception-only sets, and only there.**
+- **Opportunity is gated out** (`!= "opportunity"`). It already forces red when
+  `len(triggered_colours) < total_units`; appending red would double-count and could flip that guard.
+- **Mixed groups stay exception-style** (D2): only a unit whose effective colour is green is a
+  requirement, mirroring how `worst_wins` collapses a group to one colour.
+- The rule is duplicated across all four decision blocks (`_evaluate_from_station_data`,
+  `run_evaluation`, `run_evaluation_at`, `run_forecast_evaluation`) — a flagged follow-up is to route
+  them through the shared core.
 
 **The evaluator buckets groups from the conditions — never from `condition_groups` rows.** This is
 load-bearing and must not be "cleaned up":

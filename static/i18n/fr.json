@@ -157,7 +157,7 @@
     "site_type": "Type de site",
     "launch_site": "▲ Site de décollage",
     "landing_zone_btn": "⚑ Zone d'atterrissage",
-    "combination_hint": "Logique de combinaison : le pire l'emporte — si une condition déclenche ROUGE, le site est ROUGE ; si ORANGE, il est ORANGE.",
+    "combination_hint": "Logique de combinaison : le pire l'emporte — le site est ROUGE si une condition déclenche ROUGE ou si une condition VERTE requise n'est pas remplie ; ORANGE si une condition déclenche ORANGE.",
     "private_label": "Privé (vous seul)",
     "public_label": "Public (galerie)",
     "description_placeholder": "Courte description affichée dans la galerie (optionnel)",
