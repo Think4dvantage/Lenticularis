@@ -1,6 +1,19 @@
 # Feature History & Backlog
 
-## Current Version: v1.20.0 (shipped)
+## Current Version: v1.20.1 (shipped)
+
+### Fix: duplicate condition-group id on re-edit (`ruleset-editor.html`)
+
+`makeCondGroup()` mints new group ids as `'g' + (++groupSeq)`. `groupSeq` was only ever
+reset to `0` in `applyPreset()` — `loadEdit()` (opening an existing rule set) restored the
+stored `condition_groups` without touching it. So editing a rule whose groups were already
+`g1`/`g2`/`g3` and clicking "Add Condition Group" minted `g1` again, and the save request
+was rejected with `duplicate group id(s): g1`.
+
+Fix: `loadEdit()` now scans the restored `condition_groups` for ids matching `gN` and
+advances `groupSeq` past the highest `N` found, so ids minted afterward can't collide.
+
+## Previous Version: v1.20.0 (shipped)
 
 Specced and planned in `specs/004-green-requirement-semantics/`.
 

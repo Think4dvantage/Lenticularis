@@ -1175,6 +1175,12 @@
     const storedGroups = rs.condition_groups || [];
     const groupById = new Map(storedGroups.map(g => [g.id, g]));
     const seenGroupIds = new Set();
+    // Advance groupSeq past any restored "gN" ids so a later "Add Condition
+    // Group" click can't mint an id that collides with one already in use.
+    for (const g of storedGroups) {
+      const m = /^g(\d+)$/.exec(g.id);
+      if (m) groupSeq = Math.max(groupSeq, parseInt(m[1], 10));
+    }
     for (const c of sorted) {
       if (!c.group_id) {
         makeCondGroup([c]);
