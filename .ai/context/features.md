@@ -319,9 +319,33 @@ Key new files: `api/errors.py`, `api/routers/pages.py`, `collectors/utils.py`, `
 
 ## Backlog (unordered)
 
-### Thermal Forecast (lsmfapi thermal-grid endpoint — ready to integrate)
+### Replay-Aware Ruleset Decisions (`specs/007-replay-aware-ruleset-decisions`) — specced
 
-Full API spec + TypeScript types + fetch helpers in `.ai/context/lsmfapi-thermal-grid.md`.
+Ruleset markers on the map (launch/landing/opportunity dots) always evaluate live — scrubbing the
+time-nav bar to a past/future day or hitting ▶ Play changes the wind arrows but never the decision
+dots, because `loadRulesetMarkers()` (`index.html:765`) never passes `at_time` and isn't wired to
+`_mapReplay` at all. Spec is written (12/12 checklist, no open questions); ready for `plan.md`. Also
+folds in a related bug: linked landing-site halos are always evaluated live even when the launch site
+itself would use `at_time`.
+
+### Viewport-First Progressive Loading & Geolocation Centering (`specs/008-progressive-map-loading`) — specced
+
+Two changes bundled together: (1) scope station/replay loading to what's actually on screen, loading
+"now" for visible stations first, then alternating days (+1/-1/+2/-2/...) for the same visible set,
+then the identical pattern for off-screen stations at lower priority — replacing today's "fetch every
+station, every time" baseline (`loadStations`, `map.js:372-410`; `ReplayEngine`/`/api/stations/replay`,
+neither has any viewport-bounds concept today). (2) Ask for browser geolocation on first visit; default
+(no access) stays Interlaken at zoom 11, granted access centers there instead, remembered across
+visits. Spec is written (12/12 checklist); ready for `plan.md`. **Cross-cutting with specs/007** —
+both touch `_mapReplay`/`loadStations`/`index.html`'s day-offset handling; whichever is planned second
+should read the other's `plan.md` first.
+
+### Thermal Forecast (lsmfapi thermal-grid endpoint) — planning underway in `specs/006-thermal-forecast`
+
+Full API spec + TypeScript types + fetch helpers in `.ai/context/lsmfapi-thermal-grid.md`. Plan phase
+already written (`specs/006-thermal-forecast/plan.md`, targeting v1.20.0 → v1.21.0) — this entry's
+detail below predates that plan and is kept for the original rationale; see the spec folder for the
+current design.
 
 Key fields: `solar` (W/m²), `lcl` (cloud base m ASL), `lfc`, `freezing_level`, `cape`, `cin`, `cloud_cover`, `tke`, `sunshine`. All with ensemble `_min`/`_max`. 120-hour horizon, ~4×/day refresh. Default `stride_km=10` (~200 pts over Switzerland, ~0.5 MB uncompressed).
 
@@ -342,6 +366,13 @@ is the observed counterpart to the forecast thermal grid above, and could valida
 
 Caveat: **exclude `jfb-hollandiahutte-sac`** — it declares 3248 m but reports ~928 hPa / 23 °C
 (a ~750 m reading). Upstream metadata/sensor bug, confirmed in the raw payload.
+
+### Shelved
+
+- **InfluxDB 2.7 → 3 migration** (`specs/005-influxdb3-migration`) — spec + plan complete, not
+  proceeding to `tasks.md`. Blocked on a licensing/monetisation decision (D1 in the spec): InfluxDB 3
+  Core (free) can't serve Lenti's 90-day/365-day query patterns, and Enterprise requires resolving
+  whether `lenti.cloud` is commercial use first. Reactivate when that question closes.
 
 ### Platform Features
 
