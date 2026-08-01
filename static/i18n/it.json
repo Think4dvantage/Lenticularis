@@ -90,6 +90,7 @@
     "toggle_personal": "Stazioni personali",
     "toggle_personal_on": "⚠ Stazioni pers.: ON",
     "toggle_personal_off": "⚠ Stazioni pers.: OFF",
+    "geolocate_button": "📍 Posizione mia",
     "public": {
       "example_badge": "Esempio",
       "example_hint": "Questo è un insieme di regole di esempio creato da un altro pilota. Registrati per creare le tue regole per i tuoi siti di volo.",

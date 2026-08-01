@@ -200,9 +200,10 @@ elif ruleset.site_type != "opportunity" and cond.result_colour == "green":
   `len(triggered_colours) < total_units`; appending red would double-count and could flip that guard.
 - **Mixed groups stay exception-style** (D2): only a unit whose effective colour is green is a
   requirement, mirroring how `worst_wins` collapses a group to one colour.
-- The rule is duplicated across all four decision blocks (`_evaluate_from_station_data`,
-  `run_evaluation`, `run_evaluation_at`, `run_forecast_evaluation`) — a flagged follow-up is to route
-  them through the shared core.
+- The rule is duplicated across four decision blocks (`run_evaluation`, `run_evaluation_at`,
+  `run_forecast_evaluation`, plus `_evaluate_from_station_data` itself) — a flagged follow-up is to
+  route them through the shared core. `run_forecast_evaluation_at` (added specs/007, below) does
+  **not** add a fifth copy — it calls `_evaluate_from_station_data` directly.
 
 **The evaluator buckets groups from the conditions — never from `condition_groups` rows.** This is
 load-bearing and must not be "cleaned up":
@@ -219,10 +220,22 @@ A one-condition group evaluates identically to a standalone condition: `total_un
 and a one-member group contributes `_worst([c])` — that same colour.
 
 Public entry points: `run_evaluation`, `run_evaluation_at`, `run_forecast_evaluation`,
-`run_history_backfill`, `write_decisions_batch`. The core is `_evaluate_from_station_data(ruleset,
-station_data) -> (decision, results)`. There is **no** `evaluate_ruleset()` function.
+`run_forecast_evaluation_at`, `run_history_backfill`, `write_decisions_batch`. The core is
+`_evaluate_from_station_data(ruleset, station_data) -> (decision, results)`. There is **no**
+`evaluate_ruleset()` function in `evaluator.py` (the router's endpoint handler of that name in
+`rulesets.py` is routing glue, not an evaluator entry point).
 
 Forecast evaluation reuses identical logic over hourly `valid_time` steps. Does NOT write to InfluxDB.
+
+**`run_forecast_evaluation_at(ruleset, influx, valid_time)`** (specs/007) — single-`valid_time`
+forecast lookup, the forecast-side counterpart to `run_evaluation_at`. Built on
+`InfluxClient.query_forecast_snapshot_for_stations` (±30 min window in `weather_forecast`, already
+used by `GET /api/foehn/forecast`) rather than a new query. `GET /api/rulesets/{id}/evaluate` picks
+between `run_evaluation_at` (default) and this function via a new `forecast: bool = False` query
+param — the caller (the map's replay engine) states the mode explicitly rather than the server
+inferring it from comparing `at_time` to its own clock. Linked landing rulesets (the launch-site
+halo) are now evaluated in the same `at_time`/`forecast` mode as the primary rule set — previously
+always live regardless of the primary rule set's mode.
 
 ---
 
@@ -235,6 +248,37 @@ Forecast evaluation reuses identical logic over hourly `valid_time` steps. Does 
 **Cache poisoning guard**: skip writing when `fc_frame_count == 0` and `include_forecast` is true — prevents obs-only entries from blocking forecast data.
 
 **Post-forecast invalidation**: `main.py` lifespan wires a real async hook via `scheduler.on_forecast_run = _make_forecast_hook(influx, display_registry)`. After each successful forecast run (`status == "ok"` and `measurement_count > 0`), the hook calls `invalidate_forecast_replay_cache()` then spawns `warm_replay_cache()` as a background task.
+
+**Both `GET /api/stations` and `GET /api/stations/replay` still return every station in one atomic
+payload** — no bounding-box/`station_ids` query parameter exists on either (specs/008, deliberately
+rejected: it would fragment this shared cache into one entry per viewport per pilot instead of one
+entry per day shared by everyone, see below).
+
+---
+
+## Viewport-First Station Rendering (`static/map.js`, specs/008)
+
+**Client-side only — no API/cache change.** Since both station endpoints already return every
+station in one payload, "viewport-first" is a **render-order** concept, not a fetch-order one:
+`_renderStationsViewportFirst()` places stations inside `map.getBounds()` synchronously, defers the
+rest via chunked `requestIdleCallback` (`_deferChunked`, `_pendingOffscreen`), and a `moveend`
+listener promotes newly-visible stations out of that pending queue on pan/zoom without touching or
+duplicating already-placed markers. Applied at every station-marker render site: `loadStations()`,
+`applyReplaySnapshot()`, and (transitively) the 60 s live refresh. **Ruleset markers
+(`loadRulesetMarkers`, specs/007) are untouched** — out of this feature's scope.
+
+A bounding-box query parameter on `/api/stations/replay` was considered and rejected: `_replay_cache`
+is shared across every pilot viewing the same day-offset, which is what makes `warm_replay_cache`'s
+startup warm-up valuable (one InfluxDB query serves everyone). Scoping by viewport would fragment
+that into one cache entry per pilot's individual pan position instead.
+
+**Geolocation centering**: `map.js` attempts `navigator.geolocation.getCurrentPosition()` once,
+asynchronously, right after the map is already painted at its Interlaken/zoom-11 default — never
+blocking first paint. `localStorage['lenti_geo_pref']` (`"granted"`/`"declined"`) remembers only an
+explicit `PERMISSION_DENIED`; a timeout or unavailable position writes nothing, so a prior grant
+retries on the next visit rather than being permanently revoked by a transient failure. An explicit
+"center on me" Leaflet control (mirrors the existing `_PersonalToggle` pattern) can always retry
+regardless of the stored preference. No location data is ever sent to the backend.
 
 ---
 

@@ -89,6 +89,7 @@
     "toggle_personal": "Privatstationen",
     "toggle_personal_on": "⚠ Privatstationen: AN",
     "toggle_personal_off": "⚠ Privatstationen: AUS",
+    "geolocate_button": "📍 Mein Standort",
     "public": {
       "example_badge": "Beispiel",
       "example_hint": "Dies ist ein Beispiel-Regelsatz eines anderen Piloten. Registriere dich, um eigene Regeln für deine Fluggebiete zu erstellen.",

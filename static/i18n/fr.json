@@ -89,6 +89,7 @@
     "toggle_personal": "Stations personnelles",
     "toggle_personal_on": "⚠ Stations perso : ON",
     "toggle_personal_off": "⚠ Stations perso : OFF",
+    "geolocate_button": "📍 Ma position",
     "public": {
       "example_badge": "Exemple",
       "example_hint": "Ceci est un jeu de règles d'exemple créé par un autre pilote. Inscrivez-vous pour créer vos propres règles pour vos sites de vol.",

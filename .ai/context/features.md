@@ -1,6 +1,50 @@
 # Feature History & Backlog
 
-## Current Version: v1.20.1 (shipped)
+## Current Version: v1.22.0 (shipped)
+
+Specced and planned in `specs/008-progressive-map-loading/`.
+
+### Viewport-First Progressive Loading & Geolocation Centering (`specs/008`)
+
+The map always fetched and rendered every station regardless of what was on screen, and always opened
+centered on Interlaken. This feature makes rendering viewport-aware and lets the map open centered on
+the pilot instead.
+
+| Change | Detail |
+|---|---|
+| **No API/cache change** | `GET /api/stations` and `GET /api/stations/replay` already return every station in one atomic payload, and the day-offset progressive-load sequence (`[1, 0, 2, -1, 3, -2, 4, -3, 5]`) already existed in both the client prefetch loop and `warm_replay_cache`. A bounding-box query parameter was considered and rejected — it would fragment the shared, cross-pilot `_replay_cache` into one entry per viewport |
+| **Viewport-first rendering** | `_renderStationsViewportFirst()` (`map.js`) places on-screen stations immediately, defers the rest via chunked `requestIdleCallback`. Applied to `loadStations()`, `applyReplaySnapshot()`, and the 60s live refresh. Ruleset markers (specs/007) untouched |
+| **Pan/zoom re-prioritization** | `moveend` listener promotes newly-visible stations out of the still-pending deferred queue, without duplicating already-placed markers |
+| **Geolocation centering** | First visit (or any prior grant) attempts `navigator.geolocation` non-blocking, after the map is already painted at Interlaken/zoom-11; recenters via `map.setView()` if resolved. `localStorage['lenti_geo_pref']` remembers only an explicit denial — a timeout/unavailable-position leaves a prior grant to retry next visit. New "center on me" control (mirrors `_PersonalToggle`) retries regardless of stored preference |
+| i18n ×4 | `map.geolocate_button` |
+
+**Deploy note**: `static/map.js` + i18n changed → `pyproject.toml` bumped to 1.22.0 (asset cache key).
+No SQLite/InfluxDB schema change, no new query parameters, no data sent to the backend.
+
+## Previous Version: v1.21.0 (shipped)
+
+Specced and planned in `specs/007-replay-aware-ruleset-decisions/`.
+
+### Replay-Aware Ruleset Decisions (`specs/007`)
+
+The map's time-navigation bar already re-draws wind arrows for any scrubbed day/hour or ▶ Play
+animation, but launch/landing/opportunity markers always showed **today's live** decision regardless
+of what moment was on screen — scrubbing to yesterday left the wind arrow and the decision dot
+disagreeing. This feature makes ruleset markers follow the same replay moment.
+
+| Change | Detail |
+|---|---|
+| **New evaluator function** | `run_forecast_evaluation_at(ruleset, influx, valid_time)` — single-`valid_time` forecast lookup, the forecast counterpart to `run_evaluation_at`. Built on the already-existing `InfluxClient.query_forecast_snapshot_for_stations` (previously only used by `GET /api/foehn/forecast`), and calls `_evaluate_from_station_data` directly instead of duplicating the decision block a fifth time |
+| **`GET /api/rulesets/{id}/evaluate` gains `forecast: bool = False`** | Only meaningful with `at_time` set. `false` (default, unchanged) = observed data via `run_evaluation_at`. `true` = forecast data for that `valid_time` via the new function. The caller states the mode explicitly — the map already knows which mode applies to the frame it's displaying (`ReplayEngine.isForecastFrame`) |
+| **Landing-halo fix** | Linked landing rulesets (the launch-site halo colour) are now evaluated in the **same** `at_time`/`forecast` mode as the primary rule set, via a shared `_evaluate_at()` router helper. Previously always live regardless of the primary rule set's mode — invisible until this feature made the map actually call `evaluate?at_time=` |
+| **Frontend: coalescing refresh queue** | `loadRulesetMarkers(atTime, isForecast)` hooked into `_mapReplay`'s `onFrame` callback. A single-slot coalescing queue (not a fixed debounce) keeps at most one batch of `/evaluate` calls in flight regardless of Play's 600 ms/frame cadence; a generation counter discards a superseded batch's results instead of rendering a stale timestamp's decision |
+| **Existing 60 s live poll gated** | `if (window._lentiIsTimeNavLive())` — previously unconditional, which would have silently flipped markers back to live every minute while scrubbed away from Now, the moment markers became replay-aware |
+| `tests/backend/test_forecast_evaluation_at.py`, `test_evaluate_at_time.py` | New evaluator function parity with `_evaluate_from_station_data`; no-data fail-safe; API-level forecast-param routing; landing-halo regression test |
+
+**Deploy note**: `static/index.html` changed → `pyproject.toml` bumped to 1.21.0 (asset cache key).
+No SQLite/InfluxDB schema change, no response-shape change.
+
+## Previous Version: v1.20.1 (shipped)
 
 ### Fix: duplicate condition-group id on re-edit (`ruleset-editor.html`)
 
@@ -318,27 +362,6 @@ Key new files: `api/errors.py`, `api/routers/pages.py`, `collectors/utils.py`, `
 ---
 
 ## Backlog (unordered)
-
-### Replay-Aware Ruleset Decisions (`specs/007-replay-aware-ruleset-decisions`) — specced
-
-Ruleset markers on the map (launch/landing/opportunity dots) always evaluate live — scrubbing the
-time-nav bar to a past/future day or hitting ▶ Play changes the wind arrows but never the decision
-dots, because `loadRulesetMarkers()` (`index.html:765`) never passes `at_time` and isn't wired to
-`_mapReplay` at all. Spec is written (12/12 checklist, no open questions); ready for `plan.md`. Also
-folds in a related bug: linked landing-site halos are always evaluated live even when the launch site
-itself would use `at_time`.
-
-### Viewport-First Progressive Loading & Geolocation Centering (`specs/008-progressive-map-loading`) — specced
-
-Two changes bundled together: (1) scope station/replay loading to what's actually on screen, loading
-"now" for visible stations first, then alternating days (+1/-1/+2/-2/...) for the same visible set,
-then the identical pattern for off-screen stations at lower priority — replacing today's "fetch every
-station, every time" baseline (`loadStations`, `map.js:372-410`; `ReplayEngine`/`/api/stations/replay`,
-neither has any viewport-bounds concept today). (2) Ask for browser geolocation on first visit; default
-(no access) stays Interlaken at zoom 11, granted access centers there instead, remembered across
-visits. Spec is written (12/12 checklist); ready for `plan.md`. **Cross-cutting with specs/007** —
-both touch `_mapReplay`/`loadStations`/`index.html`'s day-offset handling; whichever is planned second
-should read the other's `plan.md` first.
 
 ### Thermal Forecast (lsmfapi thermal-grid endpoint) — planning underway in `specs/006-thermal-forecast`
 

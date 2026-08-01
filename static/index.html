@@ -314,6 +314,11 @@ let _tnPlayTimer  = null;
 let _tnPlayActive = false;
 let _tnPlayHour   = 7;
 
+// Read by the module <script> block below that owns loadRulesetMarkers(), which
+// cannot see this classic script's let/const bindings directly
+// (specs/007-replay-aware-ruleset-decisions).
+window._lentiIsTimeNavLive = () => _tnLive;
+
 const _mapReplay = new ReplayEngine(
   // onFrame — update time display and nearest hour button
   (snapshot, ts, idx, total, isForecast) => {
@@ -333,6 +338,9 @@ const _mapReplay = new ReplayEngine(
         b.classList.toggle('active', bh === h || (d.getMinutes() >= 30 && bh === h + 1));
       });
     }
+    // Ruleset markers follow the same replay moment as the wind arrows
+    // (specs/007-replay-aware-ruleset-decisions).
+    if (!_tnLive) window._lentiScheduleRulesetRefresh(ts, isForecast);
   },
   // onStateChange — show loading state on play button
   (state) => {
@@ -377,6 +385,9 @@ function tnGoLive() {
   _mapReplay.pause();
   loadStations();
   startLiveRefresh();
+  // Resume live ruleset marker decisions immediately, rather than waiting up to
+  // 60s for the next poll (specs/007-replay-aware-ruleset-decisions FR-005).
+  window._lentiScheduleRulesetRefresh(null, false);
 }
 
 // Returns the forecast_hours needed to cover a given day offset from today.
@@ -762,9 +773,53 @@ window._stationsReady.then(async () => {
   window._lentiMap.getPane('rulesetPane').style.zIndex = 450;
   const rulesetLayer = L.layerGroup().addTo(window._lentiMap);
 
-  async function loadRulesetMarkers() {
+  // ── Replay-aware refresh (specs/007-replay-aware-ruleset-decisions) ────────
+  // A single-slot coalescing queue: at most one loadRulesetMarkers batch is ever in
+  // flight. A newer replay frame overwrites the pending target instead of starting a
+  // second batch (NFR-002); when the in-flight batch resolves, it immediately picks up
+  // the latest pending target, skipping any frames in between. _rulesetMarkerGen guards
+  // against a slower, superseded batch overwriting markers with a stale timestamp's
+  // decision (NFR-003).
+  let _rulesetMarkerGen = 0;
+  let _rulesetRefreshBusy = false;
+  let _rulesetRefreshPending = null; // {ts, isForecast} | null — ts=null means "live"
+
+  function _setRulesetRefreshingUi(on) {
+    const pane = window._lentiMap.getPane('rulesetPane');
+    if (pane) pane.style.opacity = on ? '0.6' : '1';
+  }
+
+  async function _runRulesetRefresh(ts, isForecast) {
+    _rulesetRefreshBusy = true;
+    _setRulesetRefreshingUi(true);
+    try {
+      await loadRulesetMarkers(ts ?? undefined, ts ? isForecast : undefined);
+    } finally {
+      _rulesetRefreshBusy = false;
+      _setRulesetRefreshingUi(false);
+      if (_rulesetRefreshPending) {
+        const next = _rulesetRefreshPending;
+        _rulesetRefreshPending = null;
+        _runRulesetRefresh(next.ts, next.isForecast);
+      }
+    }
+  }
+
+  // Exposed so the classic <script> block driving the time-nav bar / replay engine
+  // (which cannot see this module script's bindings, and vice versa) can trigger a
+  // replay-aware marker refresh without duplicating the coalescing logic there.
+  window._lentiScheduleRulesetRefresh = function(ts, isForecast) {
+    if (_rulesetRefreshBusy) {
+      _rulesetRefreshPending = { ts, isForecast };
+      return;
+    }
+    _runRulesetRefresh(ts, isForecast);
+  };
+
+  async function loadRulesetMarkers(atTime, isForecast) {
     const t0 = performance.now();
-    console.log('[Lenti:index] loadRulesetMarkers start');
+    const gen = ++_rulesetMarkerGen;
+    console.log(`[Lenti:index] loadRulesetMarkers start atTime=${atTime ?? 'live'} isForecast=${!!isForecast}`);
     try {
       const res = await fetchAuth('/api/rulesets');
       if (!res.ok) { console.warn('[Lenti:index] loadRulesetMarkers: /api/rulesets returned', res.status); return; }
@@ -773,9 +828,15 @@ window._stationsReady.then(async () => {
       console.log(`[Lenti:index] loadRulesetMarkers: ${rulesets.length} rulesets, ${positioned.length} positioned`);
       if (positioned.length === 0) return;
 
+      const qs = atTime ? `?at_time=${encodeURIComponent(atTime)}&forecast=${!!isForecast}` : '';
       const evaluations = await Promise.allSettled(
-        positioned.map(rs => fetchAuth(`/api/rulesets/${rs.id}/evaluate`).then(r => r.ok ? r.json() : null))
+        positioned.map(rs => fetchAuth(`/api/rulesets/${rs.id}/evaluate${qs}`).then(r => r.ok ? r.json() : null))
       );
+
+      if (gen !== _rulesetMarkerGen) {
+        console.log(`[Lenti:index] loadRulesetMarkers: discarding stale batch (gen ${gen} superseded by ${_rulesetMarkerGen})`);
+        return;
+      }
 
       rulesetLayer.clearLayers();
 
@@ -930,7 +991,13 @@ window._stationsReady.then(async () => {
   // Signed-in pilots see their own rule sets; visitors see curated examples.
   if (isLoggedIn()) {
     loadRulesetMarkers();
-    setInterval(loadRulesetMarkers, 60_000);
+    setInterval(() => {
+      // Only the live poll owns unconditional refresh; while scrubbed away from Now,
+      // the replay engine's onFrame hook is the only thing allowed to touch marker
+      // decisions (specs/007-replay-aware-ruleset-decisions R6) — otherwise this poll
+      // would silently flip markers back to live every 60s during replay.
+      if (window._lentiIsTimeNavLive()) loadRulesetMarkers();
+    }, 60_000);
   } else {
     loadPublicRulesetMarkers();
     setInterval(loadPublicRulesetMarkers, 60_000);

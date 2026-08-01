@@ -363,6 +363,151 @@ const _PersonalToggle = L.Control.extend({
 new _PersonalToggle({ position: 'topright' }).addTo(map);
 
 // ---------------------------------------------------------------------------
+// Geolocation centering (specs/008-progressive-map-loading)
+// First visit: attempt geolocation once, non-blocking — the map above is
+// already painted at the Interlaken default regardless of the outcome. A prior
+// explicit decline is remembered and not re-prompted; a prior grant re-resolves
+// fresh on every visit. The explicit "center on me" control below can always
+// retry, regardless of the stored preference.
+// ---------------------------------------------------------------------------
+const _GEO_PREF_KEY = 'lenti_geo_pref';
+
+function _tryGeolocate(onSettle) {
+  if (!('geolocation' in navigator)) { onSettle(null); return; }
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      localStorage.setItem(_GEO_PREF_KEY, 'granted');
+      onSettle({ lat: pos.coords.latitude, lon: pos.coords.longitude });
+    },
+    err => {
+      // Only an explicit denial is remembered — a timeout or unavailable position
+      // must not permanently overwrite a prior grant (it retries next visit).
+      if (err.code === err.PERMISSION_DENIED) localStorage.setItem(_GEO_PREF_KEY, 'declined');
+      console.warn('[Lenti:map] geolocation unavailable:', err.message);
+      onSettle(null);
+    },
+    { timeout: 8000 },
+  );
+}
+
+if (localStorage.getItem(_GEO_PREF_KEY) !== 'declined') {
+  _tryGeolocate(pos => {
+    if (pos) {
+      console.log(`[Lenti:map] geolocation resolved — recentering to ${pos.lat.toFixed(4)}, ${pos.lon.toFixed(4)}`);
+      map.setView([pos.lat, pos.lon], 11);
+    }
+  });
+}
+
+const _GeolocateControl = L.Control.extend({
+  onAdd() {
+    const btn = L.DomUtil.create('button');
+    Object.assign(btn.style, {
+      background: '#1a1f2e',
+      border: '1px solid #2d3748',
+      borderRadius: '6px',
+      color: '#63b3ed',
+      cursor: 'pointer',
+      fontSize: '0.78rem',
+      fontFamily: 'inherit',
+      fontWeight: '500',
+      padding: '5px 10px',
+      lineHeight: '1.4',
+      boxShadow: '0 1px 4px rgba(0,0,0,0.4)',
+      whiteSpace: 'nowrap',
+      marginTop: '6px',
+    });
+    btn.title = 'Center the map on my current location';
+    function update() {
+      const t = typeof window.t === 'function' ? window.t : k => k;
+      btn.textContent = t('map.geolocate_button');
+    }
+    update();
+    // i18n loads after this control is created (module script is deferred).
+    document.addEventListener('i18nReady', update, { once: true });
+    L.DomEvent.on(btn, 'click', L.DomEvent.stopPropagation);
+    L.DomEvent.on(btn, 'click', () => {
+      console.log('[Lenti:map] geolocate control clicked');
+      _tryGeolocate(pos => { if (pos) map.setView([pos.lat, pos.lon], 11); });
+    });
+    return btn;
+  },
+});
+new _GeolocateControl({ position: 'topright' }).addTo(map);
+
+// ---------------------------------------------------------------------------
+// Viewport-first progressive rendering (specs/008-progressive-map-loading)
+// Stations inside the current map bounds are placed immediately; the rest are
+// placed in small chunks during idle time so a large station count never
+// blocks the initial paint. Panning/zooming re-prioritizes the still-pending
+// queue by promoting newly-visible stations, without touching or duplicating
+// markers already placed.
+// ---------------------------------------------------------------------------
+let _renderGen = 0;
+let _pendingOffscreen = [];
+
+function _placeStationMarker(s) {
+  if (s.latitude == null || s.longitude == null) return false;
+  const isFoehn    = s.network === 'foehn';
+  const isPersonal = PERSONAL_NETWORKS.has(s.network);
+  const icon  = isFoehn ? foehnMarkerIcon(s) : markerIcon(s);
+  const layer = isPersonal ? _personalLayer : markerLayer;
+  // Lazy popup: built only when opened, so window.t is guaranteed to be ready
+  L.marker([s.latitude, s.longitude], { icon })
+    .addTo(layer)
+    .bindPopup(() => isFoehn ? buildFoehnPopup(s) : buildPopup(s), { maxWidth: 260 });
+  return true;
+}
+
+function _partitionByViewport(stations) {
+  const bounds = map.getBounds();
+  const visible = [], offscreen = [];
+  for (const s of stations) {
+    if (s.latitude == null || s.longitude == null) continue;
+    (bounds.contains([s.latitude, s.longitude]) ? visible : offscreen).push(s);
+  }
+  return { visible, offscreen };
+}
+
+function _deferChunked(placeFn, gen, chunkSize = 40) {
+  if (_pendingOffscreen.length === 0) return;
+  const schedule = window.requestIdleCallback || (cb => setTimeout(cb, 0));
+  schedule(() => {
+    if (gen !== _renderGen) return; // superseded by a newer full render pass
+    const chunk = _pendingOffscreen.splice(0, chunkSize);
+    chunk.forEach(placeFn);
+    _deferChunked(placeFn, gen, chunkSize);
+  });
+}
+
+// Places the visible tier synchronously, defers the rest. The caller must clear
+// layers first when rendering fresh data (a full new fetch/frame) — moveend
+// re-prioritization below intentionally does NOT go through this function, since
+// it only promotes still-pending stations and must never re-place a marker
+// that's already on the map.
+function _renderStationsViewportFirst(stations, placeFn) {
+  const gen = ++_renderGen;
+  const { visible, offscreen } = _partitionByViewport(stations);
+  visible.forEach(placeFn);
+  _pendingOffscreen = offscreen;
+  _deferChunked(placeFn, gen);
+  return { visibleCount: visible.length, offscreenCount: offscreen.length };
+}
+
+// Pan/zoom re-prioritization (FR-005): promote any now-visible station still
+// waiting in the deferred queue. No-op once the deferred queue has drained.
+map.on('moveend', () => {
+  if (_pendingOffscreen.length === 0) return;
+  const bounds = map.getBounds();
+  const stillPending = [];
+  for (const s of _pendingOffscreen) {
+    if (bounds.contains([s.latitude, s.longitude])) _placeStationMarker(s);
+    else stillPending.push(s);
+  }
+  _pendingOffscreen = stillPending;
+});
+
+// ---------------------------------------------------------------------------
 // Load stations and place markers
 // ---------------------------------------------------------------------------
 
@@ -386,21 +531,10 @@ async function loadStations() {
     markerLayer.clearLayers();
     _personalLayer.clearLayers();
 
-    let placed = 0;
-    for (const s of stations) {
-      if (s.latitude == null || s.longitude == null) continue;
-      const isFoehn    = s.network === 'foehn';
-      const isPersonal = PERSONAL_NETWORKS.has(s.network);
-      const icon  = isFoehn ? foehnMarkerIcon(s) : markerIcon(s);
-      const layer = isPersonal ? _personalLayer : markerLayer;
-      // Lazy popup: built only when opened, so window.t is guaranteed to be ready
-      L.marker([s.latitude, s.longitude], { icon })
-        .addTo(layer)
-        .bindPopup(() => isFoehn ? buildFoehnPopup(s) : buildPopup(s), { maxWidth: 260 });
-      placed++;
-    }
+    const { visibleCount, offscreenCount } = _renderStationsViewportFirst(stations, _placeStationMarker);
+    const placed = visibleCount + offscreenCount;
 
-    console.log(`[Lenti:map] ${placed} markers placed, total loadStations time: ${(performance.now()-t0).toFixed(0)}ms`);
+    console.log(`[Lenti:map] ${placed} markers placed (${visibleCount} visible now, ${offscreenCount} deferred), total loadStations time: ${(performance.now()-t0).toFixed(0)}ms`);
     const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
     setStatus(true, `${placed} station${placed !== 1 ? 's' : ''} · ${now}`);
   } catch (err) {
@@ -437,18 +571,8 @@ startLiveRefresh();
 function applyReplaySnapshot(stations) {
   markerLayer.clearLayers();
   _personalLayer.clearLayers();
-  let placed = 0;
-  for (const s of stations) {
-    if (s.latitude == null || s.longitude == null) continue;
-    const isFoehn    = s.network === 'foehn';
-    const isPersonal = PERSONAL_NETWORKS.has(s.network);
-    const icon  = isFoehn ? foehnMarkerIcon(s) : markerIcon(s);
-    const layer = isPersonal ? _personalLayer : markerLayer;
-    L.marker([s.latitude, s.longitude], { icon })
-      .addTo(layer)
-      .bindPopup(() => isFoehn ? buildFoehnPopup(s) : buildPopup(s), { maxWidth: 260 });
-    placed++;
-  }
+  const { visibleCount, offscreenCount } = _renderStationsViewportFirst(stations, _placeStationMarker);
+  const placed = visibleCount + offscreenCount;
   if (placed === 0 && stations.length > 0)
     console.warn(`[Lenti:map] applyReplaySnapshot: ${stations.length} stations in snapshot but 0 placed (all missing lat/lon?)`);
   return placed;

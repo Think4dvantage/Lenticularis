@@ -622,6 +622,55 @@ def run_evaluation_at(
     }
 
 
+def run_forecast_evaluation_at(
+    ruleset: RuleSet,
+    influx: InfluxClient,
+    valid_time: datetime,
+) -> dict:
+    """
+    Evaluate all conditions in *ruleset* against forecast data for a single *valid_time*.
+
+    Uses ``query_forecast_snapshot_for_stations`` (±30 min window around ``valid_time`` in
+    ``weather_forecast``) instead of the full multi-hour series ``run_forecast_evaluation``
+    returns. Does **not** write to InfluxDB — the result is ephemeral, same as ``run_evaluation_at``.
+
+    Reuses ``_evaluate_from_station_data`` for the decision itself rather than duplicating the
+    standalone/group/combination-logic block inline.
+
+    Returns the same dict shape as ``run_evaluation_at``.
+    """
+    conditions: list[RuleCondition] = ruleset.conditions
+
+    station_ids: set[str] = set()
+    for c in conditions:
+        station_ids.add(c.station_id)
+        if c.station_b_id:
+            station_ids.add(c.station_b_id)
+
+    snapshot = influx.query_forecast_snapshot_for_stations(list(station_ids), valid_time)
+
+    station_data: dict[str, dict] = {}
+    no_data: list[str] = []
+    for sid in station_ids:
+        if sid in snapshot:
+            station_data[sid] = snapshot[sid]
+        else:
+            no_data.append(sid)
+            logger.warning(
+                "No forecast snapshot for station %s at %s (ruleset %s)",
+                sid, valid_time.isoformat(), ruleset.id,
+            )
+
+    decision, condition_results = _evaluate_from_station_data(ruleset, station_data)
+
+    return {
+        "decision":          decision,
+        "evaluated_at":      valid_time.isoformat(),
+        "condition_results": condition_results,
+        "no_data_stations":  no_data,
+    }
+
+
 def run_forecast_evaluation(
     ruleset: RuleSet,
     influx: InfluxClient,

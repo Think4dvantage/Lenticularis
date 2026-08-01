@@ -201,11 +201,41 @@ def create_ruleset(
 # Evaluate — compute current GREEN/ORANGE/RED decision from live station data
 # ---------------------------------------------------------------------------
 
+def _evaluate_at(
+    rs: RuleSet,
+    influx,
+    at_time: Optional[datetime],
+    forecast: bool,
+    virtual_members: dict,
+) -> dict:
+    """
+    Evaluate *rs* in whichever of the three modes the request asked for.
+
+    - No ``at_time``: live station data, decision written to InfluxDB.
+    - ``at_time`` set, ``forecast`` false: observed data at that moment (read-only).
+    - ``at_time`` set, ``forecast`` true: forecast data for that ``valid_time`` (read-only).
+
+    Shared by the primary rule set and any linked landing rulesets so both are evaluated in
+    the same mode — see specs/007-replay-aware-ruleset-decisions.
+    """
+    if at_time is None:
+        from lenticularis.rules.evaluator import run_evaluation, write_decision
+        result = run_evaluation(rs, influx, virtual_members)
+        write_decision(rs, result, influx)
+        return result
+    if forecast:
+        from lenticularis.rules.evaluator import run_forecast_evaluation_at
+        return run_forecast_evaluation_at(rs, influx, at_time)
+    from lenticularis.rules.evaluator import run_evaluation_at
+    return run_evaluation_at(rs, influx, at_time, virtual_members)
+
+
 @router.get("/{ruleset_id}/evaluate", response_model=EvaluationResult)
 def evaluate_ruleset(
     ruleset_id: str,
     request: Request,
     at_time: Optional[datetime] = None,
+    forecast: bool = False,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -213,8 +243,10 @@ def evaluate_ruleset(
     Evaluate a ruleset.
 
     - No ``at_time``: use live station data and write the decision to InfluxDB.
-    - ``at_time`` set: evaluate against historical observed data at that moment
-      (read-only — does not write to InfluxDB).
+    - ``at_time`` set, ``forecast`` false (default): evaluate against historical observed data
+      at that moment (read-only — does not write to InfluxDB).
+    - ``at_time`` set, ``forecast`` true: evaluate against forecast data for that ``valid_time``
+      (read-only). Ignored when ``at_time`` is absent.
     """
     rs = db.get(RuleSet, ruleset_id)
     if rs is None:
@@ -234,20 +266,17 @@ def evaluate_ruleset(
     influx = request.app.state.influx
     virtual_members = getattr(request.app.state, "virtual_members", {})
 
+    result = _evaluate_at(rs, influx, at_time, forecast, virtual_members)
     if at_time is not None:
-        from lenticularis.rules.evaluator import run_evaluation_at
-        result = run_evaluation_at(rs, influx, at_time, virtual_members)
         logger.info(
-            "Historical evaluation of ruleset %s at %s → %s",
-            rs.id, at_time.isoformat(), result["decision"],
+            "%s evaluation of ruleset %s at %s → %s",
+            "Forecast" if forecast else "Historical", rs.id, at_time.isoformat(), result["decision"],
         )
     else:
-        from lenticularis.rules.evaluator import run_evaluation, write_decision
-        result = run_evaluation(rs, influx, virtual_members)
-        write_decision(rs, result, influx)
         logger.info("Evaluated ruleset %s → %s (no-data: %s)", rs.id, result["decision"], result["no_data_stations"])
 
-    # Evaluate linked landing rulesets and attach to result
+    # Evaluate linked landing rulesets and attach to result — same at_time/forecast mode as
+    # the primary rule set (specs/007-replay-aware-ruleset-decisions FR-004).
     if rs.landing_links:
         landing_decisions = []
         for link in rs.landing_links:
@@ -255,7 +284,7 @@ def evaluate_ruleset(
             if landing_rs is None:
                 continue
             if landing_rs.conditions:
-                ld_result = run_evaluation(landing_rs, influx, virtual_members)
+                ld_result = _evaluate_at(landing_rs, influx, at_time, forecast, virtual_members)
             else:
                 ld_result = {"decision": "green"}
             landing_decisions.append({

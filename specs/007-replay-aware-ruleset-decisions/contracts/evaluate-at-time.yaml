@@ -1,0 +1,130 @@
+openapi: 3.1.0
+info:
+  title: Replay-Aware Ruleset Decisions — contracts
+  version: 0.1.0
+  description: >
+    Contracts introduced by specs/007-replay-aware-ruleset-decisions. No new routes: this feature
+    extends one existing endpoint with one new optional query parameter. The response shape is
+    unchanged (NFR-004) — only which timestamp/data-source the decision was computed from changes.
+
+paths:
+  /api/rulesets/{ruleset_id}/evaluate:
+    get:
+      summary: Evaluate a rule set — now forecast-aware at a single timestamp
+      description: >
+        EXTENDED, not new. Three modes, selected by the combination of at_time and forecast:
+
+        - Neither param: live station data, decision written to rule_decisions (unchanged).
+        - at_time only: observed data in a ±30 min window around at_time, read-only (unchanged,
+          run_evaluation_at).
+        - at_time + forecast=true: forecast data for that exact valid_time, read-only (NEW,
+          run_forecast_evaluation_at). forecast is ignored if at_time is absent.
+
+        landing_decisions / best_landing_decision (for launch sites with linked landing rule sets)
+        are now evaluated in the SAME mode as the primary rule set, closing a pre-existing
+        inconsistency where linked landing sites were always evaluated live (research R4).
+      operationId: evaluateRuleset
+      tags: [rulesets]
+      parameters:
+        - name: ruleset_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: at_time
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+          description: >
+            Absent = live (today's default behaviour). Present = evaluate at this moment instead of
+            now, read-only — never written to rule_decisions.
+        - name: forecast
+          in: query
+          required: false
+          schema: { type: boolean, default: false }
+          description: >
+            NEW. Only meaningful when at_time is set. false (default) = observed-data path,
+            byte-for-byte what at_time already did before this feature. true = forecast path: looks
+            up forecast data for valid_time = at_time instead of observed data.
+
+            The caller (the map's replay engine) already knows unambiguously which mode applies to
+            the frame it is displaying — this parameter carries that classification through rather
+            than having the server re-derive it by comparing at_time to its own clock (research R3).
+      responses:
+        "200":
+          description: >
+            Evaluation result. Shape is unchanged regardless of mode — see EvaluationResult.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EvaluationResult" }
+        "403":
+          description: Not the owner, and the rule set is not public.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: No such rule set.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+components:
+  schemas:
+    EvaluationResult:
+      type: object
+      description: >
+        Existing model (models/rules.py:255-263) — no fields added or removed by this feature.
+      required: [decision, evaluated_at, condition_results, no_data_stations]
+      properties:
+        decision:
+          type: string
+          enum: [green, orange, red]
+        evaluated_at:
+          type: string
+          format: date-time
+          description: >
+            echoes at_time when set (observed or forecast mode), otherwise the live evaluation
+            timestamp. Unchanged behaviour.
+        condition_results:
+          type: array
+          items: { $ref: "#/components/schemas/ConditionResult" }
+        no_data_stations:
+          type: array
+          items: { type: string }
+        landing_decisions:
+          type: array
+          items: { $ref: "#/components/schemas/LandingDecision" }
+          description: >
+            Populated only for launch sites with landing links. NOW evaluated in the same
+            at_time/forecast mode as the primary rule set (research R4) — previously always live.
+        best_landing_decision:
+          type: [string, "null"]
+          enum: [green, orange, red, null]
+
+    ConditionResult:
+      type: object
+      description: Existing model, unchanged by this feature.
+
+    LandingDecision:
+      type: object
+      description: Existing model, unchanged by this feature.
+      properties:
+        ruleset_id: { type: string }
+        name: { type: string }
+        decision:
+          type: string
+          enum: [green, orange, red]
+
+    Error:
+      type: object
+      description: Standard envelope from api/errors.py — see .ai/instructions/07-api-conventions.md.
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum: [VALIDATION_FAILED, AUTH_REQUIRED, PERMISSION_DENIED, ENTITY_NOT_FOUND, CONFLICT, INTERNAL_ERROR, ERROR]
+            message: { type: string }
+            details: { type: object }

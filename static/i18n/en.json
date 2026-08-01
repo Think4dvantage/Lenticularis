@@ -89,6 +89,7 @@
     "toggle_personal": "Personal Stations",
     "toggle_personal_on": "⚠ Personal stations: ON",
     "toggle_personal_off": "⚠ Personal stations: OFF",
+    "geolocate_button": "📍 My location",
     "public": {
       "example_badge": "Example",
       "example_hint": "This is an example rule set built by another pilot. Sign up to create your own rules for the sites you fly.",
