@@ -124,7 +124,7 @@ tests/backend/               # pytest suite (auth, rules, dedup, security, colle
 
 ## Development Status
 
-**Current version: v1.20.1** — published as `ghcr.io/Think4dvantage/Lenticularis:1.20.1` (and `:latest`).
+**Current version: v1.22.2** — published as `ghcr.io/Think4dvantage/Lenticularis:1.22.2` (and `:latest`).
 
 | Milestone | Status |
 |---|---|
@@ -161,6 +161,10 @@ tests/backend/               # pytest suite (auth, rules, dedup, security, colle
 | v1.19.0 — Public rule sets on the map, named condition groups | ✅ Shipped |
 | v1.20.0 — Green conditions are requirements (fail-safe launch/landing) | ✅ Shipped |
 | v1.20.1 — Fix duplicate condition-group id on re-edit | ✅ Shipped |
+| v1.21.0 — Replay-aware ruleset decisions (map markers follow time-nav/replay, not just live) | ✅ Shipped |
+| v1.22.0 — Viewport-first progressive loading + geolocation centering | ✅ Shipped |
+| v1.22.1 — Fix cross-ruleset condition-group id collision on save | ✅ Shipped |
+| v1.22.2 — Fix forecast snapshot query timing out under concurrent load | ✅ Shipped |
 
 Remaining work items are tracked as an unordered backlog in [.ai/context/features.md](.ai/context/features.md).
 

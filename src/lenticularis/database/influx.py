@@ -300,7 +300,7 @@ from(bucket: "{self._cfg.bucket}")
            columnKey: ["_field"], valueColumn: "_value")
 """
         try:
-            tables = self._query_api.query(flux, org=self._cfg.org)
+            tables = self._slow_query_api.query(flux, org=self._cfg.org)
         except Exception as exc:
             logger.error("InfluxDB query_forecast_snapshot_for_stations error: %s", exc)
             return {}
