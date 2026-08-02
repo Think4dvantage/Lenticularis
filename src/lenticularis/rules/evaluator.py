@@ -227,6 +227,7 @@ def _evaluate_from_station_data(
 
     condition_results: list[dict] = []
     triggered_colours: list[str] = []
+    unmet_green = False  # a green requirement (standalone or all-green group) failed to match
 
     for cond in standalone:
         matched, actual = _eval_condition(cond, station_data)
@@ -248,8 +249,7 @@ def _evaluate_from_station_data(
         if matched:
             triggered_colours.append(cond.result_colour)
         elif ruleset.site_type != "opportunity" and cond.result_colour == "green":
-            # Unmet GREEN requirement (incl. no data) fails safe to red for launch/landing.
-            triggered_colours.append("red")
+            unmet_green = True
 
     group_names = _group_names(ruleset)
     for group_id, group_conds in groups.items():
@@ -276,8 +276,14 @@ def _evaluate_from_station_data(
         if all_matched:
             triggered_colours.append(_worst([c.result_colour for c in group_conds]))
         elif ruleset.site_type != "opportunity" and _worst([c.result_colour for c in group_conds]) == "green":
-            # All-green group not fully met fails safe to red for launch/landing (D2).
-            triggered_colours.append("red")
+            unmet_green = True
+
+    # An unmet green requirement fails safe to red for launch/landing — but only when
+    # nothing else in the ruleset classified the current conditions. If another group
+    # already matched (e.g. a different direction arc), that stands; the green miss must
+    # not override a legitimate match elsewhere (see specs/ fix, 2026-08-02).
+    if unmet_green and not triggered_colours:
+        triggered_colours.append("red")
 
     total_units = len(standalone) + len(groups)
     if ruleset.site_type == "opportunity":
@@ -374,6 +380,7 @@ def run_evaluation(
 
     condition_results: list[dict] = []
     triggered_colours: list[str] = []
+    unmet_green = False  # a green requirement (standalone or all-green group) failed to match
 
     # ---- evaluate standalone conditions ------------------------------------
     for cond in standalone:
@@ -396,8 +403,7 @@ def run_evaluation(
         if matched:
             triggered_colours.append(cond.result_colour)
         elif ruleset.site_type != "opportunity" and cond.result_colour == "green":
-            # Unmet GREEN requirement (incl. no data) fails safe to red for launch/landing.
-            triggered_colours.append("red")
+            unmet_green = True
 
     # ---- evaluate AND groups -----------------------------------------------
     group_names = _group_names(ruleset)
@@ -428,8 +434,14 @@ def run_evaluation(
             group_colour = _worst([c.result_colour for c in group_conds])
             triggered_colours.append(group_colour)
         elif ruleset.site_type != "opportunity" and _worst([c.result_colour for c in group_conds]) == "green":
-            # All-green group not fully met fails safe to red for launch/landing (D2).
-            triggered_colours.append("red")
+            unmet_green = True
+
+    # An unmet green requirement fails safe to red for launch/landing — but only when
+    # nothing else in the ruleset classified the current conditions. If another group
+    # already matched (e.g. a different direction arc), that stands; the green miss must
+    # not override a legitimate match elsewhere (see specs/ fix, 2026-08-02).
+    if unmet_green and not triggered_colours:
+        triggered_colours.append("red")
 
     # ---- apply combination logic -------------------------------------------
     # Opportunity sites use inverted semantics: RED by default, GREEN only when
@@ -540,6 +552,7 @@ def run_evaluation_at(
 
     condition_results: list[dict] = []
     triggered_colours: list[str] = []
+    unmet_green = False  # a green requirement (standalone or all-green group) failed to match
 
     for cond in standalone:
         matched, actual = _eval_condition(cond, station_data)
@@ -561,8 +574,7 @@ def run_evaluation_at(
         if matched:
             triggered_colours.append(cond.result_colour)
         elif ruleset.site_type != "opportunity" and cond.result_colour == "green":
-            # Unmet GREEN requirement (incl. no data) fails safe to red for launch/landing.
-            triggered_colours.append("red")
+            unmet_green = True
 
     group_names = _group_names(ruleset)
     for group_id, group_conds in groups.items():
@@ -590,8 +602,14 @@ def run_evaluation_at(
             group_colour = _worst([c.result_colour for c in group_conds])
             triggered_colours.append(group_colour)
         elif ruleset.site_type != "opportunity" and _worst([c.result_colour for c in group_conds]) == "green":
-            # All-green group not fully met fails safe to red for launch/landing (D2).
-            triggered_colours.append("red")
+            unmet_green = True
+
+    # An unmet green requirement fails safe to red for launch/landing — but only when
+    # nothing else in the ruleset classified the current conditions. If another group
+    # already matched (e.g. a different direction arc), that stands; the green miss must
+    # not override a legitimate match elsewhere (see specs/ fix, 2026-08-02).
+    if unmet_green and not triggered_colours:
+        triggered_colours.append("red")
 
     total_units = len(standalone) + len(groups)
     if ruleset.site_type == "opportunity":
@@ -741,6 +759,7 @@ def run_forecast_evaluation(
 
         condition_results: list[dict] = []
         triggered_colours: list[str] = []
+        unmet_green = False  # a green requirement (standalone or all-green group) failed to match
 
         for cond in standalone:
             matched, actual = _eval_condition(cond, station_data)
@@ -762,8 +781,7 @@ def run_forecast_evaluation(
             if matched:
                 triggered_colours.append(cond.result_colour)
             elif ruleset.site_type != "opportunity" and cond.result_colour == "green":
-                # Unmet GREEN requirement (incl. no data) fails safe to red for launch/landing.
-                triggered_colours.append("red")
+                unmet_green = True
 
         group_names = _group_names(ruleset)
         for group_id, group_conds in groups.items():
@@ -788,8 +806,14 @@ def run_forecast_evaluation(
             if all_matched:
                 triggered_colours.append(_worst([c.result_colour for c in group_conds]))
             elif ruleset.site_type != "opportunity" and _worst([c.result_colour for c in group_conds]) == "green":
-                # Unmet all-green group (incl. no data) fails safe to red for launch/landing (D2).
-                triggered_colours.append("red")
+                unmet_green = True
+
+        # An unmet green requirement fails safe to red for launch/landing — but only when
+        # nothing else in the ruleset classified the current conditions. If another group
+        # already matched (e.g. a different direction arc), that stands; the green miss
+        # must not override a legitimate match elsewhere (see specs/ fix, 2026-08-02).
+        if unmet_green and not triggered_colours:
+            triggered_colours.append("red")
 
         total_units = len(standalone) + len(groups)
         if ruleset.site_type == "opportunity":

@@ -1,6 +1,40 @@
 # Feature History & Backlog
 
-## Current Version: v1.22.3 (shipped)
+## Current Version: v1.22.4 (shipped)
+
+### Fix: unmet GREEN requirement overrode a legitimately matched other group (`rules/evaluator.py`)
+
+Reported live in prod: a launch site ("Amisbühl oben") with four wind-direction-arc groups —
+one GREEN (the ideal 90-180° arc) and three ORANGE fallback arcs for other directions — read
+**red** even when the wind was calm and squarely inside one of the ORANGE arcs, with that arc's
+own (stricter) speed/gust thresholds satisfied. The v1.20.0 "green is a requirement" fail-safe
+(`evaluator.py`) unconditionally injected a `"red"` vote whenever a green unit failed to match,
+regardless of whether a *different* group in the same ruleset had already legitimately matched —
+so `worst_wins` always picked red over the correctly-matched orange, no matter what.
+
+Root-caused by reproducing the exact live conditions (direction ~9°, calm wind) against the
+real stored ruleset — and confirmed **not** a replay bug: the plain live `/evaluate` endpoint
+(no `at_time`) showed the identical wrong result.
+
+Fix: the green fail-safe now only contributes red when **nothing else** in the ruleset
+classified the current conditions — preserving the original spec-004 behaviour for a lone
+green-only rule (still red, no other classification exists) while letting a genuinely matched
+other group stand. Applied identically across the three decision blocks that duplicate this
+logic (`run_evaluation`, `run_evaluation_at`, `run_forecast_evaluation`) — `_evaluate_from_station_data`
+is the fourth and canonical copy; `run_forecast_evaluation_at` and `run_history_backfill` delegate
+to it and needed no change.
+
+`tests/backend/test_rules_evaluator.py` — 3 new tests on the canonical function.
+`tests/backend/test_unmet_green_precedence.py` — new, 3 tests covering the other three
+duplicated blocks directly, since that duplication is exactly how a fix like this could land in
+one copy and not the others.
+
+**Separately identified, not a code bug**: the paired landing ruleset ("Höhematte") had zero
+saved conditions — a ruleset with no conditions always reads green by design. No failed-save
+error appears anywhere in server logs; the conditions were simply never submitted. Needs
+manual reconfiguration in the ruleset editor, not a fix here.
+
+## Previous Version: v1.22.3 (shipped)
 
 ### Thermal Forecast — Phase 1: Ingestion (`specs/006-thermal-forecast`)
 

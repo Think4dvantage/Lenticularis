@@ -256,3 +256,53 @@ def test_opportunity_unmet_green_unaffected_by_requirement_rule():
         _rs(conds, site_type="opportunity"), station_data
     )
     assert decision == "red"
+
+
+# ---------------------------------------------------------------------------
+# Unmet green must not override a legitimately matched other group (2026-08-02)
+#
+# Reproduces a real prod ruleset: several direction-arc groups, one green
+# (the "ideal" direction), the others orange (progressively stricter fallback
+# arcs). Wind outside the green arc but inside a matching orange arc used to
+# read red regardless — the unmet green group unconditionally injected "red"
+# into triggered_colours, so worst_wins always beat the correctly-matched
+# orange group. Fixed: the green fail-safe now only fires when nothing else
+# in the ruleset classified the conditions.
+# ---------------------------------------------------------------------------
+
+def test_unmet_green_does_not_override_a_matched_orange_group():
+    conds = [
+        _cond("s1", "wind_direction", "in_direction_range", 90.0, "green", value_b=180.0, group_id="g1"),
+        _cond("s1", "wind_speed", "<", 15.0, "green", group_id="g1"),
+        _cond("s1", "wind_direction", "in_direction_range", 202.5, "orange", value_b=90.0, group_id="g2"),
+        _cond("s1", "wind_speed", "<", 5.0, "orange", group_id="g2"),
+    ]
+    # Direction 9° is outside g1's green arc (90-180) but inside g2's orange
+    # wrap-around arc (202.5-90), and g2's own (stricter) speed threshold holds.
+    station_data = {"s1": {"wind_direction": 9.0, "wind_speed": 1.0}}
+    decision, _ = _evaluate_from_station_data(_rs(conds), station_data)
+    assert decision == "orange"
+
+
+def test_unmet_green_does_not_override_a_matched_standalone_condition():
+    conds = [
+        _cond("s1", "wind_direction", "in_direction_range", 90.0, "green", value_b=180.0),
+        _cond("s1", "wind_speed", ">", 40.0, "red"),  # matches independently
+    ]
+    station_data = {"s1": {"wind_direction": 9.0, "wind_speed": 50.0}}
+    decision, _ = _evaluate_from_station_data(_rs(conds), station_data)
+    assert decision == "red"  # matches original intent — worst_wins still picks red here
+
+
+def test_unmet_green_still_forces_red_when_nothing_else_matches():
+    # Regression guard: the original spec-004 case (a lone green requirement,
+    # nothing else defined to classify the miss) must still fail safe to red.
+    conds = [
+        _cond("s1", "wind_direction", "in_direction_range", 90.0, "green", value_b=180.0, group_id="g1"),
+        _cond("s1", "wind_speed", "<", 15.0, "green", group_id="g1"),
+        _cond("s1", "wind_direction", "in_direction_range", 200.0, "orange", value_b=210.0, group_id="g2"),
+    ]
+    # Direction 9° matches neither g1 (green, 90-180) nor g2 (orange, 200-210).
+    station_data = {"s1": {"wind_direction": 9.0, "wind_speed": 5.0}}
+    decision, _ = _evaluate_from_station_data(_rs(conds), station_data)
+    assert decision == "red"
