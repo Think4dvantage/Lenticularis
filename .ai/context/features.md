@@ -1,6 +1,26 @@
 # Feature History & Backlog
 
-## Current Version: v1.22.4 (shipped)
+## Current Version: v1.22.5 (shipped)
+
+### Fix: ARM64 Docker build failure (`Dockerfile`)
+
+`v1.22.4`'s tag push triggered a `docker-publish.yml` build that failed on the `linux/arm64`
+(QEMU-emulated) leg only — `amd64` was unaffected. Root cause confirmed via `git diff v1.22.3
+v1.22.4`: **zero** dependency or Dockerfile changes between the two tags, only the version
+string — so this is a pure infra flake, not something introduced by the v1.22.4 code change.
+
+`Dockerfile:1` pins `python:3.11-slim` as a floating tag, and `Dockerfile:22-24` deliberately
+re-runs `poetry lock` fresh on every build (no committed lockfile). Between the v1.22.3 build
+(12:22 UTC) and v1.22.4's (21:14 UTC), the base image or PyPI moved under us: the bundled `pip`
+hit a known upstream bug — `user_agent()` crashes with `TypeError` when `setuptools`'s version
+metadata is unreadable — triggered specifically when Poetry shells out to `pip uninstall
+cryptography` to swap in the arm64 wheel.
+
+Fix: `RUN pip install --no-cache-dir --upgrade pip setuptools` added before Poetry is installed,
+so the buggy bundled pip never runs. `v1.22.4`'s tag was left as-is (its build failed before any
+image was pushed to ghcr.io, so nothing needed rolling back) — this ships as `v1.22.5`.
+
+## Previous Version: v1.22.4 (tag pushed, build failed — see v1.22.5)
 
 ### Fix: unmet GREEN requirement overrode a legitimately matched other group (`rules/evaluator.py`)
 

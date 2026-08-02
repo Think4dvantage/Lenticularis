@@ -10,6 +10,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     proj-bin \
     && rm -rf /var/lib/apt/lists/*
 
+# Upgrade pip/setuptools first — the base image's bundled pip has hit a known upstream
+# bug (crashes computing its User-Agent when setuptools' version metadata is unreadable),
+# reproducing specifically under linux/arm64 QEMU emulation when poetry later shells out
+# to pip to swap in a platform-specific cryptography wheel.
+RUN pip install --no-cache-dir --upgrade pip setuptools
+
 # Install Poetry
 RUN pip install --no-cache-dir poetry==2.1.1
 
