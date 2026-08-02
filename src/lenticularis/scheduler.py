@@ -34,6 +34,7 @@ from lenticularis.collectors.forecast_grid import ForecastGridCollector
 from lenticularis.collectors.forecast_grid_swissmeteo import ForecastGridSwissMeteoCollector
 from lenticularis.collectors.forecast_openmeteo import ForecastOpenMeteoCollector
 from lenticularis.collectors.forecast_swissmeteo import ForecastSwissMeteoCollector
+from lenticularis.collectors.forecast_thermal_swissmeteo import ForecastThermalSwissMeteoCollector
 from lenticularis.collectors.holfuy import HolfuyCollector
 from lenticularis.collectors.jfb import JfbCollector
 from lenticularis.collectors.metar import MetarCollector
@@ -122,6 +123,9 @@ class CollectorScheduler:
         self._collectors: list = []
         self._forecast_collectors: list = []
         self._collector_health: dict[str, dict[str, Any]] = {}
+        # Re-collection guard for the thermal forecast job — (init_time, model, usable_frame_count)
+        # of the last successful run. Skips the write when nothing has changed (plan.md §7.1 note 7).
+        self._last_thermal_run_key: tuple = (None, None, None)
         # Post-run hooks — set by the application layer (e.g. main.py lifespan)
         self.on_collector_run = None    # async cb(collector) after each observation run
         self.on_forecast_run = None     # async cb(collector, horizon_hours, health) after each forecast run
@@ -292,6 +296,33 @@ class CollectorScheduler:
         )
         logger.info("Registered wind forecast grid collector (every 60 min)")
 
+        # ---- thermal forecast collector --------------------------------------
+        self._collector_health["forecast_thermal"] = {
+            "collector": "thermal",
+            "type": "forecast",
+            "enabled": True,
+            "interval_minutes": 60,
+            "status": "scheduled",
+            "last_started_at": None,
+            "last_finished_at": None,
+            "last_success_at": None,
+            "last_error_at": None,
+            "last_error": None,
+            "last_measurement_count": None,
+            "consecutive_failures": 0,
+        }
+        self._scheduler.add_job(
+            func=self._run_thermal_forecast_collector,
+            trigger=IntervalTrigger(minutes=60),
+            id="forecast_thermal",
+            name="thermal forecast collector",
+            misfire_grace_time=600,
+            coalesce=True,
+            max_instances=1,
+            next_run_time=None,
+        )
+        logger.info("Registered thermal forecast collector (every 60 min)")
+
         # ---- ruleset evaluator (writes rule_decisions to InfluxDB) ----------
         if self._session_factory is not None:
             self._collector_health["ruleset_evaluator"] = {
@@ -375,6 +406,13 @@ class CollectorScheduler:
         asyncio.get_event_loop().call_later(
             random.uniform(_JITTER_SECONDS * 2, _JITTER_SECONDS * 4),
             lambda: asyncio.ensure_future(self._trigger_now("forecast_grid")),
+        )
+
+        # Thermal forecast collector needs the station registry — same delay band as
+        # the per-station forecast collectors above.
+        asyncio.get_event_loop().call_later(
+            random.uniform(_JITTER_SECONDS, _JITTER_SECONDS * 3),
+            lambda: asyncio.ensure_future(self._trigger_now("forecast_thermal")),
         )
 
         # Foehn collector starts after observation collectors have populated data
@@ -802,6 +840,127 @@ class CollectorScheduler:
                 "consecutive_failures": int(health.get("consecutive_failures", 0)) + 1,
             })
             logger.error("[Lenti:grid-collector] InfluxDB write failed: %s", exc, exc_info=True)
+
+    async def _run_thermal_forecast_collector(self) -> None:
+        """Collect the ICON-CH thermal grid and write station-level thermal forecasts.
+
+        No Open-Meteo fallback exists for thermal data — if lsmfapi is down or still
+        warming its cache, this run records the outcome and the next hourly tick retries.
+        """
+        health = self._collector_health.setdefault("forecast_thermal", {
+            "collector": "thermal",
+            "type": "forecast",
+            "enabled": True,
+            "interval_minutes": 60,
+            "status": "pending",
+            "last_started_at": None,
+            "last_finished_at": None,
+            "last_success_at": None,
+            "last_error_at": None,
+            "last_error": None,
+            "last_measurement_count": None,
+            "consecutive_failures": 0,
+        })
+
+        started_at = datetime.now(timezone.utc)
+        health["status"] = "running"
+        health["last_started_at"] = started_at
+
+        stations = list(self._station_registry.values())
+        stations_with_coords = [
+            s for s in stations
+            if getattr(s, "latitude", None) is not None
+            and getattr(s, "longitude", None) is not None
+        ]
+
+        if not stations_with_coords:
+            logger.warning(
+                "[Lenti:thermal-collector] no stations with coordinates in registry — "
+                "will retry when observation collectors have run"
+            )
+            health["status"] = "ok_no_stations"
+            health["last_finished_at"] = datetime.now(timezone.utc)
+            health["last_measurement_count"] = 0
+            return
+
+        # lsmfapi base_url — reuse the swissmeteo forecast collector config, no new config key.
+        base_url = "https://lsmfapi-dev.lg4.ch"
+        for fc_cfg in self._cfg.forecast_collectors:
+            if fc_cfg.name == "swissmeteo":
+                base_url = (fc_cfg.config or {}).get("base_url", base_url)
+                break
+
+        collector = ForecastThermalSwissMeteoCollector(base_url=base_url)
+        points: list = []
+        try:
+            payload = await collector.fetch()
+            if payload is None:
+                # 503 cache_warming — expected, not an error.
+                health.update({
+                    "status": "ok_no_data",
+                    "last_finished_at": datetime.now(timezone.utc),
+                    "last_measurement_count": 0,
+                })
+                logger.info("[Lenti:thermal-collector] cache warming — skipped this run")
+                return
+
+            points = await asyncio.to_thread(
+                collector.build_station_points, payload, stations_with_coords
+            )
+
+            # Re-collection guard: skip the write when nothing has changed since the last
+            # successful run. The model refreshes ~4x/day but this job runs hourly, so this
+            # drops ~75% of writes. Keyed on usable_frame_count too, not just init_time —
+            # frames can arrive late for an unchanged init_time (plan.md §3.2).
+            run_key = (collector.last_init_time, collector.last_model, collector.last_usable_frame_count)
+            if points and run_key == self._last_thermal_run_key:
+                logger.info(
+                    "[Lenti:thermal-collector] unchanged since last run (init=%s, usable=%s) — "
+                    "skipping write",
+                    collector.last_init_time, collector.last_usable_frame_count,
+                )
+                finished_at = datetime.now(timezone.utc)
+                health.update({
+                    "status": "ok_no_data",
+                    "last_finished_at": finished_at,
+                    "last_success_at": finished_at,
+                    "last_error_at": None,
+                    "last_error": None,
+                    "last_measurement_count": 0,
+                    "consecutive_failures": 0,
+                })
+                return
+
+            if points:
+                await asyncio.to_thread(self._influx.write_thermal_forecast, points)
+                self._last_thermal_run_key = run_key
+
+            finished_at = datetime.now(timezone.utc)
+            health.update({
+                "status": "ok" if points else "ok_no_data",
+                "last_finished_at": finished_at,
+                "last_success_at": finished_at if points else health.get("last_success_at"),
+                "last_error_at": None,
+                "last_error": None,
+                "last_measurement_count": len(points),
+                "consecutive_failures": 0,
+            })
+            logger.info(
+                "[Lenti:thermal-collector] Run complete — wrote %d thermal forecast points",
+                len(points),
+            )
+        except Exception as exc:
+            finished_at = datetime.now(timezone.utc)
+            health.update({
+                "status": "error",
+                "last_finished_at": finished_at,
+                "last_error_at": finished_at,
+                "last_error": str(exc),
+                "consecutive_failures": int(health.get("consecutive_failures", 0)) + 1,
+            })
+            logger.error("[Lenti:thermal-collector] Run failed: %s", exc, exc_info=True)
+        finally:
+            await collector.close()
 
     # ------------------------------------------------------------------
     # Forecast deviation computation

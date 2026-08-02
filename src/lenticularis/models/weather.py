@@ -173,3 +173,82 @@ class ForecastPoint(BaseModel):
     precipitation_max: Optional[float] = Field(None, description="Precipitation ensemble maximum")
 
 
+class ThermalForecastPoint(BaseModel):
+    """
+    One hourly thermal forecast value for one station from one model run.
+
+    Written to the ``weather_forecast_thermal`` InfluxDB measurement. Raw fields come from
+    lsmfapi's ``/api/forecast/thermal-grid``; derived fields are computed by
+    ``services/thermal.py`` (see ``specs/006-thermal-forecast/plan.md`` §6).
+    """
+
+    station_id: str = Field(..., description="Network-prefixed station identifier")
+    network: str = Field(..., description="Station network (e.g. 'meteoswiss')")
+    source: str = Field("swissmeteo", description="Forecast data source")
+    model: str = Field("icon-ch", description="NWP model name")
+    init_time: datetime = Field(..., description="Model run initialisation time (UTC)")
+    valid_time: datetime = Field(..., description="Forecast valid time (UTC)")
+
+    # Raw ensemble medians
+    solar: Optional[float] = Field(None, description="Solar radiation (direct + diffuse SW), W/m²")
+    sunshine: Optional[float] = Field(None, description="Sunshine duration per hour, min/h (0-60)")
+    cloud_cover: Optional[float] = Field(None, description="Total cloud cover, % (0-100)")
+    cloud_low: Optional[float] = Field(None, description="Low cloud cover, %")
+    cloud_mid: Optional[float] = Field(None, description="Mid cloud cover, %")
+    cloud_high: Optional[float] = Field(None, description="High cloud cover, %")
+    freezing_level: Optional[float] = Field(None, description="0°C isotherm height, m ASL")
+    cape: Optional[float] = Field(None, description="Mixed-layer CAPE, J/kg")
+    cin: Optional[float] = Field(None, description="Convective inhibition, J/kg. None = no inhibition layer")
+    lcl: Optional[float] = Field(None, description="Lifted Condensation Level (cloud base), m ASL")
+    lfc: Optional[float] = Field(None, description="Level of Free Convection, m ASL")
+    tke: Optional[float] = Field(None, description="Boundary-layer turbulent kinetic energy, J/kg")
+
+    # Selected ensemble spread (deliberate subset — see plan.md §5.1)
+    lcl_min: Optional[float] = Field(None, description="LCL ensemble minimum")
+    lcl_max: Optional[float] = Field(None, description="LCL ensemble maximum")
+    cape_max: Optional[float] = Field(None, description="CAPE ensemble maximum")
+    cloud_cover_max: Optional[float] = Field(None, description="Cloud cover ensemble maximum")
+    solar_min: Optional[float] = Field(None, description="Solar radiation ensemble minimum")
+
+    # Derived (services/thermal.py)
+    thermal_ceiling_m: Optional[float] = Field(None, description="min(lcl, freezing_level)")
+    cloud_base_agl_m: Optional[float] = Field(None, description="Cloud base above station ground")
+    thermal_strength: Optional[int] = Field(None, description="0-5 index")
+    overdevelopment_risk: Optional[int] = Field(None, description="0-3 index")
+    blue_thermal: Optional[int] = Field(None, description="1 if lfc >> lcl")
+    turbulence_index: Optional[int] = Field(None, description="0-3 index from tke")
+    ceiling_spread_m: Optional[float] = Field(None, description="lcl_max - lcl_min, ensemble confidence")
+
+
+class ThermalGridForecastPoint(BaseModel):
+    """
+    One hourly thermal forecast value for one ICON-CH grid cell.
+
+    Written to the ``thermal_forecast_grid`` InfluxDB measurement (Phase 3).
+    ``grid_id`` uses the same ``f"{lat:.4f}_{lon:.4f}"`` format as ``wind_forecast_grid`` so the
+    two measurements join on ``(grid_id, valid_time)`` — see plan.md §3.4.
+    """
+
+    grid_id: str
+    lat: float
+    lon: float
+    init_time: datetime = Field(..., description="Model run initialisation time (UTC)")
+    valid_time: datetime = Field(..., description="Forecast valid time (UTC)")
+
+    solar: Optional[float] = None
+    sunshine: Optional[float] = None
+    cloud_cover: Optional[float] = None
+    cloud_low: Optional[float] = None
+    cloud_mid: Optional[float] = None
+    cloud_high: Optional[float] = None
+    freezing_level: Optional[float] = None
+    cape: Optional[float] = None
+    cin: Optional[float] = None
+    lcl: Optional[float] = None
+    lfc: Optional[float] = None
+    tke: Optional[float] = None
+
+    thermal_ceiling_m: Optional[float] = None
+    thermal_strength: Optional[int] = None
+
+

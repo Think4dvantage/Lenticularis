@@ -18,13 +18,14 @@ from influxdb_client import InfluxDBClient, Point
 from influxdb_client.client.write_api import SYNCHRONOUS
 
 from lenticularis.config import InfluxDBConfig
-from lenticularis.models.weather import ForecastPoint, WeatherMeasurement
+from lenticularis.models.weather import ForecastPoint, ThermalForecastPoint, WeatherMeasurement
 
 logger = logging.getLogger(__name__)
 
 # InfluxDB measurement names
 MEASUREMENT_WEATHER = "weather_data"
 MEASUREMENT_FORECAST = "weather_forecast"
+MEASUREMENT_FORECAST_THERMAL = "weather_forecast_thermal"
 MEASUREMENT_FORECAST_DEVIATION = "forecast_deviation"
 MEASUREMENT_GRID_FORECAST_DEVIATION = "grid_forecast_deviation"
 
@@ -871,6 +872,216 @@ from(bucket: "{self._cfg.bucket}")
         except Exception as exc:
             logger.error("InfluxDB forecast write error: %s", exc)
             raise
+
+    # ------------------------------------------------------------------
+    # Thermal forecast — write + query
+    # ------------------------------------------------------------------
+
+    def write_thermal_forecast(self, points: list[ThermalForecastPoint]) -> None:
+        """
+        Write a batch of ThermalForecastPoint objects to the ``weather_forecast_thermal``
+        measurement.
+
+        Tags:   ``station_id``, ``network``, ``source``, ``model``, ``init_date`` (hour-granular,
+                same as ``weather_forecast`` — see ``specs/006-thermal-forecast/plan.md`` §5.1)
+        Time:   ``valid_time``
+        Fields: raw medians + selected ensemble spread + derived metrics, ``None`` skipped;
+                plus ``init_time`` (ISO string) for Python-side dedup.
+
+        Kept in its own measurement rather than merged into ``weather_forecast`` — the two
+        forecasts have different ``init_time``s, and pivoting them together would make
+        ``query_forecast_snapshot_for_stations``'s "keep the most fields" dedup silently drop
+        one side (plan.md §3.1).
+
+        Chunked at 5000 points — a single run writes ~62 799 points (519 stations × 121 hours).
+        """
+        if not points:
+            return
+
+        influx_points: list[Point] = []
+        for fp in points:
+            p = (
+                Point(MEASUREMENT_FORECAST_THERMAL)
+                .tag("station_id", fp.station_id)
+                .tag("network", fp.network)
+                .tag("source", fp.source)
+                .tag("model", fp.model)
+                .tag("init_date", fp.init_time.astimezone(timezone.utc).strftime("%Y-%m-%dT%H"))
+                .time(int(fp.valid_time.timestamp()), "s")
+            )
+            field_map = {
+                "solar": fp.solar,
+                "sunshine": fp.sunshine,
+                "cloud_cover": fp.cloud_cover,
+                "cloud_low": fp.cloud_low,
+                "cloud_mid": fp.cloud_mid,
+                "cloud_high": fp.cloud_high,
+                "freezing_level": fp.freezing_level,
+                "cape": fp.cape,
+                "cin": fp.cin,
+                "lcl": fp.lcl,
+                "lfc": fp.lfc,
+                "tke": fp.tke,
+                "lcl_min": fp.lcl_min,
+                "lcl_max": fp.lcl_max,
+                "cape_max": fp.cape_max,
+                "cloud_cover_max": fp.cloud_cover_max,
+                "solar_min": fp.solar_min,
+                "thermal_ceiling_m": fp.thermal_ceiling_m,
+                "cloud_base_agl_m": fp.cloud_base_agl_m,
+                "thermal_strength": fp.thermal_strength,
+                "overdevelopment_risk": fp.overdevelopment_risk,
+                "blue_thermal": fp.blue_thermal,
+                "turbulence_index": fp.turbulence_index,
+                "ceiling_spread_m": fp.ceiling_spread_m,
+            }
+            for field_name, value in field_map.items():
+                if value is not None:
+                    p = p.field(field_name, float(value))
+            # Store init_time as a field so Python can deduplicate per valid_time
+            p = p.field("init_time", fp.init_time.astimezone(timezone.utc).isoformat())
+            influx_points.append(p)
+
+        chunk_size = 5000
+        try:
+            for i in range(0, len(influx_points), chunk_size):
+                self._write_api.write(
+                    bucket=self._cfg.bucket, org=self._cfg.org,
+                    record=influx_points[i : i + chunk_size],
+                )
+            logger.debug("Wrote %d thermal forecast points to InfluxDB", len(influx_points))
+        except Exception as exc:
+            logger.error("InfluxDB thermal forecast write error: %s", exc)
+            raise
+
+    def query_thermal_forecast_for_stations(
+        self, station_ids: list[str], horizon_hours: int = 120
+    ) -> dict[str, dict[str, dict]]:
+        """
+        Return thermal forecast data for the given station IDs from now to ``+horizon_hours``.
+
+        Same shape as ``query_forecast_for_stations``. Deduplicates to the latest ``init_time``
+        per ``valid_time`` in Python — there is only one source (swissmeteo) for thermal data,
+        so unlike ``query_forecast_for_stations`` there is no source-preference ladder, just
+        "newest init_time wins".
+
+        Uses ``_slow_query_api`` (60 s), not ``_query_api`` (10 s) — this query is strictly
+        larger than ``query_forecast_for_stations`` (519 stations × 121 h × ~24 fields) and would
+        hit the same wall that ``query_forecast_snapshot_for_stations`` was fixed for in v1.22.2.
+
+        Returns::
+
+            {
+                station_id: {
+                    valid_time_iso: {
+                        "solar": float | None,
+                        "lcl":   float | None,
+                        ...
+                    }
+                }
+            }
+        """
+        if not station_ids:
+            return {}
+
+        now = datetime.now(timezone.utc)
+        start_str = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+        end_str = (now + timedelta(hours=horizon_hours)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        station_filter = " or ".join(
+            f'r.station_id == "{_flux_str(sid)}"' for sid in station_ids
+        )
+        three_days_ago = (datetime.now(timezone.utc) - timedelta(days=3)).strftime("%Y-%m-%d")
+
+        flux = f"""
+from(bucket: "{self._cfg.bucket}")
+  |> range(start: {start_str}, stop: {end_str})
+  |> filter(fn: (r) => r._measurement == "{MEASUREMENT_FORECAST_THERMAL}")
+  |> filter(fn: (r) => {station_filter})
+  |> filter(fn: (r) => not exists r.init_date or r.init_date >= "{three_days_ago}")
+  |> pivot(rowKey: ["_time", "station_id", "network", "source", "model", "init_date"], columnKey: ["_field"], valueColumn: "_value")
+  |> sort(columns: ["_time"])
+"""
+        try:
+            tables = self._slow_query_api.query(flux, org=self._cfg.org)
+        except Exception as exc:
+            logger.error("InfluxDB thermal forecast query error: %s", exc)
+            return {}
+
+        # raw[station_id][valid_time_iso] = {fields..., "_init_time": str}
+        raw: dict[str, dict[str, dict]] = {}
+        for table in tables:
+            for record in table.records:
+                sid = record.values.get("station_id", "")
+                valid_time_iso = record.get_time().isoformat()
+                init_time_str = record.values.get("init_time", "")
+
+                fields = {
+                    k: v
+                    for k, v in record.values.items()
+                    if not k.startswith("_")
+                    and k not in ("result", "table", "station_id", "network", "init_time", "init_date")
+                }
+                fields["_init_time"] = init_time_str
+
+                raw.setdefault(sid, {})
+                existing = raw[sid].get(valid_time_iso)
+                if existing is None or init_time_str > existing.get("_init_time", ""):
+                    raw[sid][valid_time_iso] = fields
+
+        return {
+            sid: {vt: {k: v for k, v in row.items() if k != "_init_time"} for vt, row in by_vt.items()}
+            for sid, by_vt in raw.items()
+        }
+
+    def query_thermal_forecast_snapshot_for_stations(
+        self, station_ids: list[str], valid_time: datetime
+    ) -> dict[str, dict]:
+        """Fetch the most recent thermal forecast for specific stations at ``valid_time``.
+
+        Mirrors ``query_forecast_snapshot_for_stations``: scans ±30 minutes around
+        ``valid_time`` in ``weather_forecast_thermal`` and returns the entry with the most
+        fields per station (= newest init_time = freshest model run). Uses ``_slow_query_api``.
+        """
+        if not station_ids:
+            return {}
+        ids_literal = '["' + '", "'.join(_flux_str(sid) for sid in station_ids) + '"]'
+        start = (valid_time - timedelta(minutes=30)).isoformat()
+        stop = (valid_time + timedelta(minutes=31)).isoformat()
+        flux = f"""
+from(bucket: "{self._cfg.bucket}")
+  |> range(start: {start}, stop: {stop})
+  |> filter(fn: (r) => r._measurement == "{MEASUREMENT_FORECAST_THERMAL}")
+  |> filter(fn: (r) => contains(value: r.station_id, set: {ids_literal}))
+  |> last()
+  |> pivot(rowKey: ["_time", "station_id", "network", "source", "model", "init_date"],
+           columnKey: ["_field"], valueColumn: "_value")
+"""
+        try:
+            tables = self._slow_query_api.query(flux, org=self._cfg.org)
+        except Exception as exc:
+            logger.error("InfluxDB query_thermal_forecast_snapshot_for_stations error: %s", exc)
+            return {}
+
+        results: dict[str, dict] = {}
+        for table in tables:
+            for record in table.records:
+                sid = record.values.get("station_id", "")
+                if not sid:
+                    continue
+                entry: dict = {
+                    "station_id": sid,
+                    "timestamp": record.get_time(),
+                    "is_forecast": True,
+                }
+                entry.update({
+                    k: v for k, v in record.values.items()
+                    if not k.startswith("_")
+                    and k not in ("result", "table", "station_id", "network", "model", "init_time")
+                })
+                if sid not in results or len(entry) > len(results[sid]):
+                    results[sid] = entry
+        return results
 
     # ------------------------------------------------------------------
     # Wind forecast grid — write + query

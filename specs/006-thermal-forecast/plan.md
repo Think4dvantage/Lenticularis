@@ -1,9 +1,15 @@
 # Implementation Plan: Thermal Forecasting from LSMFAPI
 
-**Phase**: 2 — Plan · **Date**: 2026-07-31
-**Target version**: v1.20.0 → **v1.21.0**
+**Phase**: 2 — Plan · **Date**: 2026-07-31 · **Revised**: 2026-08-02
+**Target version**: v1.22.2 → **v1.23.0**
+**Tasks**: [tasks.md](./tasks.md)
 **Audience**: this document is written to be implemented by an agent that has *not* seen the
 research session. Everything needed is inline. Read `.ai/instructions/` first anyway.
+
+> **Revision note (2026-08-02).** Authored against v1.20.0; re-verified against v1.22.2 after
+> 007 and 008 shipped. §3.5 lists what was stale and is now corrected — most importantly the
+> `station_data` merge sites went from 3 to **6**. §12 lists four additions from the same review.
+> The original target of v1.21.0 was taken by 007; this now ships as **v1.23.0**.
 
 ---
 
@@ -163,6 +169,46 @@ claiming lsmfapi "only serves FGA stations" is stale.
 Irrelevant for the thermal grid anyway — it is spatial, not per-station, so Lenticularis samples
 it against its **own** `_station_registry`.
 
+### 3.4 The thermal grid and the wind grid are the SAME 1272 points (verified 2026-08-02)
+
+Verified in the lsmfapi source, not inferred. `/api/forecast/grid` and `/api/forecast/thermal-grid`
+share one default bbox constant (`LSMFAPI forecast.py:45`, from `_icon_eps_base.py:71-75`:
+lat 45.8–47.9, lon 5.9–10.6), both default `stride_km=10`, and both build their point list with
+**character-for-character identical** code (`forecast.py:196-202` vs `:288-294`), rounding to 5 dp
+identically (`:225-228` vs `:317-320`). Result: 24 lats × 53 lons = **1272 points**, first
+`(47.9, 5.9)`, emitted row-major lat-DESC / lon-ASC in both. Formatting all 1272 to `.4f` gives
+1272 **collision-free** `grid_id`s (spacing 0.0901° ≫ 0.0001°).
+
+Lenticularis' wind collector sends neither `bbox` nor `stride_km`
+(`collectors/forecast_grid_swissmeteo.py:51`), so it receives exactly that default grid, and
+`wind_forecast.py:122` already canonicalises to the same lat-DESC/lon-ASC order.
+
+**Consequence: `thermal_forecast_grid` and `wind_forecast_grid` join on `(grid_id, valid_time)`,
+and index `j` refers to the same physical cell in both.** This is load-bearing for the feature
+being *useful* — see §6.9. Requirements it imposes:
+
+1. The thermal collector **must** use `f"{lat:.4f}_{lon:.4f}"` (§5.2 already prescribes this).
+   Any other format silently breaks the join with zero errors.
+2. Do **not** join on `init_date` across the two measurements — the caches fill separately and
+   carry different `init_time`s (§3.1). Join on `grid_id` + `valid_time` only.
+3. If the Open-Meteo grid fallback ever runs (`forecast_grid.py:164` — 171 points, 2 dp, 0.25°
+   lattice), those `grid_id`s will not join and will produce zero matches, silently. Phase 3 must
+   tolerate a wind lookup miss rather than assume it.
+
+### 3.5 The plan predates v1.21.0 and v1.22.x — re-verified 2026-08-02
+
+This document was written on 2026-07-31 against **v1.20.0**. Since then `007-replay-aware-ruleset-decisions`
+(v1.21.0) and `008-progressive-map-loading` (v1.22.0) shipped, plus fixes through v1.22.2. Corrections
+applied throughout this document on 2026-08-02:
+
+| Was | Now |
+|---|---|
+| 3 `station_data` merge sites | **6** — `run_forecast_evaluation_at` (new in 007) and `public_map.py` were missing (§7.4) |
+| station `elevation_m` | `WeatherStation.elevation: Optional[int]`; coords are `latitude`/`longitude` (`models/weather.py:14-43`) |
+| "All 14 `static/*.html`" | **17** files exist; ~10 need editing — 4 pages inject nav from `bootstrap.js:19-33` (T20) |
+| "clone `wind-forecast.*`" | There is no `wind-forecast.js` — the page is one 597-line HTML with a 348-line inline module (T19) |
+| mirror `query_forecast_*` clients | Both new query methods use `_slow_query_api`, per the v1.22.2 fix (§7.2) |
+
 ---
 
 ## 4. Architecture
@@ -208,11 +254,12 @@ Both are comfortably within what the instance already sustains. No InfluxDB capa
 
 ### 4.2 Interaction with `specs/005-influxdb3-migration`
 
-`specs/005` is an in-flight, uncommitted plan to move to InfluxDB 3. The two new measurements here
-are plain measurements written through the existing `InfluxClient` façade with no exotic Flux —
-whatever 005 does to `weather_forecast` / `wind_forecast_grid` applies identically to these.
-**Action for the implementer**: read `specs/005-influxdb3-migration/plan.md` before writing the
-Flux in T04/T11 and match whatever query style it settles on. Do not invent a third style.
+**Updated 2026-08-02: 005 is shelved**, not in-flight. It is blocked on an unresolved engine
+decision (D1: InfluxDB 3 licensing/monetisation; D2, added 2026-08-02: whether to target
+Postgres/TimescaleDB instead) and never reached `tasks.md`. There is no in-progress query style to
+match. **Action for the implementer**: write T04/T11 in the current InfluxDB 2.x Flux style, same
+as every other measurement in `influx.py`. Re-check this section if 005 is reactivated before 006
+ships.
 
 ---
 
@@ -243,7 +290,8 @@ Mirrors `weather_forecast`'s tag layout exactly (`influx.py:808-873`) so dedup l
 > a field to this list is a one-line change — dropping one is not.
 
 **Derived fields (computed by the collector, §6):** `thermal_ceiling_m`, `cloud_base_agl_m`,
-`thermal_strength`, `overdevelopment_risk`, `blue_thermal`, `turbulence_index`
+`thermal_strength`, `overdevelopment_risk`, `blue_thermal`, `turbulence_index`,
+`ceiling_spread_m`
 
 Derived metrics are computed in the **collector**, not the frontend, because the rules engine must
 be able to threshold them server-side.
@@ -310,6 +358,7 @@ class ThermalForecastPoint(BaseModel):
     overdevelopment_risk: Optional[int] = None
     blue_thermal: Optional[int] = None
     turbulence_index: Optional[int] = None
+    ceiling_spread_m: Optional[float] = None   # §6.8 — ensemble confidence
 
 
 class ThermalGridForecastPoint(BaseModel):
@@ -349,6 +398,13 @@ result:  max(0.0, lcl - elevation_m)
 Cloud base above ground is what a pilot on that hill actually experiences. Station-level only —
 never computed for grid cells. Clamp at 0 (an LCL below terrain means cloud on the deck).
 
+> ⚠️ The pure function's parameter is named `elevation_m`, but the attribute on the station object
+> is **`WeatherStation.elevation`** (`Optional[int]`, `models/weather.py:20`) — there is no
+> `elevation_m` and no `altitude` on that model. Read it as
+> `getattr(station, "elevation", None)`. **`scheduler.py:840` gets this wrong today**
+> (`getattr(station, "altitude", None)`, always `None`, so every station silently falls through to
+> `level_hpa = 950`); do not copy that line. Logged as a separate pre-existing bug — not fixed here.
+
 ### 6.3 `thermal_strength` — integer 0–5
 
 ```python
@@ -357,6 +413,7 @@ THERMAL_CAPE_BONUS_JKG      = 300     # cape at/above this → +1
 THERMAL_CLOUD_PENALTY_PCT   = 70      # cloud_cover above this → -1
 THERMAL_CLOUD_HEAVY_PCT     = 90      # cloud_cover above this → -2 (instead of -1)
 THERMAL_CIN_PENALTY_JKG     = -100    # cin at/below this → -1
+THERMAL_SUNSHINE_PATCHY_MIN = 30      # min/h — sun out less than half the hour → -1
 ```
 
 ```
@@ -366,28 +423,48 @@ score += 1  if cape is not null and cape >= 300
 score -= 2  if cloud_cover is not null and cloud_cover > 90
        else -1  if cloud_cover is not null and cloud_cover > 70
 score -= 1  if cin_effective <= -100          # cin_effective = 0.0 when cin is null (§2.4)
+score -= 1  if sunshine is not null and sunshine < 30
+            and (cloud_cover is null or cloud_cover <= 70)      # see note below
 result = clamp(score, 0, 5)
 null   if solar is null      # solar is the trigger; without it there is no forecast to give
 ```
 
-A missing *modifier* (`cape`, `cloud_cover`) simply contributes nothing — that is intended. A
-missing `solar` makes the whole index null.
+A missing *modifier* (`cape`, `cloud_cover`, `sunshine`) simply contributes nothing — that is
+intended. A missing `solar` makes the whole index null.
+
+> **Why the `sunshine` term is guarded on `cloud_cover`.** §2.3 documents sunshine as a real signal
+> ("high variance = patchy = uneven thermals") and the original draft of this plan then never used
+> it — an internal contradiction, fixed here. But `sunshine` and `cloud_cover` are strongly
+> correlated, so an unconditional penalty would double-count the same overcast sky already punished
+> by the cloud term. The guard makes it *additive-only*: it fires when the sun is out less than half
+> the hour **and** total cloud cover did not already flag it — i.e. thin or broken cloud that
+> `cloud_cover` alone misses. `sunshine_min`/`sunshine_max` are not stored (§5.1), so true ensemble
+> variance is unavailable; this is the median-only approximation of the same idea.
 
 ### 6.4 `overdevelopment_risk` — integer 0–3
 
 ```python
-OVERDEV_CAPE_BANDS   = ((300, 0), (800, 1), (1500, 2))   # J/kg → risk band
-OVERDEV_UNCAPPED_CIN = -25   # cin above (weaker than) this = convection fires freely
+OVERDEV_CAPE_BANDS    = ((300, 0), (800, 1), (1500, 2))   # J/kg → risk band
+OVERDEV_UNCAPPED_CIN  = -25   # cin above (weaker than) this = convection fires freely
+OVERDEV_CLOUD_MID_PCT = 50    # mid-level cloud above this, with CAPE present → +1
 ```
 
 ```
 risk   = 0 if cape < 300, 1 if < 800, 2 if < 1500, else 3
 risk  += 1  if cape >= 300 and cin_effective > -25     # high CAPE + no cap = fires without warning
+risk  += 1  if cape >= 300 and cloud_mid is not null and cloud_mid > 50
 result = clamp(risk, 0, 3)
 null   if cape is null
 ```
 Uses `cape` (median). `cape_max` is stored separately so the UI can show the ensemble worst case —
 the *rule-facing* number stays the median so a single outlier member cannot red-light a whole day.
+
+> **Why `cloud_mid` is now a term.** §2.3 calls `cloud_mid` the "overdevelopment cap indicator" and
+> the original draft then computed overdevelopment risk from `cape` + `cin` only, never touching it
+> — the same documented-but-unused contradiction as `sunshine` in §6.3. Mid-level cloud on a day
+> that already has CAPE is a classic pre-overdevelopment signal (spreading altocumulus / early
+> anvil). Gated on `cape >= 300` so that mid cloud on a stable day — which is just shade, not
+> overdevelopment — contributes nothing. `null` `cloud_mid` contributes nothing, per §3.2 rule 2.
 
 ### 6.5 `blue_thermal` — 0 or 1
 
@@ -416,12 +493,67 @@ result = 0 if tke < 1, 1 if < 2, 2 if < 5, else 3     # 2+ = rough air
 null   if tke is null
 ```
 
-### 6.7 Day-window metrics — API layer, not stored
+### 6.7 `ceiling_spread_m` — ensemble confidence
+
+```
+inputs:  lcl_min, lcl_max   (m ASL)
+result:  lcl_max - lcl_min
+         null if either is null
+```
+
+The single number that tells a pilot whether to trust the cloud base. "2400 m ± 150 m" is a plan;
+"2400 m ± 900 m" is a coin flip, and today those two forecasts are indistinguishable in every UI
+we have. Raw metres, not a band — the UI and rules can threshold it (`ceiling_spread < 400`), and
+unlike a 0–3 index it needs no retuning.
+
+> This is the only derived metric that uses the ensemble at all. §5.1 stores five `_min`/`_max`
+> fields and, without this, would derive nothing from any of them.
+
+### 6.8 Day-window metrics — API layer, not stored
 
 `thermal_window_start` / `thermal_window_end` (first/last hour of a local day with
 `thermal_strength >= 2`) are a **presentation** concern computed in the router from the stored
 hourly series. Do not add them as InfluxDB fields — they would need recomputing on every
 timezone/threshold change.
+
+The window bounds alone under-serve the actual question, which is "is Saturday worth the drive?".
+Compute the full per-day summary in the router (§7.5 shows the shape):
+
+| Key | Derivation over the local day's hours |
+|---|---|
+| `start` / `end` | first / last local hour with `thermal_strength >= 2` |
+| `hours` | count of hours with `thermal_strength >= 2` (**not** `end - start`; the window can have holes) |
+| `best_hour` | local hour of max `thermal_strength`; ties → earliest |
+| `best_strength` | that maximum |
+| `peak_cloud_base_agl_m` | max `cloud_base_agl_m` across the window hours |
+| `peak_ceiling_m` | max `thermal_ceiling_m` across the window hours |
+| `max_overdevelopment_risk` | max `overdevelopment_risk` across the window hours |
+| `median_ceiling_spread_m` | median `ceiling_spread_m` across the window hours (§6.7) |
+
+All are `null` when the day has no qualifying hour. Emit **no** `day_windows` entry for a day with
+zero usable frames, rather than an entry full of nulls.
+
+> ⚠️ **Known limitation, accepted for now.** A day that is *partly* null (§3.2) produces a window
+> computed only over the hours that exist — so a day whose morning is missing reports
+> `start: "14:00"`, which reads as "thermals start at 2pm" when the truth is "we don't know about
+> the morning". Surfacing a per-day `coverage` count in the API was considered and **deferred**
+> (§11 decision 6). Revisit at T11 if the Phase 1 gate (§10) shows the null hole persists.
+
+### 6.9 Wind × thermal — no new code, but design for it
+
+A thermal number on its own is not a flying decision: 2400 m of cloud base under 45 km/h at ridge
+height is a no-go, and nothing in §6.1–6.8 knows that. Wind is already in the stack, so this
+requires no new collector, measurement, or fetch — only that we build deliberately rather than
+discover it by accident:
+
+| Layer | What is already true | What this plan must do |
+|---|---|---|
+| **Rules (Phase 2)** | Once thermal fields are merged into `station_data` (§7.4), wind and thermal fields sit in the **same flat dict**. `thermal_strength >= 3 AND wind_speed < 25` therefore works with zero evaluator changes | Cover it with an explicit test (T10) so it is a supported capability, not an accident |
+| **Map (Phase 3)** | `thermal_forecast_grid` and `wind_forecast_grid` are the same 1272 cells (§3.4) | Overlay the existing wind arrows on the thermal layer — same index `j`, no join code, no second fetch. Tolerate a lookup miss (§3.4 note 3) |
+
+Deliberately **not** doing: a combined `flyability` metric in the collector. That would couple two
+collectors with different `init_time`s (§3.1) and bake one pilot's wind tolerance into stored data.
+The composition belongs in the ruleset, where each pilot sets their own threshold.
 
 ---
 
@@ -443,13 +575,13 @@ timezone/threshold change.
 
 | # | File | Change |
 |---|---|---|
-| T08 | `src/lenticularis/models/rules.py` | Extend `FieldName` (§7.4) |
-| T09 | `src/lenticularis/rules/evaluator.py` | Extend `FIELD_MAP`; merge thermal into `station_data` at 3 sites (§7.4) |
-| T10 | `tests/backend/test_rules_thermal.py` | **NEW.** Thermal conditions across live + forecast paths |
-| T11 | `src/lenticularis/api/routers/stations.py` | `GET /api/stations/{station_id}/thermal-forecast` (§7.5) |
-| T12 | `static/station-detail.html` + `.js` | Thermal panel: 4 new chart cards (§7.6) |
-| T13 | `static/ruleset-editor.html` + `.js` | New fields in the condition-field dropdown + units |
-| T14 | `static/i18n/{en,de,fr,it}.json` | `thermal.*` block — **all four locales** |
+| T08 | `src/lenticularis/models/rules.py` | Extend `FieldName` — 11 new keys incl. `ceiling_spread` (§7.4) |
+| T09 | `src/lenticularis/rules/evaluator.py` **+ `services/public_map.py`** | Extend `FIELD_MAP`; merge thermal into `station_data` at **5 of the 6 sites** in §7.4 (A, B, C, D, F — **not** E). Site F is in `public_map.py`, not `evaluator.py`, and skipping it silently drops showcase rule sets from the anonymous map |
+| T10 | `tests/backend/test_rules_thermal.py` | **NEW.** Thermal conditions across all six merge sites, the public-map regression, and the wind × thermal composition (§9) |
+| T11 | `src/lenticularis/api/routers/stations.py` | `GET /api/stations/{station_id}/thermal-forecast` (§7.5), incl. the 8-key `day_windows` summary (§6.8) |
+| T12 | `static/station-detail.html` + `.js` | Thermal panel: 4 new chart cards (§7.6). Reuse `fcDatasets()` / `renderSimpleChart()` — no new charting code |
+| T13 | `static/ruleset-editor.html` + 2 more | New fields in the editor's `FIELDS` array (`ruleset-editor.html:704-715`) **with units**. Also the two duplicated `FIELD_UNIT`/`FIELD_LABEL` copies at `index.html:637-653` and `ruleset-analysis.html:350-369`, else the map popup and analysis page render the new fields unlabelled. Consider extending `ai.py:65`'s prompt field list (already stale — it omits `foehn_active`) |
+| T14 | `static/i18n/{en,de,fr,it}.json` | `thermal.*` block + `editor.fields.*` for the 11 new fields — **all four locales**, which are line-for-line parallel today (727/727/727/728) |
 
 ### Phase 3 — Map layer
 
@@ -459,17 +591,17 @@ timezone/threshold change.
 | T16 | `src/lenticularis/collectors/forecast_thermal_swissmeteo.py` | Emit grid points from the **same** parsed payload |
 | T17 | `src/lenticularis/api/routers/thermal_forecast.py` | **NEW router**, modelled on `wind_forecast.py` |
 | T18 | `src/lenticularis/api/main.py` + `routers/pages.py` | Register router; add `/thermal-forecast` **page route in `pages.py`, never `main.py`** |
-| T19 | `static/thermal-forecast.html` + `.js` | Map page, cloned from `wind-forecast.*` |
-| T20 | All 14 `static/*.html` | Nav link (nav markup is duplicated per page — every file) |
+| T19 | `static/thermal-forecast.html` + `.js` | Map page, modelled on `wind-forecast.html`. ⚠️ There is **no** `wind-forecast.js` — that page is one 597-line HTML with a 348-line inline `<script type="module">` (lines 247-594). Extract the new page's logic to a real `.js` like `index.html`/`map.js` does, rather than cloning the inline pattern |
+| T20 | Nav link — **13 places, not 14 files** | `static/` holds **17** HTML files, but 4 (`foehn`, `ruleset-editor`, `rulesets`, `stats`) inject nav from `bootstrap.js:19-33`, so editing `_NAV_HTML` covers all four at once. Then 9 inline navs: `admin:137`, `forecast-accuracy:285`, `forecast-analysis:274`, `help:196`, `index:250`, `ruleset-analysis:189`, `station-detail:227`, `stations:202`, `wind-forecast:190`. **Skip** `login`/`register` (3-link auth nav), `org-dashboard` (no `.nav-links`), `oauth-callback` (no nav) |
 
 ### Phase 4 — Docs & release
 
 | # | File | Change |
 |---|---|---|
-| T21 | `pyproject.toml` | `version = "1.21.0"` — **mandatory**, static assets changed (`04-constraints.md`) |
+| T21 | `pyproject.toml` | `version = "1.23.0"` — **mandatory**, static assets changed (`04-constraints.md`) |
 | T22 | `.ai/context/architecture.md` | Both measurements, both endpoints, derived-metric table |
 | T23 | `.ai/context/features.md` | v1.21 milestone entry |
-| T24 | `.ai/context/lsmfapi-thermal-grid.md` | **Correct the payload table** — it claims ~0.5 MB at `stride_km=10`; measured **28.6 MB** (§2.5). Also drop the "serves FGA stations only" note (§3.3) and the "Integration ideas" section, now superseded by this plan |
+| T24 | `.ai/context/lsmfapi-thermal-grid.md` + 2 more | **Correct the payload table** — it claims ~0.5 MB at `stride_km=10`; measured **28.6 MB** (§2.5). Drop the "serves FGA stations only" note (§3.3) and the "Integration ideas" section, superseded by this plan. **Also fix two unrelated doc bugs found 2026-08-02:** (a) `.ai/context/architecture.md:65` documents `wind_forecast_grid.init_date` as `YYYY-MM-DDTHH`, but `influx.py:898` writes `%Y-%m-%d`; (b) `.ai/context/features.md:258` and `.ai/context/forecast-analysis-wip.md:18,50` describe a `_ranking_client` / `ranking_query_timeout: 300000` that **does not exist** — `influx.py:49-66` has only `_client` and `_slow_client` |
 | T25 | `.ai/instructions/01-project-overview.md` | Add thermal grid to the SwissMeteo data-sources row |
 | T26 | `README.md` | Feature + API sections |
 
@@ -511,13 +643,18 @@ class ForecastThermalSwissMeteoCollector:
    stall the event loop otherwise. `04-constraints.md` "Blocking the async event loop" is explicit,
    and lsmfapi itself shipped v0.3.5 to fix exactly this class of bug. `response.json()` counts as
    blocking work here.
-2. **Nearest-point mapping: reuse `haversine_m()` from `services/dedup.py`.** Never redefine a
+2. **Nearest-point mapping: reuse `haversine_m()` from `services/dedup.py:44`.** Never redefine a
    distance helper (`01-project-overview.md:54`). Compute the mapping **once per run** —
    519 × 1272 = 660 k evaluations, ~1 s in pure Python, negligible next to the 4.1 s fetch. Do not
    recompute per frame. `scheduler.py:810 _build_station_grid_mapping` is the existing precedent
-   for the shape of this.
-3. **Skip stations with no `latitude`/`longitude`** — same guard as
-   `forecast_swissmeteo.py:73`.
+   for the shape of this — but note it calls a locally-defined `_haversine_sq` (`scheduler.py:650`),
+   a second unreconciled distance implementation. Import the `dedup.py` one; do not add a third.
+3. **Read station attributes by their real names.** `WeatherStation` (`models/weather.py:14-43`) has
+   `latitude` / `longitude` (required floats) and **`elevation`** (`Optional[int]`) — there is no
+   `elevation_m` and no `altitude`. Still guard on lat/lon being present, same as
+   `forecast_swissmeteo.py:73`, since registry entries are built by collectors. Get the station list
+   the same way `scheduler.py:638-643` does, including its empty-registry guard (`:645-655`) — the
+   registry is populated asynchronously and an early run can legitimately see zero stations.
 4. **Null-check per field per frame** (§3.2). Suggested shape:
    ```python
    def _at(frame: dict, field: str, j: int) -> float | None:
@@ -529,9 +666,14 @@ class ForecastThermalSwissMeteoCollector:
    ```
 5. **Emit nothing for an all-null frame.** If every raw field at index `j` is null, skip the point
    entirely — do not write a row carrying only `init_time`.
-6. **Log the non-null frame count once per run** at INFO, e.g.
-   `[Lenti:thermal-collector] init=%s model=%s frames=%d usable=%d points=%d`. Per
-   `08-operability.md`, a silently degraded upstream must be visible.
+6. **Log the non-null frame count AND per-hour coverage once per run** at INFO:
+   ```
+   [Lenti:thermal-collector] init=%s model=%s frames=%d usable=%d points=%d
+   [Lenti:thermal-collector] coverage today=%d/12 d1=%d/12 (local 08-19, non-null solar)
+   ```
+   Per `08-operability.md`, a silently degraded upstream must be visible. The second line is not
+   decoration — it **is** the Phase 1 exit gate (§10.1), because the §3.2 null hole lands squarely
+   on the flyable hours and a row-count check cannot see it.
 7. **Re-collection guard (optional, worth having).** Skip the write when
    `(init_time, model, usable_frame_count)` is identical to the last successful run — the model
    refreshes 4×/day but the job runs hourly, so this drops ~75 % of writes. Include
@@ -561,6 +703,22 @@ cutoff filter (`influx.py:1145`) so old runs are not pulled.
 
 `query_thermal_forecast_snapshot_for_stations(station_ids, valid_time)` — mirror
 `query_forecast_snapshot_for_stations` (`influx.py:280`), ±30 min window.
+
+⚠️ **Both new query methods must use `_slow_query_api` (60 s), not `_query_api` (10 s).**
+Copy the *structure* of the two wind methods, not their client choice:
+
+- `query_forecast_snapshot_for_stations` already uses `_slow_query_api` (`influx.py:303`) — it was
+  switched in **v1.22.2** (the most recent commit) precisely because 10 s timeouts were making
+  forecast evaluations spuriously report red via the v1.20.0 no-data fail-safe. Inherit that fix,
+  do not re-earn it.
+- `query_forecast_for_stations` still uses `_query_api` (`influx.py:1150`). **Do not mirror that.**
+  The thermal horizon query is strictly larger (519 stations × 121 h × ~24 fields) and would hit
+  the same 10 s wall.
+
+> Note: `.ai/context/features.md:258` and `.ai/context/forecast-analysis-wip.md:18,50` describe a
+> third `_ranking_client` with a 300 s `ranking_query_timeout`. **It does not exist in the code** —
+> `influx.py:49-66` defines only `_client` (10 s) and `_slow_client` (60 s), and `config.py:8-15`
+> has no `ranking_query_timeout`. Those docs are wrong; corrected in T24.
 
 ⚠️ **Flux injection.** Station IDs reaching these methods must already be allowlist-validated at
 the router (`04-constraints.md` T01). Interpolate through the existing `_flux_str()` helper
@@ -597,7 +755,7 @@ FieldName = Literal[
     "foehn_active",
     # thermal (forecast-only — see note below)
     "thermal_ceiling", "cloud_base_agl", "thermal_strength",
-    "overdevelopment_risk", "blue_thermal", "turbulence",
+    "overdevelopment_risk", "blue_thermal", "turbulence", "ceiling_spread",
     "cape", "cloud_cover", "solar", "freezing_level",
 ]
 ```
@@ -611,21 +769,46 @@ FieldName = Literal[
     "overdevelopment_risk": "overdevelopment_risk",
     "blue_thermal":         "blue_thermal",
     "turbulence":           "turbulence_index",
+    "ceiling_spread":       "ceiling_spread_m",
     "cape":                 "cape",
     "cloud_cover":          "cloud_cover",
     "solar":                "solar",
     "freezing_level":       "freezing_level",
 ```
 
-**The clean seam**: `_eval_condition` (`evaluator.py:164`) reads `station_data[station_id][field]`.
-Merge the thermal dict into that per-station dict at fetch time and **no evaluator logic changes
-at all** beyond `FIELD_MAP`. Three sites build `station_data`:
+Add `"ceiling_spread"` to the `FieldName` Literal above as well — `FieldName` (`models/rules.py:13-18`)
+and `FIELD_MAP` (`evaluator.py:81-94`) are duplicated lists with **no cross-check**, so a key added
+to one and not the other fails silently at `_eval_condition:178` with only a `logger.warning`.
 
-| Site | Path | Merge |
-|---|---|---|
-| `evaluator.py:350-361` | live evaluation | Thermal is inherently a forecast quantity. Fetch `query_thermal_forecast_snapshot_for_stations(ids, now)` and merge over the live dict |
-| `evaluator.py:509-524` | forecast snapshot | Same snapshot method at the target `valid_time` |
-| `evaluator.py:668, 687` | forecast horizon sweep | `query_thermal_forecast_for_stations(...)`, merge per `valid_time` bucket |
+**The clean seam**: `_eval_condition` (`evaluator.py:164-200`) reads
+`station_data[station_id][influx_field]`, `float()`-coerces it, and returns `(False, None)` when the
+station or field is absent. Merge the thermal dict into that per-station dict at fetch time and
+**no evaluator decision logic changes at all** beyond `FIELD_MAP` — the four duplicated decision
+blocks are field-agnostic and need zero edits.
+
+**There are SIX sites that build `station_data`, not three.** The original draft listed three and
+was written before `run_forecast_evaluation_at` shipped in v1.21.0; `public_map.py` was missed
+entirely. Verified 2026-08-02:
+
+| # | Site | Path | Merge |
+|---|---|---|---|
+| A | `evaluator.py:350-363` (`run_evaluation`) | live evaluation | Thermal is inherently a forecast quantity. Fetch `query_thermal_forecast_snapshot_for_stations(ids, now)` and merge over the live dict |
+| B | `evaluator.py:509-526` (`run_evaluation_at`) | observed snapshot at `at_time` | Same snapshot method at `at_time` |
+| C | `evaluator.py:652-662` (`run_forecast_evaluation_at`) | **forecast snapshot — new in 007/v1.21.0** | Same snapshot method at the target `valid_time`. This is the function the replay-aware map calls on every scrub frame |
+| D | `evaluator.py:736-740` (`run_forecast_evaluation`) | forecast horizon sweep | `query_thermal_forecast_for_stations(...)` once outside the loop (it is already hoisted at `:717`), merge per `valid_time` bucket |
+| E | `evaluator.py:885-898` (`run_history_backfill`) | historical backfill | **Deliberately no thermal merge.** No thermal data exists before this feature starts collecting, so a merge would be uniformly empty. Must not crash — covered by a test (T10) |
+| F | `services/public_map.py:96-120` (`_fetch_station_data`) | anonymous showcase map | **Must merge.** See the warning below |
+
+⚠️ **Site F is a shipping bug if skipped.** `public_map.py` evaluates curated showcase rule sets for
+anonymous visitors. If a showcase rule set carries a thermal condition and F does not fetch thermal
+data, `_eval_condition` returns `(False, None)` → under v1.20.0 green-requirement semantics an unmet
+GREEN becomes **red**, and per v1.19.0 the no-data rule set is **omitted from the public map
+entirely**. A curated rule set would silently vanish with no error anywhere. Either merge at F, or
+explicitly reject thermal conditions on showcase sets — merging is the smaller change.
+
+⚠️ **Site C is the hot path.** 007 made the map call `run_forecast_evaluation_at` on every replay
+frame through a coalescing queue. Adding a second Influx round-trip there doubles that path's query
+count — one more reason both new query methods use the 60 s client (§7.2).
 
 ⚠️ **Merge direction matters.** Thermal field names are disjoint from observation field names, so
 `{**live, **thermal}` is safe today — but write it as an explicit key-by-key update of only the
@@ -635,8 +818,18 @@ thermal field names so a future name collision cannot silently shadow an observa
 per-station in a loop (`04-constraints.md` T09).
 
 ⚠️ **Note for the implementer**: a thermal condition on a *live* decision is answered from the
-forecast row valid at the current hour — there is no observed CAPE or LCL. Make that explicit in
-the docstring and in `help.html` so it is not read as a bug later.
+forecast row valid at the current hour — there is no observed CAPE or LCL (§11 decision 1). Make
+that explicit in the docstring and in `help.html` so it is not read as a bug later.
+
+> `help.html` is **not internationalised** — `data-i18n` appears on exactly 8 lines, all nav links,
+> and the locale files have no `help` key at all. Add the thermal FAQ as plain English in a new
+> `<div class="help-section" id="thermal">` plus a `.jump-link` in the jump bar (`help.html:211-224`),
+> matching the 12 existing sections. Do **not** invent `help.*` i18n keys for it.
+
+**Precedent worth knowing:** `ForecastPoint` carries no `snow_depth` and no `foehn_active`, so those
+two fields already silently never match in forecast evaluation. Fields that exist in only one of the
+two worlds are an established (if undocumented) condition in this codebase — thermal being
+forecast-only is not a new class of problem.
 
 ### 7.5 Station thermal API — `api/routers/stations.py`
 
@@ -651,12 +844,19 @@ GET /api/stations/{station_id}/thermal-forecast?hours=120
   "init_time": "2026-07-31T00:00:00+00:00",
   "model": "icon-ch1+ch2",
   "hours": [
-    { "valid_time": "...", "solar": 612.0, "lcl": 2350.0, "lcl_min": 2100.0, "lcl_max": 2600.0,
-      "cape": 340.0, "cape_max": 780.0, "cin": null, "cloud_cover": 35.0, "tke": 1.2,
-      "freezing_level": 3800.0, "thermal_ceiling_m": 2350.0, "cloud_base_agl_m": 1773.0,
+    { "valid_time": "...", "solar": 612.0, "sunshine": 55.0, "lcl": 2350.0,
+      "lcl_min": 2100.0, "lcl_max": 2600.0,
+      "cape": 340.0, "cape_max": 780.0, "cin": null, "cloud_cover": 35.0, "cloud_mid": 20.0,
+      "tke": 1.2, "freezing_level": 3800.0,
+      "thermal_ceiling_m": 2350.0, "cloud_base_agl_m": 1773.0, "ceiling_spread_m": 500.0,
       "thermal_strength": 4, "overdevelopment_risk": 2, "blue_thermal": 0, "turbulence_index": 1 }
   ],
-  "day_windows": [ { "date": "2026-07-31", "start": "10:00", "end": "17:00" } ]
+  "day_windows": [
+    { "date": "2026-07-31", "start": "10:00", "end": "17:00", "hours": 7,
+      "best_hour": "14:00", "best_strength": 4,
+      "peak_cloud_base_agl_m": 1773.0, "peak_ceiling_m": 2350.0,
+      "max_overdevelopment_risk": 2, "median_ceiling_spread_m": 320.0 }
+  ]
 }
 ```
 
@@ -667,7 +867,9 @@ GET /api/stations/{station_id}/thermal-forecast?hours=120
   (`.ai/context/forecast-analysis-wip.md`).
 - `async def` + `await asyncio.to_thread(influx....)` — never a bare sync Influx call in an async
   handler (`04-constraints.md` T07).
-- `day_windows` computed here per §6.7.
+- `elevation_m` in the response is read from `WeatherStation.elevation` (§6.2 warning).
+- `day_windows` computed here per §6.8 — all eight keys, and no entry at all for a day with zero
+  usable frames.
 - Errors via `HTTPException` / `AppException` so the `{"error":{code,message,details}}` envelope
   holds (`04-constraints.md` T12).
 
@@ -682,6 +884,19 @@ four cards following that exact markup pattern:
 | `card-thermal_strength` | `thermal_strength` 0–5 bars, coloured; `overdevelopment_risk` overlay |
 | `card-convection` | `cape` line + `cape_max` band + `cin` on a second axis (render `null` cin as "no cap") |
 | `card-solar` | `solar` line + `sunshine` bars + `cloud_cover` |
+
+Concrete anchors (verified 2026-08-02):
+- Card markup pattern — `station-detail.html:291-295`; convention is `card-<field>` / `chart-<field>`,
+  each starting `display:none` and revealed by `showCard()` (`station-detail.js:782-785`).
+- **The ensemble band already exists — reuse it, do not rebuild.** `fcDatasets()`
+  (`station-detail.js:118-155`) emits the exact 3-dataset min/max/probable pattern for
+  `lcl_min`/`lcl_max` and `cape_max`. Dataset order is load-bearing (`fill: '-1'`), the legend must
+  filter `(min)` (`:604`), and the tooltip must use `makeForecastFilter()` (`:107-116`), which folds
+  the range onto the probable line by **timestamp lookup, not index**.
+- `renderSimpleChart()` (`station-detail.js:~715-777`) already handles line/bar plus
+  `yMin`/`yMax`/`yTickLabels`/`barThickness` — enough for the 0–5 and 0–3 index bars without new
+  chart code.
+- `CHART_DEFAULTS` at `:157-221`; palette `CHART_COLORS` at `:11-20`; forecast amber at `:103`.
 
 Follow `03-frontend-conventions.md` throughout:
 - vanilla JS in `<script type="module">`, self-hosted Chart.js from `static/vendor/` — **no CDN,
@@ -710,7 +925,7 @@ Follow `03-frontend-conventions.md` throughout:
 
 | Constraint | Compliance |
 |---|---|
-| Static assets → version bump | T21: 1.20.0 → **1.21.0** (mandatory — T12/T13/T19/T20 all touch `static/`) |
+| Static assets → version bump | T21: 1.22.2 → **1.23.0** (mandatory — T12/T13/T19/T20 all touch `static/`) |
 | i18n all four locales | T14 |
 | No npm / no CDN | Chart.js + Leaflet from `static/vendor/` |
 | No Alembic | No SQLite change at all — thermal data is InfluxDB-only |
@@ -741,6 +956,13 @@ functions, no fixtures needed.
 - `thermal_ceiling_m` with one of the two inputs null, and with both null.
 - `cloud_base_agl_m` clamps to 0 when `lcl < elevation_m`.
 - Clamping: a stacked-penalty case cannot go below 0; a stacked-bonus case cannot exceed 5.
+- **`sunshine` guard (§6.3):** `sunshine=20, cloud_cover=85` → **no** sunshine penalty (the cloud
+  term already fired); `sunshine=20, cloud_cover=40` → penalty applies; `sunshine=20,
+  cloud_cover=None` → penalty applies; `sunshine=None` → no penalty, score otherwise unchanged.
+- **`cloud_mid` gate (§6.4):** `cape=100, cloud_mid=90` → **no** bump (stable day, mid cloud is just
+  shade); `cape=500, cloud_mid=90` → +1; `cape=500, cloud_mid=None` → no bump.
+- **`ceiling_spread_m` (§6.7):** normal case; either input null → `None`; and `lcl_min == lcl_max`
+  → `0.0`, which must stay distinguishable from `None`.
 
 **T07 — collector tests.** Build a **small hand-written fixture payload** (say 4 grid points ×
 5 frames) — do **not** commit a 28.6 MB capture. It must include:
@@ -754,8 +976,15 @@ functions, no fixtures needed.
 - a `thermal_strength >= 3 → green` condition matching and not matching
 - a thermal condition where the station has **no** thermal row → `(False, None)`, same as any
   other missing-data field
-- one test per merge site (live / snapshot / horizon sweep) proving the thermal field is visible
-- a mixed ruleset (wind + thermal conditions) evaluating correctly end-to-end
+- **one test per merge site — all six of §7.4**, proving the thermal field is visible at A/B/C/D/F
+  and that E (`run_history_backfill`) runs without thermal data and does not crash
+- **site F specifically**: a showcase rule set with a thermal condition still appears on the public
+  map with a correct decision — the regression guard for the silent-disappearance failure in §7.4
+- **wind × thermal (§6.9)**: a mixed rule set (`thermal_strength >= 3` AND `wind_speed < 25`)
+  evaluating correctly end-to-end, and flipping to red when only the wind leg fails. This is the
+  test that makes the composition a supported feature rather than an accident
+- `FieldName` / `FIELD_MAP` parity: assert the two lists have identical key sets, so the silent
+  `logger.warning` path at `_eval_condition:178` can never be reached by a typo
 
 **Regression guard:** existing `weather_forecast` behaviour must be untouched. Assert that a
 ruleset with no thermal conditions produces a byte-identical decision before and after.
@@ -775,7 +1004,7 @@ Phase 1 — ingestion  (no user-visible change; verify in InfluxDB)
   T03  forecast_thermal_swissmeteo.py collector
   T07  collector tests
   T05  scheduler job registration
-  ── STOP. User syncs + restarts. Confirm rows in weather_forecast_thermal. ──
+  ── STOP. User syncs + restarts. See the coverage gate below. ──
 
 Phase 2 — rules + station detail
   T08  FieldName
@@ -796,30 +1025,87 @@ Phase 3 — map layer
   T20  nav link in all 14 HTML files
 
 Phase 4 — release
-  T21  version bump 1.21.0            ← REQUIRED, static assets changed
+  T21  version bump 1.23.0            ← REQUIRED, static assets changed
   T22–T26  docs sync (.ai/ + README)
 ```
+
+### 10.1 The Phase 1 exit gate — coverage, not row count
+
+**"Confirm rows exist in `weather_forecast_thermal`" is not a sufficient gate.** §3.2 measured the
+00Z run as null across h+8…h+33 — from a 00Z init that is **08:00 today through 09:00 tomorrow**,
+i.e. the entire flyable window of today and tomorrow morning. Rows *will* exist (h+0–7 and
+h+34–120 are populated), so a row-count gate passes green while the feature shows nothing for the
+only hours a pilot cares about. Phases 2 and 3 would then be built against a hollow measurement.
+
+**Gate: non-null `thermal_strength` for local hours 08:00–19:00, for today and D+1.**
+
+To make that observable, the collector's per-run INFO log (§7.1 note 6) must report **per-hour**
+coverage, not just a usable-frame total:
+
+```
+[Lenti:thermal-collector] init=%s model=%s frames=%d usable=%d points=%d
+[Lenti:thermal-collector] coverage today=%d/12 d1=%d/12 (local 08-19, non-null solar)
+```
+
+Outcomes:
+
+| Result | Action |
+|---|---|
+| Both days ≥ 10/12 | Gate passes. Proceed to Phase 2 |
+| Either day badly short | **Stop.** The hole is still open upstream. Report to the lsmfapi side and hold Phases 2–3 — the ingestion and its diagnostic are still worth having merged, but there is no point building UI against it yet |
+
+This is why the collector, not a probe script, is the diagnostic: it runs hourly and will show the
+hole closing (or not) without anyone re-probing by hand.
+
+---
 
 **Deployment**: per `.ai/instructions/05-user-profile.md`, stop after each phase and report what
 changed. **Never** rsync, scp, or restart containers — the user syncs and restarts manually.
 
 ---
 
-## 11. Open questions for the user
+## 11. Decisions
 
-Not blocking — the plan states a default for each. Confirm or override.
+Questions 1–5 were the original open list, all confirmed at their stated default on 2026-08-02.
+Question 6 arose from the same-day review.
 
-1. **Thermal condition semantics on live decisions.** A thermal condition on a *live* traffic
-   light is necessarily answered from the forecast row valid at the current hour, since CAPE/LCL
-   are not observed anywhere. **Default: allow it**, documented in `help.html`. The alternative is
-   restricting thermal fields to forecast-mode rulesets only.
-2. **`stride_km`.** **Default: 10** (1272 points, 28.6 MB, 4.1 s). `stride_km=5` quadruples points
-   and would need a bbox split to stay under lsmfapi's `_MAX_RESPONSE_CELLS = 10 000 000` cap.
-3. **Ensemble spread selection.** **Default: the 5 fields in §5.1.** Say the word if `cape_min`,
-   `tke_max`, or the full 24 are wanted.
-4. **`thermal_strength` weights.** §6.3's bands are a defensible first cut, not a validated model.
-   They are named constants specifically so they can be retuned against real flying days.
-5. **Phase 3 scope.** A whole new map page is the bulk of the frontend work. An alternative is
-   adding a thermal *layer toggle* to the existing `/wind-forecast` page — cheaper, and arguably
-   better UX since wind and thermals are read together. **Default: separate page** (matches the
-   existing one-page-per-concern layout), but worth a decision before T17.
+1. **Thermal condition semantics on live decisions.** ✅ **Allow it.** A thermal condition on a
+   *live* traffic light is answered from the forecast row valid at the current hour, since CAPE/LCL
+   are not observed anywhere. Must be documented in `help.html` (see §7.4 implementer note) so it
+   is never mistaken for a bug.
+2. **`stride_km`.** ✅ **10** (1272 points, 28.6 MB, 4.1 s). No bbox-splitting needed.
+3. **Ensemble spread selection.** ✅ **The 5 fields in §5.1** (`lcl_min`, `lcl_max`, `cape_max`,
+   `cloud_cover_max`, `solar_min`). No additions.
+4. **`thermal_strength` weights.** ✅ **Accept §6.3's bands as-is for Phase 1.** Ship as named
+   constants; retune later against real flying days if needed. (The `sunshine` term added in the
+   2026-08-02 review is a *new* term, not a retune of these bands — see §12.)
+5. **Phase 3 scope.** ✅ **Separate `/thermal-forecast` page** (matches the existing
+   one-page-per-concern layout). T17–T20 proceed as written.
+6. **Surfacing null coverage in the API/UI.** ✅ **Deferred.** The Phase 1 gate (§10.1) uses
+   collector logging to detect the §3.2 null hole, and the API does **not** carry a `coverage`
+   block. Accepted cost: a partially-null day produces a misleading `day_windows` entry (§6.8
+   warning). Revisit at T11 if the gate shows the hole persists.
+
+---
+
+## 12. Review addenda — 2026-08-02
+
+Added after re-verifying the plan against the v1.22.2 codebase. The plan was authored against
+v1.20.0; §3.5 lists the staleness corrections. These four are *additions*, not corrections:
+
+| # | Addition | Where | Why |
+|---|---|---|---|
+| 1 | **Wind × thermal made deliberate** | §3.4, §6.9, T10, T19 | Verified the thermal and wind grids are the same 1272 cells, so they join on `(grid_id, valid_time)` for free. A thermal number alone is not a flying decision; the composition already works in the rules engine and must be tested, and the Phase 3 map gets a wind overlay at no cost |
+| 2 | **`ceiling_spread_m`** | §5.1, §5.3, §6.7, §7.4 | 7th derived metric, `lcl_max - lcl_min`. Without it the five stored ensemble fields feed nothing, and a ±150 m cloud base is indistinguishable from a ±900 m one |
+| 3 | **`sunshine` and `cloud_mid` wired in** | §6.3, §6.4 | §2.3 documented both as meaningful signals and §6 then ignored both. Resolved by adding a guarded `sunshine` penalty to `thermal_strength` and a CAPE-gated `cloud_mid` term to `overdevelopment_risk` |
+| 4 | **Richer `day_windows`** | §6.8, §7.5 | Start/end alone does not answer "is Saturday worth the drive?". Eight keys now, all router-computed from stored hourly data at zero storage cost |
+
+### Follow-up recorded, not scheduled
+
+**Thermal forecast verification via the JFB elevation ladder.** Thermal forecasts look unverifiable
+(nothing observes CAPE or LCL), but `.ai/context/features.md` already notes the JFB collector gives
+an 799 m → 3955 m temperature+humidity ladder within ~10 km — a measured lapse rate, and a
+temperature−dewpoint spread that converts directly to observed cloud base (~125 m per K). That is
+the observed counterpart to forecast `lcl`, and would let the existing `/forecast-analysis`
+machinery score thermal accuracy. Out of scope here; worth a spec of its own once Phase 1 has
+accumulated data. Exclude `jfb-hollandiahutte-sac` (upstream metadata bug).

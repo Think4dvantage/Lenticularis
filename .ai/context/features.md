@@ -1,6 +1,28 @@
 # Feature History & Backlog
 
-## Current Version: v1.22.2 (shipped)
+## Current Version: v1.22.3 (shipped)
+
+### Thermal Forecast — Phase 1: Ingestion (`specs/006-thermal-forecast`)
+
+Backend-only, no user-facing surface yet. Ingests lsmfapi's `/api/forecast/thermal-grid`
+(solar, sunshine, cloud cover, freezing level, CAPE/CIN, LCL, LFC, TKE, ~4×/day, 120h horizon)
+and derives seven pilot-facing metrics, ready for Phase 2 (rules + station-detail panel) and
+Phase 3 (map layer) — neither built yet.
+
+| Change | Detail |
+|---|---|
+| `services/thermal.py` — new | 7 pure functions: `thermal_ceiling_m`, `cloud_base_agl_m`, `thermal_strength` (0-5), `overdevelopment_risk` (0-3), `blue_thermal`, `turbulence_index` (0-3), `ceiling_spread_m`. `cin=None` means no inhibition layer, substituted as `0.0` — never a cap |
+| `collectors/forecast_thermal_swissmeteo.py` — new | One HTTP request (28.6 MB / 4.1s) covers every station and the whole grid. Nearest-grid-point mapping via `haversine_m()`. Per-field, per-frame null handling — never assumes a full frame or a full horizon is populated |
+| `weather_forecast_thermal` — new InfluxDB measurement | Own measurement, not merged into `weather_forecast` — the two forecasts have different `init_time`s and would break `query_forecast_snapshot_for_stations`'s dedup |
+| `forecast_thermal` scheduler job | Hourly, no Open-Meteo fallback (none exists for thermal). Re-collection guard skips the write when `(init_time, model, usable_frame_count)` is unchanged — the model refreshes ~4×/day but the job runs hourly |
+| **Phase 1 exit gate is coverage, not row count** | lsmfapi is known to null frames h+8…h+33 on some runs — squarely on today's and tomorrow's flyable hours. The collector logs `coverage today=%d/12 d1=%d/12 (local 08-19, non-null solar)` every run; Phase 2/3 do not proceed until both days show real coverage |
+| `tests/backend/test_thermal_derived.py`, `test_thermal_collector.py` | 63 + 9 tests. Suite: 96 → 188 |
+
+**Not shipped yet, tracked in the same spec**: rules-engine integration (`FieldName`/`FIELD_MAP`,
+6 merge sites), station-detail thermal panel, `/thermal-forecast` map page. See
+`specs/006-thermal-forecast/tasks.md` Phases 2-4.
+
+## Previous Version: v1.22.2 (shipped)
 
 ### Fix: forecast snapshot query timing out under concurrent load (`query_forecast_snapshot_for_stations`)
 
@@ -397,29 +419,36 @@ Key new files: `api/errors.py`, `api/routers/pages.py`, `collectors/utils.py`, `
 
 ## Backlog (unordered)
 
-### Thermal Forecast (lsmfapi thermal-grid endpoint) — planning underway in `specs/006-thermal-forecast`
+### Thermal Forecast (lsmfapi thermal-grid endpoint) — **planned, ready to implement**, `specs/006-thermal-forecast`
 
-Full API spec + TypeScript types + fetch helpers in `.ai/context/lsmfapi-thermal-grid.md`. Plan phase
-already written (`specs/006-thermal-forecast/plan.md`, targeting v1.20.0 → v1.21.0) — this entry's
-detail below predates that plan and is kept for the original rationale; see the spec folder for the
-current design.
+Plan **and** tasks written: `specs/006-thermal-forecast/plan.md` + `tasks.md`, targeting
+**v1.22.2 → v1.23.0**. Plan revised 2026-08-02 (it was authored against v1.20.0, before 007/008
+shipped). All design decisions are closed — see plan §11. **Read the spec folder, not this entry**,
+for the current design; the notes below are kept only for original rationale.
 
-Key fields: `solar` (W/m²), `lcl` (cloud base m ASL), `lfc`, `freezing_level`, `cape`, `cin`, `cloud_cover`, `tke`, `sunshine`. All with ensemble `_min`/`_max`. 120-hour horizon, ~4×/day refresh. Default `stride_km=10` (~200 pts over Switzerland, ~0.5 MB uncompressed).
+Key fields: `solar` (W/m²), `lcl` (cloud base m ASL), `lfc`, `freezing_level`, `cape`, `cin`,
+`cloud_cover`, `cloud_mid`, `tke`, `sunshine`, all with ensemble `_min`/`_max`. 120-hour horizon,
+~4×/day refresh, `stride_km=10`.
 
-Candidate integration surfaces:
-- **Thermal map page** (`/thermal`) — grid overlay coloured by `solar` or `lcl`, time-nav controls (same pattern as `/wind-forecast`)
-- **Station-detail thermal panel** — cloud base, freezing level, CAPE, sunshine below wind chart; nearest grid point via `nearestGridIndex`
-- **Ruleset conditions** — `lcl > X`, `cape < Y`, `cloud_cover < Z` — requires thermal fields in InfluxDB
-- **Thermal suitability badge** — green/orange/red on map popups
+Three things the 2026-08-02 review established that are easy to lose:
 
-Implementation note: confirm schema stability with lsmfapi owner before writing to InfluxDB.
+1. **The thermal grid and `wind_forecast_grid` are the same 1272 cells** — verified in the lsmfapi
+   source: shared default bbox, same stride, character-identical point-generation code. They join on
+   `(grid_id, valid_time)`, so wind × thermal composition is free in both the rules engine and the
+   map (plan §3.4, §6.9).
+2. **Payload is 28.6 MB / 4.1 s at `stride_km=10`**, not the ~0.5 MB this entry used to claim.
+   One request covers every station and the whole map — never fan out per-station.
+3. **Upstream currently nulls h+8…h+33** — from a 00Z init that is today 08:00 through tomorrow
+   09:00, i.e. the entire flyable window. Phase 1's exit gate is a *coverage* check, not a row
+   count (plan §10.1); if the hole is still open, Phases 2–3 are on hold.
 
-**Observed counterpart (new, from the JFB collector):** the JFB stations form an 799 m → 3955 m
+**Observed counterpart (from the JFB collector):** the JFB stations form an 799 m → 3955 m
 elevation ladder within ~10 km (Lauterbrunnen-Heliport 799, Lauterbrunnen-Gässli 856, Grindelwald-Moos
 1267, Grütschalp 1469, Kleine Scheidegg 2071, Mittellegihütte 3340, Eiger 3955 — all reporting
 temperature + humidity). That gives a **measured vertical temperature profile**, i.e. a real lapse
-rate, and temperature−dewpoint spread converts directly to observed cloud base (~125 m per K). This
-is the observed counterpart to the forecast thermal grid above, and could validate it.
+rate, and temperature−dewpoint spread converts directly to observed cloud base (~125 m per K) — the
+observed counterpart to forecast `lcl`, and a viable way to score thermal forecast accuracy through
+the existing `/forecast-analysis` machinery. Recorded as a follow-up spec in plan §12, not scheduled.
 
 Caveat: **exclude `jfb-hollandiahutte-sac`** — it declares 3248 m but reports ~928 hPa / 23 °C
 (a ~750 m reading). Upstream metadata/sensor bug, confirmed in the raw payload.

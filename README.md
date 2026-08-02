@@ -124,7 +124,7 @@ tests/backend/               # pytest suite (auth, rules, dedup, security, colle
 
 ## Development Status
 
-**Current version: v1.22.2** — published as `ghcr.io/Think4dvantage/Lenticularis:1.22.2` (and `:latest`).
+**Current version: v1.22.3** — published as `ghcr.io/Think4dvantage/Lenticularis:1.22.3` (and `:latest`).
 
 | Milestone | Status |
 |---|---|
@@ -165,6 +165,7 @@ tests/backend/               # pytest suite (auth, rules, dedup, security, colle
 | v1.22.0 — Viewport-first progressive loading + geolocation centering | ✅ Shipped |
 | v1.22.1 — Fix cross-ruleset condition-group id collision on save | ✅ Shipped |
 | v1.22.2 — Fix forecast snapshot query timing out under concurrent load | ✅ Shipped |
+| v1.22.3 — Thermal forecast ingestion (Phase 1: lsmfapi thermal-grid → InfluxDB, backend only) | ✅ Shipped |
 
 Remaining work items are tracked as an unordered backlog in [.ai/context/features.md](.ai/context/features.md).
 
