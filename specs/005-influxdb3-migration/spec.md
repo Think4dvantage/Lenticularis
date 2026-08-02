@@ -4,7 +4,9 @@
 **Status**: **Shelved (2026-07-23)** — D1 resolved to *defer*. Spec/plan complete; not proceeding to
 `tasks.md`. Reactivate when the monetisation question closes (see D1).
 **Next step**: none until D1 reopens. If it resolves non-commercial → Enterprise-free path in `plan.md`
-Phase 0. Until then, **stay on InfluxDB 2.7** (still supported).
+Phase 0. Until then, **stay on InfluxDB 2.7** (still supported). See **D2** — before reactivating,
+re-examine whether InfluxDB 3 is even the right target engine, or whether Postgres/TimescaleDB is a
+better fit on licensing/long-term-support grounds.
 
 ## Overview
 
@@ -136,6 +138,19 @@ Original options (retained for the reactivation decision):
 licence on a not-yet-earning project inverts the cost/benefit. **(c) Core is not recommended** for this
 workload regardless. The migration below is written to be edition-agnostic between (a) and (b) — the
 code and cutover are identical; only the licence and rate-limit differ.
+
+### D2 — Target engine: InfluxDB 3 vs. Postgres/TimescaleDB — **UNRESOLVED, not yet re-examined.**
+
+The user recalls a prior decision to target **Postgres (likely with the TimescaleDB extension)**
+instead of InfluxDB 3, on **licensing and long-term-support** grounds — the same concerns D1
+identifies (Enterprise's non-commercial-only free tier; Core's inability to serve Lenti's 90/365-day
+queries). That decision is **not recorded** in this spec, in git history, or in session memory as of
+2026-08-02 — this note exists so it isn't lost a second time. Whether the reasoning behind it still
+holds (TimescaleDB's own licence has shifted over time; would require rewriting all ~30 Flux methods
+in `influx.py` to SQL rather than the mechanical byte-identical port this spec was scoped around) needs
+re-evaluating before Phase 0 restarts. **Do not resume this spec's InfluxDB-3 plan without first
+re-deciding D2** — reactivating on the old (a)/(b)/(c)/(d) framing alone would re-litigate a question
+the user believes was already settled in Postgres's favour.
 
 ### D2 — Query language: **SQL (DataFusion), not InfluxQL.**
 Chosen over InfluxQL. The hard queries are pivots and joins (`query_forecast_accuracy_ranking` joins

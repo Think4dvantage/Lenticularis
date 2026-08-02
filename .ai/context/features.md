@@ -1,6 +1,23 @@
 # Feature History & Backlog
 
-## Current Version: v1.22.1 (shipped)
+## Current Version: v1.22.2 (shipped)
+
+### Fix: forecast snapshot query timing out under concurrent load (`query_forecast_snapshot_for_stations`)
+
+Observed in prod (`sdh` host): two genuine ~10s InfluxDB read-timeouts on
+`query_forecast_snapshot_for_stations` within a 30-minute window, each causing that forecast
+evaluation to spuriously report **red** via the v1.20.0 no-data fail-safe rule — not because
+conditions were actually unmet, but because the station's forecast data didn't come back before
+the default 10s client gave up. Correlates with specs/archive/008's viewport-preload requests
+hitting InfluxDB concurrently with replay/forecast scrubbing, and specs/archive/007's
+`run_forecast_evaluation_at` calling this query more often than before.
+
+Fix: switched to `_slow_query_api` (60s timeout), the same client `query_forecast_replay` and
+`query_forecast_accuracy_ranking` already use for exactly this reason.
+`tests/backend/test_influx_query_clients.py` — new regression test asserting the slow client is
+used, not the fast one.
+
+## Previous Version: v1.22.1 (shipped)
 
 ### Fix: cross-ruleset condition-group id collision on save (`PUT /api/rulesets/{id}/conditions`)
 
@@ -19,9 +36,9 @@ literal primary key.
 
 ## Previous Version: v1.22.0 (shipped)
 
-Specced and planned in `specs/008-progressive-map-loading/`.
+Specced and planned in `specs/archive/008-progressive-map-loading/`.
 
-### Viewport-First Progressive Loading & Geolocation Centering (`specs/008`)
+### Viewport-First Progressive Loading & Geolocation Centering (`specs/archive/008`)
 
 The map always fetched and rendered every station regardless of what was on screen, and always opened
 centered on Interlaken. This feature makes rendering viewport-aware and lets the map open centered on
@@ -30,7 +47,7 @@ the pilot instead.
 | Change | Detail |
 |---|---|
 | **No API/cache change** | `GET /api/stations` and `GET /api/stations/replay` already return every station in one atomic payload, and the day-offset progressive-load sequence (`[1, 0, 2, -1, 3, -2, 4, -3, 5]`) already existed in both the client prefetch loop and `warm_replay_cache`. A bounding-box query parameter was considered and rejected — it would fragment the shared, cross-pilot `_replay_cache` into one entry per viewport |
-| **Viewport-first rendering** | `_renderStationsViewportFirst()` (`map.js`) places on-screen stations immediately, defers the rest via chunked `requestIdleCallback`. Applied to `loadStations()`, `applyReplaySnapshot()`, and the 60s live refresh. Ruleset markers (specs/007) untouched |
+| **Viewport-first rendering** | `_renderStationsViewportFirst()` (`map.js`) places on-screen stations immediately, defers the rest via chunked `requestIdleCallback`. Applied to `loadStations()`, `applyReplaySnapshot()`, and the 60s live refresh. Ruleset markers (specs/archive/007) untouched |
 | **Pan/zoom re-prioritization** | `moveend` listener promotes newly-visible stations out of the still-pending deferred queue, without duplicating already-placed markers |
 | **Geolocation centering** | First visit (or any prior grant) attempts `navigator.geolocation` non-blocking, after the map is already painted at Interlaken/zoom-11; recenters via `map.setView()` if resolved. `localStorage['lenti_geo_pref']` remembers only an explicit denial — a timeout/unavailable-position leaves a prior grant to retry next visit. New "center on me" control (mirrors `_PersonalToggle`) retries regardless of stored preference |
 | i18n ×4 | `map.geolocate_button` |
@@ -40,9 +57,9 @@ No SQLite/InfluxDB schema change, no new query parameters, no data sent to the b
 
 ## Previous Version: v1.21.0 (shipped)
 
-Specced and planned in `specs/007-replay-aware-ruleset-decisions/`.
+Specced and planned in `specs/archive/007-replay-aware-ruleset-decisions/`.
 
-### Replay-Aware Ruleset Decisions (`specs/007`)
+### Replay-Aware Ruleset Decisions (`specs/archive/007`)
 
 The map's time-navigation bar already re-draws wind arrows for any scrubbed day/hour or ▶ Play
 animation, but launch/landing/opportunity markers always showed **today's live** decision regardless
@@ -76,9 +93,9 @@ advances `groupSeq` past the highest `N` found, so ids minted afterward can't co
 
 ## Previous Version: v1.20.0 (shipped)
 
-Specced and planned in `specs/004-green-requirement-semantics/`.
+Specced and planned in `specs/archive/004-green-requirement-semantics/`.
 
-### Green Conditions Are Requirements (`specs/004`)
+### Green Conditions Are Requirements (`specs/archive/004`)
 
 Fixes a decision flaw: a launch/landing site whose only rule was a positive GREEN confirmation
 (e.g. "wind direction in the usable arc → green") read **green 100% of the time**, including when the
@@ -108,8 +125,8 @@ the pilot's intent.
 
 ## Previous Version: v1.19.0 (shipped)
 
-Two features, specced and planned in `specs/002-public-rulesets/` and
-`specs/003-condition-group-names/`.
+Two features, specced and planned in `specs/archive/002-public-rulesets/` and
+`specs/archive/003-condition-group-names/`.
 
 **Deploy notes** (this release is not a drop-in restart):
 - The `condition_groups` backfill runs at container startup against real data.
@@ -119,7 +136,7 @@ Two features, specced and planned in `specs/002-public-rulesets/` and
   `PUT /api/rulesets/{id}/set_showcase?is_showcase=true` (admin; 409 if the owner has
   not published it). There is no admin UI for this yet.
 
-### Public Rule Sets on the Map (`specs/002-public-rulesets`)
+### Public Rule Sets on the Map (`specs/archive/002-public-rulesets`)
 
 Visitors who are not signed in now see curated example rule sets with live traffic lights, and a
 prompt to sign up. Signed-in pilots additionally see other people's published rule sets, except at
@@ -137,7 +154,7 @@ sites they have already configured.
 | `static/index.html` | The ruleset layer was entirely inside `if (isLoggedIn())`; now branches by auth state |
 | `tests/backend/test_public_rulesets.py` | 17 tests — the D4 gate, no-data omission, owner-field leakage, one-Influx-call batching, cache isolation between viewers, 500 m boundary |
 
-### Named Condition Groups (`specs/003-condition-group-names`)
+### Named Condition Groups (`specs/archive/003-condition-group-names`)
 
 Condition groups can be named, so a pilot returning to a rule set remembers which risk each group
 guards against.
@@ -252,7 +269,7 @@ See `.ai/context/forecast-analysis-wip.md` for full debug history and next steps
 
 ### Security & Performance Remediation Batch
 
-23-task security and performance pack (`specs/001-review-remediation/`). All tasks complete.
+23-task security and performance pack (`specs/archive/001-review-remediation/`). All tasks complete.
 
 | Phase | Tasks | Summary |
 |---|---|---|
@@ -412,7 +429,10 @@ Caveat: **exclude `jfb-hollandiahutte-sac`** — it declares 3248 m but reports 
 - **InfluxDB 2.7 → 3 migration** (`specs/005-influxdb3-migration`) — spec + plan complete, not
   proceeding to `tasks.md`. Blocked on a licensing/monetisation decision (D1 in the spec): InfluxDB 3
   Core (free) can't serve Lenti's 90-day/365-day query patterns, and Enterprise requires resolving
-  whether `lenti.cloud` is commercial use first. Reactivate when that question closes.
+  whether `lenti.cloud` is commercial use first. Reactivate when that question closes. **D2
+  (unresolved, added 2026-08-02)**: the user recalls a prior decision to target Postgres/TimescaleDB
+  instead of InfluxDB 3, for the same licensing/long-term-support reasons — not found recorded
+  anywhere. Re-decide the engine (D2) before reactivating on the old InfluxDB-3-only framing.
 
 ### Platform Features
 
@@ -439,7 +459,7 @@ Caveat: **exclude `jfb-hollandiahutte-sac`** — it declares 3248 m but reports 
   copied verbatim across `_evaluate_from_station_data`, `run_evaluation`, `run_evaluation_at`, and
   `run_forecast_evaluation` in `rules/evaluator.py`. Any decision-logic change (e.g. the v1.20.0
   green-requirement rule) must be made in all four. Route the live/snapshot/forecast paths through the
-  shared core so it lives once. See `specs/004-green-requirement-semantics/plan.md` follow-up.
+  shared core so it lives once. See `specs/archive/004-green-requirement-semantics/plan.md` follow-up.
 - **Fix `pyproject.toml` `requires-python`** — it is `"^3.11"`, a Poetry caret that is invalid in a
   PEP 621 `[project]` table. `ruff check` cannot parse the file (CI hides this with
   `continue-on-error: true`); run `ruff check --isolated` to lint until fixed. Change to

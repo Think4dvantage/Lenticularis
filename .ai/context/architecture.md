@@ -98,7 +98,10 @@ relationship's `cascade="all, delete-orphan"` is what actually deletes children.
 
 Two clients in `InfluxClient.__init__()`:
 - `_query_api` — `timeout` from config (default 10s) — used by all standard queries
-- `_slow_query_api` — `slow_query_timeout` from config (default 60s) — used only by `query_forecast_replay`
+- `_slow_query_api` — `slow_query_timeout` from config (default 60s) — used by `query_forecast_replay`,
+  `query_forecast_accuracy_ranking`, and `query_forecast_snapshot_for_stations` (moved off the 10s
+  default client after two observed prod timeouts under concurrent replay/forecast load — see
+  `tests/backend/test_influx_query_clients.py`)
 
 Config keys: `influxdb.timeout` (ms, default 10000), `influxdb.slow_query_timeout` (ms, default 60000).
 
@@ -177,7 +180,7 @@ There is **no launch-sites API** — a "launch site" is a `ruleset` with `site_t
 **Grouping is one level deep — AND only.** There is no OR-group and no nesting. Do not document or
 build against a "condition tree".
 
-### GREEN conditions are requirements (v1.20.0, `specs/004`)
+### GREEN conditions are requirements (v1.20.0, `specs/archive/004`)
 
 For **launch/landing** sites, a GREEN unit (a standalone GREEN condition, or an AND group whose
 effective colour `_worst(members)` is green) is a **requirement**. When it does **not** trigger it
@@ -202,7 +205,7 @@ elif ruleset.site_type != "opportunity" and cond.result_colour == "green":
   requirement, mirroring how `worst_wins` collapses a group to one colour.
 - The rule is duplicated across four decision blocks (`run_evaluation`, `run_evaluation_at`,
   `run_forecast_evaluation`, plus `_evaluate_from_station_data` itself) — a flagged follow-up is to
-  route them through the shared core. `run_forecast_evaluation_at` (added specs/007, below) does
+  route them through the shared core. `run_forecast_evaluation_at` (added specs/archive/007, below) does
   **not** add a fifth copy — it calls `_evaluate_from_station_data` directly.
 
 **The evaluator buckets groups from the conditions — never from `condition_groups` rows.** This is
@@ -227,7 +230,7 @@ Public entry points: `run_evaluation`, `run_evaluation_at`, `run_forecast_evalua
 
 Forecast evaluation reuses identical logic over hourly `valid_time` steps. Does NOT write to InfluxDB.
 
-**`run_forecast_evaluation_at(ruleset, influx, valid_time)`** (specs/007) — single-`valid_time`
+**`run_forecast_evaluation_at(ruleset, influx, valid_time)`** (specs/archive/007) — single-`valid_time`
 forecast lookup, the forecast-side counterpart to `run_evaluation_at`. Built on
 `InfluxClient.query_forecast_snapshot_for_stations` (±30 min window in `weather_forecast`, already
 used by `GET /api/foehn/forecast`) rather than a new query. `GET /api/rulesets/{id}/evaluate` picks
@@ -250,13 +253,13 @@ always live regardless of the primary rule set's mode.
 **Post-forecast invalidation**: `main.py` lifespan wires a real async hook via `scheduler.on_forecast_run = _make_forecast_hook(influx, display_registry)`. After each successful forecast run (`status == "ok"` and `measurement_count > 0`), the hook calls `invalidate_forecast_replay_cache()` then spawns `warm_replay_cache()` as a background task.
 
 **Both `GET /api/stations` and `GET /api/stations/replay` still return every station in one atomic
-payload** — no bounding-box/`station_ids` query parameter exists on either (specs/008, deliberately
+payload** — no bounding-box/`station_ids` query parameter exists on either (specs/archive/008, deliberately
 rejected: it would fragment this shared cache into one entry per viewport per pilot instead of one
 entry per day shared by everyone, see below).
 
 ---
 
-## Viewport-First Station Rendering (`static/map.js`, specs/008)
+## Viewport-First Station Rendering (`static/map.js`, specs/archive/008)
 
 **Client-side only — no API/cache change.** Since both station endpoints already return every
 station in one payload, "viewport-first" is a **render-order** concept, not a fetch-order one:
@@ -265,7 +268,7 @@ rest via chunked `requestIdleCallback` (`_deferChunked`, `_pendingOffscreen`), a
 listener promotes newly-visible stations out of that pending queue on pan/zoom without touching or
 duplicating already-placed markers. Applied at every station-marker render site: `loadStations()`,
 `applyReplaySnapshot()`, and (transitively) the 60 s live refresh. **Ruleset markers
-(`loadRulesetMarkers`, specs/007) are untouched** — out of this feature's scope.
+(`loadRulesetMarkers`, specs/archive/007) are untouched** — out of this feature's scope.
 
 A bounding-box query parameter on `/api/stations/replay` was considered and rejected: `_replay_cache`
 is shared across every pilot viewing the same day-offset, which is what makes `warm_replay_cache`'s
@@ -355,4 +358,11 @@ healthcheck:
 `docker-compose.dev.yml` extends base with live `src/` and `static/` volume mounts, Traefik labels for `lenti-dev.lg4.ch`, `PYTHONPYCACHEPREFIX=/tmp/pycache`.
 
 ### SSH / Deploy
-SSH host `xpsex` is for **read-only investigation only** (logs, curl). The user syncs files and restarts containers manually. Never rsync or push files to the server.
+SSH hosts `xpsex` and `sdh` are for **read-only investigation only** (`docker logs`, `docker ps`,
+`docker exec ... <read-only command>`, curl). The user syncs files, pulls new images, and restarts
+containers manually. Never rsync, push files, or restart/recreate containers on either host.
+
+`sdh` (confirmed 2026-08-01) is a shared multi-service Docker host — the `lenticularis` container runs
+alongside many unrelated services. It serves `lenti.cloud` and `lenti.sdh.lol` via Traefik; the
+SQLite file inside the container is at `/app/data/lenticularis.db`; the InfluxDB container is named
+`lenticularis-influxdb`.

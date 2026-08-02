@@ -36,7 +36,8 @@
       "Bash(sort -t: -k2 -rn)",
       "WebFetch(domain:jfbmdlw-production.apps-customer.410400260094.ninegcp.ch)",
       "Bash(poetry run *)",
-      "PowerShell(.venv\\\\Scripts\\\\python.exe -c \"import pyproj; print\\('ok', pyproj.__version__\\)\")"
+      "PowerShell(.venv\\\\Scripts\\\\python.exe -c \"import pyproj; print\\('ok', pyproj.__version__\\)\")",
+      "Bash(ssh sdh *)"
     ]
   }
 }

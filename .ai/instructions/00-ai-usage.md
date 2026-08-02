@@ -45,6 +45,11 @@ Specify → Clarify → Plan → Checklist → Tasks → Analyze → Implement
 
 See the matching prompt file in `.ai/prompts/` for each step.
 
+Once a spec's feature has shipped (landed in `features.md` as a released version), move its
+folder to `specs/archive/<NNN>-<feature-name>/` (`git mv`, so history follows) and update any
+cross-references. This keeps `specs/` at the top level showing only what's still active —
+drafted, planned, or shelved. See `specs/archive/README.md`.
+
 ---
 
 ## Always Read First
