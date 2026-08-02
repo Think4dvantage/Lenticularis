@@ -1,6 +1,23 @@
 # Feature History & Backlog
 
-## Current Version: v1.22.0 (shipped)
+## Current Version: v1.22.1 (shipped)
+
+### Fix: cross-ruleset condition-group id collision on save (`PUT /api/rulesets/{id}/conditions`)
+
+`ruleset-editor.html`'s `makeCondGroup()` mints group ids from a per-session counter
+(`'g' + (++groupSeq)`) that resets to `0` every time the editor opens fresh. Two
+different rule sets therefore routinely send the same client-minted ids (`g1`, `g2`, ...).
+`ConditionGroup.id` is a global primary key across all rule sets, so saving a *second*
+rule set whose groups reused an id already on disk for a different rule set hit an
+uncaught `IntegrityError: UNIQUE constraint failed: condition_groups.id` — surfaced to
+the pilot as a bare 500 with no explanation.
+
+Fix: `replace_conditions` now mints fresh server-side UUIDs for group ids and remaps
+`RuleCondition.group_id` through that mapping, the same pattern `/clone` already used.
+Client-supplied group ids are now purely a same-request correlation token, never a
+literal primary key.
+
+## Previous Version: v1.22.0 (shipped)
 
 Specced and planned in `specs/008-progressive-map-loading/`.
 

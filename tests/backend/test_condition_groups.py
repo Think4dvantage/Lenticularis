@@ -366,6 +366,37 @@ async def test_saving_twice_keeps_the_same_group_id(client, db_engine, make_toke
     assert [g["name"] for g in r.json()["condition_groups"]] == ["Wind (renamed)"]
 
 
+async def test_two_rulesets_can_reuse_the_same_client_minted_group_id(client, db_engine, make_token):
+    """
+    The editor mints group ids from a per-session counter ("g1", "g2", ...) that
+    resets to zero every time it opens fresh. Two different rule sets therefore
+    routinely send the same client id. Since ConditionGroup.id is a global
+    primary key, inserting that id verbatim for a second rule set collided with
+    the first rule set's row and blew up as an uncaught 500.
+    """
+    db = _session(db_engine)
+    _mk_user(db, "u1")
+    _mk_ruleset(db, "u1", "rs1")
+    _mk_ruleset(db, "u1", "rs2")
+    db.close()
+
+    body = {
+        "conditions": [_cond_payload("g1"), _cond_payload("g2")],
+        "groups": [
+            {"id": "g1", "name": "Overall Wind", "sort_order": 0},
+            {"id": "g2", "name": "Overall Wind Orange", "sort_order": 1},
+        ],
+    }
+    r1 = await client.put("/api/rulesets/rs1/conditions", json=body, headers=make_token("u1", "pilot"))
+    assert r1.status_code == 200
+
+    r2 = await client.put("/api/rulesets/rs2/conditions", json=body, headers=make_token("u1", "pilot"))
+    assert r2.status_code == 200, "a second rule set reusing the same client-minted group ids must not 500"
+
+    r = await client.get("/api/rulesets/rs2", headers=make_token("u1", "pilot"))
+    assert [g["name"] for g in r.json()["condition_groups"]] == ["Overall Wind", "Overall Wind Orange"]
+
+
 async def test_dangling_group_id_is_refused_and_nothing_is_written(client, db_engine, make_token):
     db = _session(db_engine)
     _mk_user(db, "u1")

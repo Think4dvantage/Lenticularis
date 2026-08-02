@@ -474,9 +474,16 @@ def replace_conditions(
     # re-inserted group would collide with the row still on disk.
     db.flush()
 
+    # Group ids are client-minted (a per-session counter in the editor, e.g.
+    # "g1", "g2"), so the same id is reused across different rule sets. Since
+    # ConditionGroup.id is a global primary key, inserting the client's id
+    # verbatim collides with another rule set's row of the same id. Mint a
+    # fresh server-side id per group instead, same as the /clone endpoint.
+    group_id_map = {grp.id: str(uuid.uuid4()) for grp in body.groups}
+
     for grp in body.groups:
         db.add(ConditionGroup(
-            id=grp.id,
+            id=group_id_map[grp.id],
             ruleset_id=rs.id,
             name=grp.name,
             sort_order=grp.sort_order,
@@ -484,11 +491,13 @@ def replace_conditions(
 
     # Insert new ones
     for i, cond in enumerate(body.conditions):
+        data = cond.model_dump(exclude={'sort_order', 'group_id'})
         db.add(RuleCondition(
             id=str(uuid.uuid4()),
             ruleset_id=rs.id,
             sort_order=i,
-            **cond.model_dump(exclude={'sort_order'}),
+            group_id=group_id_map.get(cond.group_id) if cond.group_id else None,
+            **data,
         ))
 
     rs.updated_at = datetime.now(timezone.utc)
