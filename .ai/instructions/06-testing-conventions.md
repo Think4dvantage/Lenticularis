@@ -287,8 +287,12 @@ jobs:
 | JFB collector | knots → km/h; direction normalisation; unmappable params dropped; MeteoSwiss duplicates excluded; timestamp reconstruction + midnight rollover; staleness skip; `currentDateTime` always sent |
 | Public rule sets | `is_showcase AND is_public` gate; curated-but-unpublished never appears; **no-data omitted, not green**; payload carries no owner fields; **one Influx call regardless of rule set count**; cache isolation between viewers; 500 m proximity boundary; 409 on curating an unpublished rule set |
 | Condition groups | backfill idempotency; **decisions identical across the migration**; **empty group is inert**; one-condition group ≡ standalone; fail-closed 422 on a dangling `group_id`; re-saving the same group id; clone gets independent groups |
+| Thermal derived metrics (`test_thermal_derived.py`) | every §6 band boundary on-threshold and either side; null paths incl. `cin=None` not a cap; `sunshine`/`cloud_mid` guard terms; `ceiling_spread_m == 0.0` staying distinct from `None` |
+| Thermal collector (`test_thermal_collector.py`) | hand-written 4-point×3-frame fixture; fully-null frame → zero points; partially-null frame → point emitted with the null field absent; unambiguous nearest-grid-point selection; station with no coords skipped; 503 cache_warming → `None` |
+| Unmet-green precedence (`test_unmet_green_precedence.py`, `test_rules_evaluator.py`) | a matched other group/condition is not overridden by an unrelated unmet green group; the original spec-004 case (nothing else matches) still fails safe to red; covers all 3 duplicated decision blocks that don't delegate to `_evaluate_from_station_data` |
+| Influx query clients (`test_influx_query_clients.py`) | forecast snapshot uses the slow (60s) client; forecast/thermal-forecast snapshot and the Föhn pressure history's forecast leg all generate an OR-chain `==` filter, never `contains()` |
 
-Current suite: **96 passing**.
+Current suite: **197 passing** (2026-08-03).
 
 ### Time-dependent fixtures — do not hardcode a clock time
 

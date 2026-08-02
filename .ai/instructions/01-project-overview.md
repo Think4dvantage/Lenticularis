@@ -100,7 +100,7 @@ Frontend
 | Holfuy | API key (`pw=` param) | wind speed/gust/direction, temp, humidity | 5 min |
 | Jungfraubahn (JFB) | None (open middleware API) | wind speed/gust/direction, temp, humidity, pressure_qfe | 10 min |
 | Open-Meteo | None (or commercial API key) | 5-day forecast (short + extended); grid forecast for wind-forecast map | layered schedule |
-| SwissMeteo (`lsmfapi-dev.lg4.ch`) | None (internal API) | ICON-CH ensemble forecast: probable + min/max for all fields; altitude-wind profiles per station | 60 min |
+| SwissMeteo (`lsmfapi-dev.lg4.ch`) | None (internal API) | ICON-CH ensemble forecast: station forecast + wind grid (probable + min/max for all fields); thermal grid (solar, CAPE/CIN, LCL/LFC, cloud, TKE — `specs/006-thermal-forecast`, ingestion-only as of v1.22.3, no rules/UI yet). **No per-station altitude-wind endpoint** — removed v1.16; `vertical_wind` is 100% null when probed, do not build on it | 60 min |
 
 ---
 

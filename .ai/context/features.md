@@ -508,19 +508,29 @@ Key new files: `api/errors.py`, `api/routers/pages.py`, `collectors/utils.py`, `
 
 ## Backlog (unordered)
 
-### Precompute/cache forecast ruleset decisions instead of per-frame live evaluation
+### Reactive Ruleset Evaluation — **planned, spec + plan written**, `specs/009-reactive-ruleset-evaluation`
 
-Raised 2026-08-03 during the replay-lag investigation (see v1.22.6). Today, every single replay
-frame in forecast mode calls `/api/rulesets/{id}/evaluate?at_time=...&forecast=true`, which runs
-`run_forecast_evaluation_at` → a fresh `query_forecast_snapshot_for_stations` Influx round-trip —
-even though `run_forecast_evaluation` already computes a ruleset's **entire** forecast horizon in
-ONE query (`query_forecast_for_stations`). Play's ~600ms/frame cadence has no business depending
-on per-frame query latency at all. Confirmed via `scheduler.py`'s `_run_ruleset_evaluator`: only
-the **live** decision is periodically written to `rule_decisions` (every 10 min) — forecast
-decisions are never precomputed or cached anywhere today. Candidate designs: warm a per-ruleset
-horizon cache on ruleset save/station-data-refresh; or have the frontend fetch the whole horizon
-once per Play session (via a new endpoint wrapping `run_forecast_evaluation`) and index into it
-client-side as frames advance, instead of one `/evaluate` call per frame.
+Raised 2026-08-03 during the replay-lag investigation (v1.22.6) and turned into a full feature the
+same day. Two problems, one plan: (1) rulesets are re-evaluated on a fixed 10-min poll
+(`_run_ruleset_evaluator`) regardless of whether any station data actually changed — Holfuy
+delivers every 5 min, so a decision can be up to 10 min stale; (2) forecast decisions are never
+precomputed — every replay frame in forecast mode triggers a fresh live Influx query, which is the
+actual root cause v1.22.6 only mitigated (9.3s → 69ms), not eliminated.
+
+**Read the spec folder for the current design** (`spec.md` + `plan.md`, all 4 clarifications
+resolved 2026-08-03) — summary:
+- Ruleset evaluation is triggered by the existing `on_collector_run`/`on_forecast_run` hooks
+  (composed, not replaced) via a station→ruleset reverse lookup (`rule_conditions.station_id`),
+  expanded through the virtual-station mapping so a physical member station updating still finds
+  rulesets keyed to the canonical id. The fixed 10-min poll is removed entirely; one evaluation
+  pass still runs at boot.
+- Forecast updates recompute and store the **entire horizon** in a new measurement
+  (`rule_decisions_forecast`), reusing `write_decisions_batch` — a function that already exists
+  for exactly this shape (built for history backfill). Replay reads a precomputed decision instead
+  of querying live per frame, with a fallback to today's live path on a cache miss.
+
+**Not started**: `tasks.md` not yet written, no code touched. Next session: write `tasks.md` from
+plan §5, then implement Phase-by-phase per that plan's file list.
 
 ### Thermal Forecast (lsmfapi thermal-grid endpoint) — **planned, ready to implement**, `specs/006-thermal-forecast`
 

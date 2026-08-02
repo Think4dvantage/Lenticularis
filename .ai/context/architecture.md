@@ -61,6 +61,17 @@ relationship's `cascade="all, delete-orphan"` is what actually deletes children.
 - **Source preference** (`query_forecast_for_stations`): prefer `swissmeteo` when its `init_time` is ≤24h old; if stale, latest-init-date wins across sources.
 - **Replay query pattern**: two-step — (1) fast `_latest_forecast_init_dates()` scan (`range(-12h)`, one field, normal 10s client) → (2) main pivot filtered to exact latest `init_date` per source (slow 60s client). Avoids scanning 72+ model runs.
 
+### `weather_forecast_thermal` (v1.22.3, `specs/006-thermal-forecast` Phase 1 — ingestion only, no rules/UI yet)
+- **Tags**: `station_id`, `network`, `source` (`swissmeteo`), `model` (`icon-ch`), `init_date` (YYYY-MM-DDTHH — hour-granular, same as `weather_forecast`, **not** day-granular like `wind_forecast_grid`)
+- **Timestamp**: `valid_time`
+- **Fields**: 12 raw ensemble medians (`solar`, `sunshine`, `cloud_cover`, `cloud_low`, `cloud_mid`, `cloud_high`, `freezing_level`, `cape`, `cin`, `lcl`, `lfc`, `tke`); 5 selected ensemble-spread fields (`lcl_min`, `lcl_max`, `cape_max`, `cloud_cover_max`, `solar_min` — a deliberate subset, not all 24 possible `_min`/`_max`); 7 derived fields computed by `services/thermal.py` (`thermal_ceiling_m`, `cloud_base_agl_m`, `thermal_strength` 0-5, `overdevelopment_risk` 0-3, `blue_thermal` 0/1, `turbulence_index` 0-3, `ceiling_spread_m`); `init_time` (ISO string, same dedup trick as `weather_forecast`)
+- **Own measurement, not merged into `weather_forecast`** — the two forecasts have different `init_time`s (separate lsmfapi cache phases), and merging would break `query_forecast_snapshot_for_stations`'s "keep the entry with the most fields" dedup exactly the way `specs/006` §3.1 predicted.
+- **`cin: null` means "no inhibition layer"** (ICON fill value), substituted as `0.0` in every derived calculation — never treated as a cap, and never coerced to `0` in the stored field itself (absence must stay distinguishable from a real `0`).
+- **Known upstream gap**: lsmfapi sometimes nulls an entire frame range mid-horizon (observed h+8-h+33 on one run) — lands squarely on the flyable hours of "today" and "tomorrow morning". The collector logs per-hour local coverage (`coverage today=%d/12 d1=%d/12`) every run specifically because a row-count check cannot see this — rows get written either way.
+- **Same 1272-cell grid as `wind_forecast_grid`** — verified in the lsmfapi source: both endpoints share one default bbox + stride and generate points with character-identical code. `thermal_forecast_grid` (Phase 3, not yet built) will join on `(grid_id, valid_time)` for a wind overlay at zero extra cost.
+- Written by `collectors/forecast_thermal_swissmeteo.py` (`ForecastThermalSwissMeteoCollector`, plain class not `BaseForecastCollector` — one spatial request covers every station, same reasoning as the wind grid collector), hourly job `forecast_thermal` in `scheduler.py`. Re-collection guard skips the write when `(init_time, model, usable_frame_count)` is unchanged since the last successful run.
+- **Not yet wired into the rules engine or any UI** — `FieldName`/`FIELD_MAP` extension, station-detail panel, and the `/thermal-forecast` map page are `specs/006` Phases 2-3, not started.
+
 ### `wind_forecast_grid`
 - **Tags**: `grid_id` (e.g. `"47.9000_5.9000"` — 4 decimal places for lsmfapi's ICON-CH1 ~10 km grid; Open-Meteo fallback uses `"46.00_7.00"` 2 decimal places), `level_hpa` (950/900/850/800/750/700/600/500), `init_date` (YYYY-MM-DDTHH)
 - **Timestamp**: `valid_time` (UTC)
@@ -85,6 +96,7 @@ relationship's `cascade="all, delete-orphan"` is what actually deletes children.
 | Open-Meteo surface | `forecast_openmeteo.py` | Open-Meteo API | **disabled** | Fallback only; re-enable in config if lsmfapi is unavailable for an extended period |
 | SwissMeteo grid | `forecast_grid_swissmeteo.py` | lsmfapi `/api/forecast/grid?level_m=X` | every 60 min | Primary; 8 levels in parallel; 1272 pts; `ws`/`wd`/`rh` arrays |
 | Open-Meteo grid | `forecast_grid.py` | Open-Meteo API | fallback only | Runs when SwissMeteo grid returns 0 wind pts |
+| SwissMeteo thermal | `forecast_thermal_swissmeteo.py` | lsmfapi `/api/forecast/thermal-grid` (no params — full CH bbox, `stride_km=10`) | every 60 min | v1.22.3, `specs/006` Phase 1. One request (28.6 MB / 4.1s) → nearest-grid-point mapped onto every station. No fallback source exists. Writes `weather_forecast_thermal` (station-level) only — grid-level `thermal_forecast_grid` is Phase 3, not built |
 
 **lsmfapi** (`lsmfapi-dev.lg4.ch`) is user-owned, same Docker network, no rate limiting. Serves ALL station networks. Response schema: `init_time`, `forecast[]` (surface) or `grid` + `frames[]` (grid). No per-station altitude wind endpoint — altitude data comes from the grid only. Updates ~4×/day (~04Z, 10Z, 16Z, 22Z); hourly collector runs are no-ops on most ticks.
 
@@ -106,6 +118,22 @@ Two clients in `InfluxClient.__init__()`:
 Config keys: `influxdb.timeout` (ms, default 10000), `influxdb.slow_query_timeout` (ms, default 60000).
 
 **`write_forecast_grid` — chunked writes**: Grid data (~1.17M points per run) is written in chunks of 5000 pts per InfluxDB call. A single bulk write caused read-timeout failures (~8.75 s) against the default 10s timeout.
+
+### ⚠️ `contains(value:, set:)` is catastrophically slow against high-cardinality measurements (v1.22.6)
+
+Filtering multiple station ids with Flux's `contains(value: r.station_id, set: [...])` measured
+**9.3 s** for a single-station, ±30 min query against `weather_forecast` — the *same* query with
+an OR-chain of `r.station_id == "..."` took **69 ms**. 135× difference, confirmed by direct A/B
+timing against InfluxDB, not inferred. Root cause: `weather_forecast`'s per-hour `init_date` tag
+fragments it into a huge number of series over time (infinite retention, running since v1.15),
+and `contains()` cannot use the tag index to skip non-matching series the way `==` can.
+
+**Rule going forward: never use `contains(value:, set:)` against `weather_forecast` or
+`weather_forecast_thermal`.** Always build an OR-chain string (`" or ".join(f'r.station_id ==
+"{sid}"' for sid in ids)`), exactly as `query_forecast_for_stations` already did before this was
+even discovered as a bug elsewhere. `contains()` against `weather_data` measured fast (147 ms) —
+lower cardinality, no per-hour tag fragmentation — and was left alone; the five `contains()`
+call sites still in `influx.py` all target `weather_data` only. Re-check this if that changes.
 
 ---
 
@@ -180,22 +208,37 @@ There is **no launch-sites API** — a "launch site" is a `ruleset` with `site_t
 **Grouping is one level deep — AND only.** There is no OR-group and no nesting. Do not document or
 build against a "condition tree".
 
-### GREEN conditions are requirements (v1.20.0, `specs/archive/004`)
+### GREEN conditions are requirements (v1.20.0, `specs/archive/004`) — refined v1.22.4
 
 For **launch/landing** sites, a GREEN unit (a standalone GREEN condition, or an AND group whose
-effective colour `_worst(members)` is green) is a **requirement**. When it does **not** trigger it
-contributes `"red"` to `triggered_colours`:
+effective colour `_worst(members)` is green) is a **requirement**. When it does **not** trigger,
+it flags `unmet_green = True` rather than appending `"red"` immediately — the actual `"red"`
+fail-safe only fires **after both loops complete, and only if nothing else triggered at all**:
 
 ```python
-if matched:
-    triggered_colours.append(cond.result_colour)
-elif ruleset.site_type != "opportunity" and cond.result_colour == "green":
-    triggered_colours.append("red")   # unmet green requirement (incl. no data) → red
+unmet_green = False
+for cond in standalone:
+    if matched:
+        triggered_colours.append(cond.result_colour)
+    elif ruleset.site_type != "opportunity" and cond.result_colour == "green":
+        unmet_green = True
+# ... same pattern in the group loop ...
+if unmet_green and not triggered_colours:
+    triggered_colours.append("red")
 ```
+
+⚠️ **This was unconditional before v1.22.4** — the fail-safe used to append `"red"` the instant a
+green unit missed, *regardless of whether a different group in the same ruleset had already
+matched*. Real-world bug this caused: a launch ruleset with a green direction arc (e.g. 90-180°)
+plus separate orange arcs for other directions (a common, legitimate pattern, not an "exception")
+always read red whenever the wind came from any of the orange arcs — the orange arc's own match
+was silently overridden by the unrelated unmet green arc. Fixed by deferring the fail-safe: it
+still forces red for the original spec-004 case (a lone green requirement, nothing else defined to
+classify the miss), but a genuinely matched other group now stands.
 
 - **"Not triggered" folds no-data into threshold-failure.** `_eval_condition` returns `(False, …)`
   for both a missing station and a failed comparison, so an unconfirmable GREEN requirement **fails
-  safe to red** — no separate no-data branch (spec 004 D3).
+  safe to red** when nothing else classifies the conditions either (spec 004 D3).
 - **RED/ORANGE keep exception semantics.** They contribute only when matched; otherwise silent. A
   rule set built only from exception conditions therefore still defaults to `"green"` when nothing
   triggers — **the benefit-of-the-doubt default survives for exception-only sets, and only there.**
@@ -206,7 +249,8 @@ elif ruleset.site_type != "opportunity" and cond.result_colour == "green":
 - The rule is duplicated across four decision blocks (`run_evaluation`, `run_evaluation_at`,
   `run_forecast_evaluation`, plus `_evaluate_from_station_data` itself) — a flagged follow-up is to
   route them through the shared core. `run_forecast_evaluation_at` (added specs/archive/007, below) does
-  **not** add a fifth copy — it calls `_evaluate_from_station_data` directly.
+  **not** add a fifth copy — it calls `_evaluate_from_station_data` directly. The v1.22.4 fix was
+  applied identically to all four copies; see `tests/backend/test_unmet_green_precedence.py`.
 
 **The evaluator buckets groups from the conditions — never from `condition_groups` rows.** This is
 load-bearing and must not be "cleaned up":

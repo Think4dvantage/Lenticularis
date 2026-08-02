@@ -56,17 +56,29 @@ No user-visible change. Ends at a hard gate; do not start Phase 2 before it pass
   every new/changed file: clean. (3 pre-existing findings elsewhere in `influx.py`/`scheduler.py`
   predate this change set — confirmed via `git diff`, left untouched.)
 
-> ### ⛔ GATE — do not proceed to Phase 2 until this passes (§10.1)
-> **Not yet checked — needs a live run.** Code is implemented and unit-tested, but the coverage
-> numbers only exist once lsmfapi is actually queried. User syncs and restarts. Then read the
-> collector log:
-> ```
-> [Lenti:thermal-collector] coverage today=%d/12 d1=%d/12 (local 08-19, non-null solar)
-> ```
-> **Pass:** both days ≥ 10/12 → continue to Phase 2.
-> **Fail:** the §3.2 null hole (h+8…h+33 — today's and tomorrow morning's flyable hours) is still
-> open upstream. Phase 1 stays merged as a diagnostic; report to the lsmfapi side and **hold
-> Phases 2–3**. "Rows exist" is not the gate — rows will exist either way.
+> ### ✅ GATE — checked against prod, 2026-08-02/03 (§10.1) — PASSED, Phase 2 unblocked
+> Observed on `sdh` over ~9 hours of hourly runs (v1.22.3):
+>
+> | Run (local init) | today | d1 |
+> |---|---|---|
+> | 00Z | 12/12 | 8/12 — the §3.2 null hole, real, hit once |
+> | 06Z | **12/12** | **12/12** — clean pass, held for 5 straight hourly checks |
+> | 12Z | 6/12* | 12/12 |
+>
+> \* Not a data gap — a run initialized at 12:00 UTC (14:00 local) has no frames at all for
+> today's already-elapsed 08:00-13:00 local hours, so counting those as "missing" is a metric
+> artifact in the gate's exact hour-boundary definition, not lost data. `frames=121 usable=121`
+> for both the 06Z and 12Z runs confirms no null-hole recurrence in either.
+>
+> **Verdict: the null hole is real but transient** — it self-resolved within one model cycle (6h)
+> and the 06Z run showed full coverage on both days simultaneously. No errors in 9h of logs;
+> independently confirmed non-zero, matching row counts for `solar`/`lcl`/`thermal_strength` via
+> a direct InfluxDB query. **Phase 2 may proceed whenever picked back up** — no need to re-run
+> this check unless the collector's coverage log starts showing a regression.
+>
+> Known follow-up, not blocking: the `today=6/12`-in-the-evening artifact above is a gate-logic
+> imprecision (should only count hours from now onward, not from local midnight) — harmless
+> (false alarm only, never masks a real gap) and not fixed yet.
 
 ---
 
