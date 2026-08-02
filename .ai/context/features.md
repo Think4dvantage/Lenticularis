@@ -1,6 +1,41 @@
 # Feature History & Backlog
 
-## Current Version: v1.22.5 (shipped)
+## Current Version: v1.22.6 (shipped)
+
+### Fix: catastrophic `contains()` slowdown in forecast-snapshot queries (`database/influx.py`)
+
+Reported live: during map replay ("go to tomorrow, hit Play"), ruleset marker colours never
+kept up with the wind-arrow animation — Play advances a frame every ~600ms, but each
+`loadRulesetMarkers` batch was taking **7-10 seconds**. Traced to
+`query_forecast_snapshot_for_stations` (powers `run_forecast_evaluation_at`, called once per
+frame per ruleset whenever replay is scrubbed into forecast time).
+
+Measured directly against InfluxDB: the same ±30-minute, single-station query against
+`weather_forecast` took **9,338 ms** with `contains(value: r.station_id, set: [...])` and
+**69 ms** with an OR-chain of `r.station_id == "..."` — a **135x** difference. Root cause:
+`weather_forecast`'s per-hour `init_date` tag fragments it into a huge number of series over
+time (infinite retention, ~4 model runs/day since v1.15), and `contains()` cannot use the tag
+index to skip non-matching series the way a direct equality filter can.
+`query_forecast_for_stations` already used the OR-chain style; this method (and two others
+targeting the same measurement family) just hadn't been fixed to match.
+
+Fixed in three places — the only ones confirmed to target the affected high-cardinality
+measurements (`weather_forecast` / `weather_forecast_thermal`); the other five `contains()`
+call sites in `influx.py` target `weather_data`, measured fast, left untouched:
+- `query_forecast_snapshot_for_stations`
+- `query_thermal_forecast_snapshot_for_stations` (specs/006, not yet user-facing — fixed
+  proactively before it could reproduce the same bug once Phase 2 ships)
+- `query_foehn_pressure_history`'s forecast leg (`_flux_pressure` against `MEASUREMENT_FORECAST`)
+
+`tests/backend/test_influx_query_clients.py` — 3 new tests asserting the generated Flux string
+uses the OR-chain, not `contains()`, for all three.
+
+**Follow-up raised, not built here**: forecast decisions are never precomputed — every replay
+frame re-queries InfluxDB live, even though `run_forecast_evaluation` already computes a
+ruleset's entire horizon in one query. Worth a proper caching/precompute pass so Play doesn't
+depend on per-frame query latency at all. Tracked in backlog.
+
+## Previous Version: v1.22.5 (shipped)
 
 ### Fix: ARM64 Docker build failure (`Dockerfile`)
 
@@ -472,6 +507,20 @@ Key new files: `api/errors.py`, `api/routers/pages.py`, `collectors/utils.py`, `
 ---
 
 ## Backlog (unordered)
+
+### Precompute/cache forecast ruleset decisions instead of per-frame live evaluation
+
+Raised 2026-08-03 during the replay-lag investigation (see v1.22.6). Today, every single replay
+frame in forecast mode calls `/api/rulesets/{id}/evaluate?at_time=...&forecast=true`, which runs
+`run_forecast_evaluation_at` → a fresh `query_forecast_snapshot_for_stations` Influx round-trip —
+even though `run_forecast_evaluation` already computes a ruleset's **entire** forecast horizon in
+ONE query (`query_forecast_for_stations`). Play's ~600ms/frame cadence has no business depending
+on per-frame query latency at all. Confirmed via `scheduler.py`'s `_run_ruleset_evaluator`: only
+the **live** decision is periodically written to `rule_decisions` (every 10 min) — forecast
+decisions are never precomputed or cached anywhere today. Candidate designs: warm a per-ruleset
+horizon cache on ruleset save/station-data-refresh; or have the frontend fetch the whole horizon
+once per Play session (via a new endpoint wrapping `run_forecast_evaluation`) and index into it
+client-side as frames advance, instead of one `/evaluate` call per frame.
 
 ### Thermal Forecast (lsmfapi thermal-grid endpoint) — **planned, ready to implement**, `specs/006-thermal-forecast`
 

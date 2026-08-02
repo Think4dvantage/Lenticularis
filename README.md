@@ -124,7 +124,7 @@ tests/backend/               # pytest suite (auth, rules, dedup, security, colle
 
 ## Development Status
 
-**Current version: v1.22.5** — published as `ghcr.io/Think4dvantage/Lenticularis:1.22.5` (and `:latest`).
+**Current version: v1.22.6** — published as `ghcr.io/Think4dvantage/Lenticularis:1.22.6` (and `:latest`).
 
 | Milestone | Status |
 |---|---|
@@ -168,6 +168,7 @@ tests/backend/               # pytest suite (auth, rules, dedup, security, colle
 | v1.22.3 — Thermal forecast ingestion (Phase 1: lsmfapi thermal-grid → InfluxDB, backend only) | ✅ Shipped |
 | v1.22.4 — Fix: unmet GREEN requirement overrode a legitimately matched other group (tag build failed, see v1.22.5) | ✅ Shipped |
 | v1.22.5 — Fix: ARM64 Docker build failure (pip upgrade before Poetry) | ✅ Shipped |
+| v1.22.6 — Fix: 135x forecast-snapshot query slowdown (contains() → OR-chain equality) | ✅ Shipped |
 
 Remaining work items are tracked as an unordered backlog in [.ai/context/features.md](.ai/context/features.md).
 

@@ -288,14 +288,21 @@ from(bucket: "{self._cfg.bucket}")
         """
         if not station_ids:
             return {}
-        ids_literal = '["' + '", "'.join(_flux_str(sid) for sid in station_ids) + '"]'
+        # OR-chain of equality, NOT contains(value:, set:) — measured 135x slower
+        # (9.3s vs 69ms) against weather_forecast, whose per-hour init_date tag
+        # fragments it into a huge number of series that contains() cannot use the
+        # tag index to skip. query_forecast_for_stations already uses this pattern;
+        # this method just hadn't been fixed to match (2026-08-03).
+        station_filter = " or ".join(
+            f'r.station_id == "{_flux_str(sid)}"' for sid in station_ids
+        )
         start = (valid_time - timedelta(minutes=30)).isoformat()
         stop  = (valid_time + timedelta(minutes=31)).isoformat()
         flux = f"""
 from(bucket: "{self._cfg.bucket}")
   |> range(start: {start}, stop: {stop})
   |> filter(fn: (r) => r._measurement == "{MEASUREMENT_FORECAST}")
-  |> filter(fn: (r) => contains(value: r.station_id, set: {ids_literal}))
+  |> filter(fn: (r) => {station_filter})
   |> last()
   |> pivot(rowKey: ["_time", "station_id", "network", "source", "model", "init_date"],
            columnKey: ["_field"], valueColumn: "_value")
@@ -340,7 +347,12 @@ from(bucket: "{self._cfg.bucket}")
         """
         if not station_ids:
             return []
-        ids_literal = '["' + '", "'.join(_flux_str(sid) for sid in station_ids) + '"]'
+        # OR-chain of equality, not contains() — the forecast leg below queries
+        # weather_forecast, whose per-hour init_date tag makes contains() 135x
+        # slower than this (see query_forecast_snapshot_for_stations).
+        station_filter = " or ".join(
+            f'r.station_id == "{_flux_str(sid)}"' for sid in station_ids
+        )
         now = datetime.now(timezone.utc)
         half = hours // 2
 
@@ -370,7 +382,7 @@ from(bucket: "{self._cfg.bucket}")
 from(bucket: "{self._cfg.bucket}")
   |> range(start: {s}, stop: {e})
   |> filter(fn: (r) => r._measurement == "{measurement}")
-  |> filter(fn: (r) => contains(value: r.station_id, set: {ids_literal}))
+  |> filter(fn: (r) => {station_filter})
   |> filter(fn: (r) => r._field == "pressure_qff")
   |> aggregateWindow(every: 1h, fn: mean, createEmpty: false)
   |> sort(columns: ["_time"])
@@ -1045,14 +1057,18 @@ from(bucket: "{self._cfg.bucket}")
         """
         if not station_ids:
             return {}
-        ids_literal = '["' + '", "'.join(_flux_str(sid) for sid in station_ids) + '"]'
+        # OR-chain of equality, not contains() — see query_forecast_snapshot_for_stations
+        # (measured 135x slower against a per-hour-init_date-fragmented measurement).
+        station_filter = " or ".join(
+            f'r.station_id == "{_flux_str(sid)}"' for sid in station_ids
+        )
         start = (valid_time - timedelta(minutes=30)).isoformat()
         stop = (valid_time + timedelta(minutes=31)).isoformat()
         flux = f"""
 from(bucket: "{self._cfg.bucket}")
   |> range(start: {start}, stop: {stop})
   |> filter(fn: (r) => r._measurement == "{MEASUREMENT_FORECAST_THERMAL}")
-  |> filter(fn: (r) => contains(value: r.station_id, set: {ids_literal}))
+  |> filter(fn: (r) => {station_filter})
   |> last()
   |> pivot(rowKey: ["_time", "station_id", "network", "source", "model", "init_date"],
            columnKey: ["_field"], valueColumn: "_value")
