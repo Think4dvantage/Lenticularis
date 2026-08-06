@@ -14,6 +14,20 @@ h+34. That is the **ICON-CH1 → CH2 seam** — CH1's horizon ends at h+33 and C
 (Note: this is *not* the h+8–h+33 hole documented for the thermal-grid endpoint; different endpoint,
 different mechanism.)
 
+**Seam geometry, mapped precisely against two consecutive runs** (`/api/forecast/station`, not the
+grid endpoint):
+
+| init | last populated hour | null window | resumes |
+|---|---|---|---|
+| `2026-08-06T00Z` | h+17 | h+18…h+33 | h+34 |
+| `2026-08-06T06Z` | h+18 | h+19…h+33 | h+34 |
+
+**The window is run-relative, not wall-clock**, and its **end is fixed at h+33 in both runs** —
+the start floats around h+18/h+19. That fixed upper bound is the load-bearing fact: it means CH1's
+usable output is only ~18h even though the stitch appears to reserve h+0–h+33 for it, so frames
+h+19–h+33 fall inside "CH1 owns this" and are never backfilled from CH2. Reported to the lsmfapi
+owner (same person) with this exact table — see the "Upstream" backlog entry below.
+
 **Our bug — phantom rows.** `write_forecast` skipped null weather fields (correct) but wrote
 `init_time` **unconditionally**. So an all-null frame still produced a point containing *only*
 `init_time`. Proven in prod at `2026-08-07T14:00Z` for `holfuy-1808`:
@@ -647,6 +661,35 @@ Key new files: `api/errors.py`, `api/routers/pages.py`, `collectors/utils.py`, `
 ---
 
 ## Backlog (unordered)
+
+### Upstream: lsmfapi CH1/CH2 stitch nulls h+19–h+33 on `/api/forecast/station` — **reported, not fixed**
+
+Root-caused in v1.23.2 (see that entry for the full geometry table). `/api/forecast/station` nulls
+every weather field for a run-relative window that starts around h+18/h+19 and **always ends at
+h+33**, then resumes cleanly at h+34. Consistent with a stitch that reserves h+0–h+33 for CH1 but
+CH1's actual usable output stops around h+18 — so h+19–h+33 fall inside "CH1 owns this" and are
+never backfilled from CH2.
+
+**Likely shared with `/api/forecast/thermal-grid`**, whose documented null window (h+8–h+33,
+`.ai/context/lsmfapi-thermal-grid.md`) has the **same h+33 upper bound** with a different start —
+consistent with one shared stitch bug, not two independent ones. Worth fixing once in the common
+path rather than per endpoint.
+
+Also worth checking while in there: the station response's `model` field says `"icon-ch1"` even
+past h+34 where the data is clearly CH2 — the thermal endpoint correctly reports
+`"icon-ch1+ch2"` when both slices are merged. If the station endpoint isn't labelling the merge,
+that's probably the same code path mislabeling provenance.
+
+**Repro**: `curl -s 'http://lsmfapi:8000/api/forecast/station?station_id=holfuy-1808&hours=120' |
+jq '[.forecast[] | select(.wind_direction == null) | .valid_time]'`
+
+**Lenticularis-side payoff if fixed**: `FORECAST_RUN_FALLBACK_DEPTH` (`database/influx.py`) is
+currently `3` — measured, not guessed, specifically to paper over this gap (depth 1 recovers 0/15
+hours, depth 2 → 6/15, depth 3 → 15/15). Each extra run costs ~1.4s on the replay query. If the
+seam is fixed upstream, drop the constant back to `1` and replay latency falls from ~4.4s to ~1.5s
+(measured against prod, one replay day, all stations). The gap-fill merge logic itself
+(`_merge_forecast_candidates`) is worth keeping regardless as a safety net for a missed collection
+run — only the depth is a workaround.
 
 ### Thermal Forecast (lsmfapi thermal-grid endpoint) — **planned, ready to implement**, `specs/006-thermal-forecast`
 

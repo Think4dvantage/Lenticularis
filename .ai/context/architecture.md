@@ -58,14 +58,18 @@ relationship's `cascade="all, delete-orphan"` is what actually deletes children.
 - **Timestamp**: `valid_time` (the future moment the forecast is valid for)
 - **Fields**: `wind_speed`, `wind_gust`, `wind_direction`, `temperature`, `humidity`, `pressure_qff`, `precipitation`; SwissMeteo also writes `_min`/`_max` variants for all fields (ensemble spread); `init_time` (ISO string for Python-side dedup)
 - **Primary source**: `swissmeteo` (lsmfapi ICON-CH1/CH2 ensemble). `open-meteo` is fallback.
-- **Source preference** (`query_forecast_for_stations`): prefer `swissmeteo` when its `init_time` is ≤24h old; if stale, latest-init-date wins across sources.
-- **Replay query pattern**: two-step — (1) fast `_latest_forecast_init_dates()` scan (`range(-12h)`, one field, normal 10s client) → (2) main pivot filtered to exact latest `init_date` per source (slow 60s client). Avoids scanning 72+ model runs.
+- **Model-run selection** (all three readers, since v1.23.2): see "Forecast model-run selection is
+  shared by every reader" below — `swissmeteo` outranks `open-meteo` regardless of recency, then
+  newest `init_date` wins, resolved **per field** so a run's null frame is backfilled from an older
+  run rather than blanking the hour. The old "prefer swissmeteo only if ≤24h fresh" staleness cutoff
+  is gone — a stale `swissmeteo` run still outranks a fresher `open-meteo` one, since `open-meteo`
+  is disabled in production and this only matters if it's ever re-enabled.
 
 ### `weather_forecast_thermal` (v1.22.3, `specs/006-thermal-forecast` Phase 1 — ingestion only, no rules/UI yet)
 - **Tags**: `station_id`, `network`, `source` (`swissmeteo`), `model` (`icon-ch`), `init_date` (YYYY-MM-DDTHH — hour-granular, same as `weather_forecast`, **not** day-granular like `wind_forecast_grid`)
 - **Timestamp**: `valid_time`
 - **Fields**: 12 raw ensemble medians (`solar`, `sunshine`, `cloud_cover`, `cloud_low`, `cloud_mid`, `cloud_high`, `freezing_level`, `cape`, `cin`, `lcl`, `lfc`, `tke`); 5 selected ensemble-spread fields (`lcl_min`, `lcl_max`, `cape_max`, `cloud_cover_max`, `solar_min` — a deliberate subset, not all 24 possible `_min`/`_max`); 7 derived fields computed by `services/thermal.py` (`thermal_ceiling_m`, `cloud_base_agl_m`, `thermal_strength` 0-5, `overdevelopment_risk` 0-3, `blue_thermal` 0/1, `turbulence_index` 0-3, `ceiling_spread_m`); `init_time` (ISO string, same dedup trick as `weather_forecast`)
-- **Own measurement, not merged into `weather_forecast`** — the two forecasts have different `init_time`s (separate lsmfapi cache phases), and merging would break `query_forecast_snapshot_for_stations`'s "keep the entry with the most fields" dedup exactly the way `specs/006` §3.1 predicted.
+- **Own measurement, not merged into `weather_forecast`** — the two forecasts have different `init_time`s (separate lsmfapi cache phases), and merging would break the per-field model-run merge (see below) exactly the way `specs/006` §3.1 predicted.
 - **`cin: null` means "no inhibition layer"** (ICON fill value), substituted as `0.0` in every derived calculation — never treated as a cap, and never coerced to `0` in the stored field itself (absence must stay distinguishable from a real `0`).
 - **Known upstream gap**: lsmfapi sometimes nulls an entire frame range mid-horizon (observed h+8-h+33 on one run) — lands squarely on the flyable hours of "today" and "tomorrow morning". The collector logs per-hour local coverage (`coverage today=%d/12 d1=%d/12`) every run specifically because a row-count check cannot see this — rows get written either way.
 - **Same 1272-cell grid as `wind_forecast_grid`** — verified in the lsmfapi source: both endpoints share one default bbox + stride and generate points with character-identical code. `thermal_forecast_grid` (Phase 3, not yet built) will join on `(grid_id, valid_time)` for a wind overlay at zero extra cost.
@@ -185,6 +189,12 @@ run's hole ends at its *own* h+33, with CH2 data resuming at h+34. Consecutive r
 overlapping but offset holes, and reading only the newest run blanks those hours entirely. Measured
 against prod recovering a 15-hour hole: depth 1 → 0/15, depth 2 → 6/15, **depth 3 → 15/15**. Cost
 ~+1.4 s per extra run on the replay query, so 3 is where coverage saturates.
+
+**`FORECAST_RUN_FALLBACK_DEPTH = 3` is a workaround, not a permanent constant.** The seam has been
+reported to the lsmfapi owner (`features.md` backlog: "Upstream: lsmfapi CH1/CH2 stitch nulls
+h+19–h+33"). If fixed upstream, drop this back to `1` and replay latency falls from ~4.4 s to
+~1.5 s. Don't lower it speculatively — re-measure against prod first, the same way it was
+determined here.
 
 **Never resolve a run with `|> last()`.** It returns the last point *per series*, i.e. one record per
 `init_date`, not the newest run. Paired with a "keep the entry with the most fields" tiebreak this

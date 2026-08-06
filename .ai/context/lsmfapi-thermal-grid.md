@@ -189,6 +189,23 @@ function pointSeries(data, lat, lon) {
 ## Notes on lsmfapi
 
 - User-owned service, same Docker network as Lenticularis dev/prod, no rate limits.
-- Currently serves FGA stations (station forecast) and ICON-CH1/CH2 wind grid.
-- Thermal grid is a new endpoint — may still be in active development; verify schema stability before storing in InfluxDB.
+- Serves all station networks (not just FGA) plus the ICON-CH1/CH2 wind grid.
+- Thermal grid is a newer endpoint — verify schema stability before storing in InfluxDB.
 - No authentication required (internal network).
+
+### Known bug: CH1/CH2 stitch nulls a run-relative window ending at h+33
+
+Confirmed independently on **two endpoints** with the same fixed upper bound:
+
+- `/api/forecast/thermal-grid`: documented null window h+8–h+33 (see Null Semantics above).
+- `/api/forecast/station`: measured null window h+18/19–h+33 (two consecutive runs,
+  `.ai/context/features.md` v1.23.2 entry has the full table) — data resumes cleanly at h+34
+  in both cases.
+
+Both endpoints null out **exactly through h+33**, with different start points. That's consistent
+with one shared stitch that reserves h+0–h+33 for CH1 while CH1's actual usable output stops
+earlier (~h+18 on the station endpoint) — so the tail of the reserved CH1 range is never
+backfilled from CH2. Reported upstream; not fixed as of v1.23.2. Lenticularis works around it on
+the station endpoint by reading back 3 model runs and merging per field
+(`FORECAST_RUN_FALLBACK_DEPTH`, `database/influx.py`) — see `features.md`'s backlog entry for the
+fix this unblocks once resolved.
