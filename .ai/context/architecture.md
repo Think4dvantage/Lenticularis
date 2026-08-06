@@ -158,14 +158,18 @@ call sites still in `influx.py` all target `weather_data` only. Re-check this if
 
 ---
 
-### ⚠️ All forecast reads must select the same model run (v1.23.1)
+### ⚠️ Forecast model-run selection is shared by every reader (v1.23.1 / v1.23.2)
 
-`init_date` is a **tag**, so every model run is a separate series and `weather_forecast` retains
-many runs for the same `valid_time`. Any query that does not explicitly pin a run can silently
-serve a stale one — and if two queries pin differently, the UI contradicts itself.
+`init_date` is a **tag**, so every model run is its own series and `weather_forecast` retains many
+runs for the same `valid_time`. Two rules, applied identically by all three readers — that shared
+rule is what guarantees the map's wind arrows and the rule set's traffic light never disagree:
 
-**Invariant: everything that renders or decides on a forecast moment resolves the run through
-`_latest_forecast_init_dates()`.** Three readers, one selection:
+1. **Same candidate runs** — `_forecast_init_date_filter()` builds the Flux `init_date` predicate
+   from `_recent_forecast_init_dates(depth=FORECAST_RUN_FALLBACK_DEPTH)`.
+2. **Per-field, newest-run-that-has-it** — `_merge_forecast_candidates()` orders candidates by
+   `(preferred source, newest init_date, tiebreak)` and takes each field from the first candidate
+   with a non-`None` value. A newer run supplies everything it has; an older run fills only the
+   gaps it left, never the reverse.
 
 | Reader | Used by |
 |---|---|
@@ -173,17 +177,26 @@ serve a stale one — and if two queries pin differently, the UI contradicts its
 | `query_forecast_snapshot_for_stations` | `run_forecast_evaluation_at` (replay decision fallback), `GET /api/foehn/forecast` |
 | `query_forecast_for_stations` | `run_forecast_evaluation` (the precomputed horizon), station forecast charts |
 
-`query_forecast_for_stations` reaches back 3 days rather than pinning one run, but its per-`valid_time`
-dedup keeps the newest `init_time` — verified in prod at **0 divergences** from the arrow, because the
-newest run writes a row even when a frame's fields are null, so it wins the dedup instead of
-back-filling from an older run. If that upstream behaviour ever changes (null frames written as
-*absent rows*), this function would start filling holes from older runs and drift from the arrow —
-re-verify before assuming agreement.
+Each strips the provenance keys its response shape never carried (`init_date` for the horizon
+reader; `source`/`model`/`init_date` for replay), so shapes are unchanged.
+
+**Why fall back at all:** lsmfapi legitimately serves null frames at the ICON-CH1/CH2 seam — every
+run's hole ends at its *own* h+33, with CH2 data resuming at h+34. Consecutive runs therefore have
+overlapping but offset holes, and reading only the newest run blanks those hours entirely. Measured
+against prod recovering a 15-hour hole: depth 1 → 0/15, depth 2 → 6/15, **depth 3 → 15/15**. Cost
+~+1.4 s per extra run on the replay query, so 3 is where coverage saturates.
 
 **Never resolve a run with `|> last()`.** It returns the last point *per series*, i.e. one record per
 `init_date`, not the newest run. Paired with a "keep the entry with the most fields" tiebreak this
 resolved to the **oldest** retained run and shipped a four-day-old forecast to the rules engine
-while the arrows showed the current one (fixed v1.23.1; see `features.md`).
+while the arrows showed the current one (fixed v1.23.1).
+
+**Never write a point whose every weather field is null.** `write_forecast` /
+`write_thermal_forecast` write `init_time` unconditionally, so an all-null frame used to emit a
+point holding *only* `init_time` — and that phantom row, belonging to a newer run, shadowed a
+complete row from the previous run in every newest-wins dedup, turning real data into `None`. Both
+writers now skip the point (fixed v1.23.2). The read-side merge above tolerates phantom rows
+already stored, so the fix is retroactive.
 
 ## API Contracts
 

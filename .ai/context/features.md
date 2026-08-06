@@ -1,6 +1,59 @@
 # Feature History & Backlog
 
-## Current Version: v1.23.1 (shipped)
+## Current Version: v1.23.2 (shipped)
+
+### Fix: phantom rows blanked 15 hours of tomorrow's forecast; gap-fill across model runs
+
+Follow-up to v1.23.1. The owner pushed back on "no data": *lsmfapi reports data from now until
+115 h into the future.* Checked directly against the running `lsmfapi` container — **they were
+right, and the bug was ours.**
+
+lsmfapi returns 115 hourly entries (h+0 → h+115), but **15 carry null wind values**:
+`2026-08-07T01:00Z`–`15:00Z`, i.e. h+19–h+33 from the `06Z` init, with values resuming exactly at
+h+34. That is the **ICON-CH1 → CH2 seam** — CH1's horizon ends at h+33 and CH2 takes over at h+34.
+(Note: this is *not* the h+8–h+33 hole documented for the thermal-grid endpoint; different endpoint,
+different mechanism.)
+
+**Our bug — phantom rows.** `write_forecast` skipped null weather fields (correct) but wrote
+`init_time` **unconditionally**. So an all-null frame still produced a point containing *only*
+`init_time`. Proven in prod at `2026-08-07T14:00Z` for `holfuy-1808`:
+
+| run | fields written | wind_direction |
+|---|---|---|
+| `2026-08-06T00` | **22** | **194.0** |
+| `2026-08-06T06` | **1** (`init_time` only) | — |
+
+That one-field row is newer, so it won every "newest wins" dedup and shadowed a complete row. The
+`06Z` run wrote only **9 of 24** hours for tomorrow, and the other 15 read as `None` even though the
+previous run had them.
+
+| Change | Detail |
+|---|---|
+| `write_forecast` / `write_thermal_forecast` | Skip the point entirely when every weather field is null — no more phantom rows |
+| `_merge_forecast_candidates` — new | Shared per-field merge: order candidates by `(preferred source, newest init_date, tiebreak)`, take each field from the first with a non-`None` value. Newer run wins; older run fills **only** its gaps |
+| `_recent_forecast_init_dates` / `_forecast_init_date_filter` — new | One Flux `init_date` predicate builder for **all three** readers, so arrows and decisions can never consider different runs |
+| All three readers rewired | `query_forecast_replay`, `query_forecast_snapshot_for_stations`, `query_forecast_for_stations`. Replaced the latter's bespoke four-branch dedup, which picked one winning row per `valid_time` and so blanked an hour rather than falling back |
+| Response shapes preserved | Each reader strips the provenance keys it never carried (`init_date` for the horizon reader; `source`/`model`/`init_date` for replay) |
+| `FORECAST_RUN_FALLBACK_DEPTH = 3` | **Measured, not guessed** — every run's hole ends at its *own* h+33, so consecutive runs have overlapping but offset holes and one step back is not enough |
+| `tests/backend/test_influx_query_clients.py` | +9 tests: per-field merge precedence, gap backfill, "fills only gaps, never overwrites a newer value", all-null → hour omitted, source preference vs newer other-source, all three readers sharing one filter, bounded depth. Suite: 236 → **245** |
+
+**Verified against prod before tagging** (read-only, new logic run inline):
+
+| | |
+|---|---|
+| hours recovered (were blank, now have data) | **15 / 15** |
+| readers disagreeing (arrow vs horizon vs snapshot) | **0 / 20** |
+| coverage by depth | depth 1 → 0/15 · depth 2 → **6/15** · depth 3 → **15/15** |
+| replay cost (1 day, all stations) | 1 run 1.46 s · 2 runs 3.05 s · 3 runs 4.40 s · 4 runs 6.33 s |
+
+The read-side merge tolerates phantom rows already in InfluxDB, so **the fix is retroactive** — no
+backfill or cleanup needed.
+
+Resulting Amisbühl forecast for tomorrow (local): 07:00 orange, 09:00 **green**, 10:00 orange,
+11:00–17:00 red (gusts 18–25 km/h exceed every arc's cap), 18:00 **green**, then red. A believable
+morning window rather than a uniformly blank day.
+
+## Previous Version: v1.23.1 (shipped)
 
 ### Fix: forecast snapshot served a stale model run, contradicting the map arrows (`database/influx.py`)
 

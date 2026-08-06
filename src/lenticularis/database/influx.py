@@ -38,6 +38,107 @@ def _flux_str(value) -> str:
     return s.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "").replace("\r", "")
 
 
+# ---------------------------------------------------------------------------
+# Forecast model-run selection — shared by every forecast reader
+# ---------------------------------------------------------------------------
+#
+# `init_date` is a TAG, so each model run is its own series and many runs coexist for the
+# same valid_time. Two rules keep every reader consistent:
+#
+#   1. All readers consider the same bounded set of recent runs (see
+#      `_recent_forecast_init_dates`) — so the map's wind arrows and the rule set decision
+#      for one replay frame can never come from different runs.
+#   2. Within that set, a value is taken from the newest run that actually *has* it
+#      (`_merge_forecast_candidates`) — a run can legitimately contain null frames at the
+#      ICON-CH1/CH2 seam, and the previous run usually covers exactly those hours.
+#
+# Reading only the newest run would blank those hours; reading every retained run would
+# reintroduce the series-count blowup that made these queries time out before v1.16.
+
+PREFERRED_FORECAST_SOURCE = "swissmeteo"
+
+#: How many recent runs per source a forecast read may fall back through.
+#:
+#: 3, measured — not guessed. Every run's null window ends at its *own* h+33 (the ICON-CH1
+#: boundary, with CH2 data resuming at h+34), so consecutive runs have overlapping but
+#: offset holes and one step back is not enough. Against prod, recovering a 15-hour hole in
+#: tomorrow's forecast for one station:
+#:
+#:   depth=1 -> 0/15 hours     depth=2 -> 6/15 hours     depth=3 -> 15/15 hours
+#:
+#: Cost, same data (one replay day, all stations): 1 run = 1.46 s, 2 = 3.05 s, 3 = 4.40 s,
+#: 4 = 6.33 s — roughly +1.4 s per extra run. 3 is where coverage saturates, so going higher
+#: buys nothing but latency. Replay results are server-cached (5 min TTL) and warmed at
+#: startup, and since v1.23.0 the decision path reads a precomputed horizon rather than
+#: querying per frame, so this lands on a cold cache rather than on every frame.
+FORECAST_RUN_FALLBACK_DEPTH = 3
+
+
+def _forecast_run_rank(
+    source: Optional[str], init_date: Optional[str], tiebreak: float = 0.0
+) -> tuple:
+    """
+    Sort key for model-run precedence: preferred source, then newest run, then *tiebreak*.
+
+    ``tiebreak`` (higher wins) separates rows from the *same* run — the snapshot query passes
+    negative distance from ``valid_time`` so the closest reading in its ±30 min window wins.
+    Callers keying strictly on an exact ``valid_time`` leave it at 0.
+    """
+    return (
+        1 if source == PREFERRED_FORECAST_SOURCE else 0,
+        init_date or "",
+        tiebreak,
+    )
+
+
+def _merge_forecast_candidates(candidates: list[dict]) -> dict:
+    """
+    Collapse several runs' rows for one ``(station, valid_time)`` into one field dict.
+
+    Each candidate is ``{"source": str, "init_date": str, "fields": dict}`` and may carry an
+    optional numeric ``"tiebreak"``. Candidates are ordered by :func:`_forecast_run_rank`
+    (newest preferred run first) and, **per field**, the first non-``None`` value wins. So a
+    newer run supplies everything it has and an older run fills only the gaps it left —
+    never the other way round.
+
+    ``source`` / ``model`` in the result describe the run that supplied the *primary* values
+    (the highest-precedence candidate carrying any real data), so the forecast-source badge
+    still reflects what the pilot is mostly looking at.
+    """
+    if not candidates:
+        return {}
+
+    ordered = sorted(
+        candidates,
+        key=lambda c: _forecast_run_rank(
+            c.get("source"), c.get("init_date"), c.get("tiebreak", 0.0)
+        ),
+        reverse=True,
+    )
+
+    merged: dict = {}
+    primary: Optional[dict] = None
+    for cand in ordered:
+        contributed = False
+        for key, value in cand["fields"].items():
+            if value is None:
+                continue
+            if merged.get(key) is None:
+                merged[key] = value
+                contributed = True
+        if contributed and primary is None:
+            primary = cand
+
+    # Provenance of the primary values. With gap-fill a merged row can legitimately draw a
+    # field from an older run, so these describe where the *main* values came from, not every
+    # value. Callers drop whichever keys their response shape never carried.
+    if primary is not None:
+        for key in ("source", "model", "init_date"):
+            if primary.get(key):
+                merged[key] = primary[key]
+    return merged
+
+
 class InfluxClient:
     """
     Thin wrapper around the official ``influxdb-client`` library.
@@ -314,20 +415,7 @@ from(bucket: "{self._cfg.bucket}")
             f'r.station_id == "{_flux_str(sid)}"' for sid in station_ids
         )
 
-        latest = self._latest_forecast_init_dates()
-        if latest:
-            init_date_clauses = " or ".join(
-                f'r.init_date == "{_flux_str(d)}"' for d in set(latest.values())
-            )
-            init_date_filter = f"({init_date_clauses})"
-        else:
-            # Same fallback as query_forecast_replay: no run in the last 12 h.
-            three_days_ago = (datetime.now(timezone.utc) - timedelta(days=3)).strftime("%Y-%m-%d")
-            init_date_filter = f'not exists r.init_date or r.init_date >= "{three_days_ago}"'
-            logger.warning(
-                "query_forecast_snapshot_for_stations: no recent init_dates found, "
-                "using 3-day fallback"
-            )
+        init_date_filter = self._forecast_init_date_filter()
 
         start = (valid_time - timedelta(minutes=30)).isoformat()
         stop  = (valid_time + timedelta(minutes=31)).isoformat()
@@ -346,35 +434,48 @@ from(bucket: "{self._cfg.bucket}")
             logger.error("InfluxDB query_forecast_snapshot_for_stations error: %s", exc)
             return {}
 
-        _PREFERRED_SOURCE = "swissmeteo"
-        results: dict[str, dict] = {}
-        ranks: dict[str, tuple] = {}
+        # Collect every candidate row per station, then merge per field so a newer run's
+        # gap is filled by the previous run instead of blanking the hour.
+        candidates: dict[str, list[dict]] = {}
+        timestamps: dict[str, tuple] = {}
         for table in tables:
             for record in table.records:
                 sid = record.values.get("station_id", "")
                 if not sid:
                     continue
                 ts = record.get_time()
-                entry: dict = {
-                    "station_id":  sid,
-                    "timestamp":   ts,
-                    "is_forecast": True,
-                }
-                entry.update({
+                fields = {
                     k: v for k, v in record.values.items()
                     if not k.startswith("_")
-                    and k not in ("result", "table", "station_id", "network", "model", "init_time")
+                    and k not in (
+                        "result", "table", "station_id", "network",
+                        "source", "model", "init_date", "init_time",
+                    )
+                }
+                proximity = -abs((ts - valid_time).total_seconds())
+                candidates.setdefault(sid, []).append({
+                    "source": record.values.get("source", ""),
+                    "init_date": record.values.get("init_date", ""),
+                    "fields": fields,
+                    # Within one run the ±30 min window can hold two hourly readings —
+                    # the one nearest valid_time wins.
+                    "tiebreak": proximity,
                 })
-                # Explicit precedence — preferred source, then newest model run, then the
-                # reading closest to valid_time. Never "whichever row arrived first".
-                rank = (
-                    1 if record.values.get("source", "") == _PREFERRED_SOURCE else 0,
-                    record.values.get("init_date", "") or "",
-                    -abs((ts - valid_time).total_seconds()),
-                )
-                if sid not in ranks or rank > ranks[sid]:
-                    ranks[sid] = rank
-                    results[sid] = entry
+                # Report the timestamp of the reading closest to valid_time.
+                if sid not in timestamps or proximity > timestamps[sid][0]:
+                    timestamps[sid] = (proximity, ts)
+
+        results: dict[str, dict] = {}
+        for sid, cands in candidates.items():
+            merged = _merge_forecast_candidates(cands)
+            if not merged:
+                continue
+            results[sid] = {
+                "station_id":  sid,
+                "timestamp":   timestamps[sid][1],
+                "is_forecast": True,
+                **merged,
+            }
         return results
 
     def query_foehn_pressure_history(
@@ -961,9 +1062,19 @@ from(bucket: "{self._cfg.bucket}")
                 "precipitation_min":   fp.precipitation_min,
                 "precipitation_max":   fp.precipitation_max,
             }
+            wrote_any = False
             for field_name, value in field_map.items():
                 if value is not None:
                     p = p.field(field_name, float(value))
+                    wrote_any = True
+            # A frame whose every weather value is null carries no information. Writing it
+            # anyway emitted a point holding *only* ``init_time`` — and because that phantom
+            # row belonged to a newer run, it shadowed a complete row from the previous run
+            # in every "newest init_time wins" dedup, turning real forecast data into None.
+            # lsmfapi legitimately serves such frames at the ICON-CH1/CH2 seam (CH1 ends at
+            # h+33, CH2 resumes at h+34). Observed in prod: 15 consecutive hours blanked.
+            if not wrote_any:
+                continue
             # Store init_time as a field so Python can deduplicate per valid_time
             p = p.field("init_time", fp.init_time.astimezone(timezone.utc).isoformat())
             influx_points.append(p)
@@ -1039,9 +1150,15 @@ from(bucket: "{self._cfg.bucket}")
                 "turbulence_index": fp.turbulence_index,
                 "ceiling_spread_m": fp.ceiling_spread_m,
             }
+            wrote_any = False
             for field_name, value in field_map.items():
                 if value is not None:
                     p = p.field(field_name, float(value))
+                    wrote_any = True
+            # Same phantom-row guard as write_forecast — an all-null frame must not emit an
+            # init_time-only point that shadows the previous run's real data.
+            if not wrote_any:
+                continue
             # Store init_time as a field so Python can deduplicate per valid_time
             p = p.field("init_time", fp.init_time.astimezone(timezone.utc).isoformat())
             influx_points.append(p)
@@ -1313,8 +1430,23 @@ from(bucket: "{self._cfg.bucket}")
     # Forecast — query
     # ------------------------------------------------------------------
 
-    def _latest_forecast_init_dates(self) -> dict[str, str]:
-        """Return {source: latest_init_date} from recent forecast data (fast lookup)."""
+    def _recent_forecast_init_dates(
+        self, depth: int = FORECAST_RUN_FALLBACK_DEPTH
+    ) -> dict[str, list[str]]:
+        """
+        Return ``{source: [init_date, …]}`` newest first, at most *depth* per source.
+
+        Deliberately more than just the newest run: a run can contain null frames (the
+        ICON-CH1/CH2 seam), and the previous run normally covers exactly those hours.
+        Bounded, because scanning every retained run is what made these queries time out
+        before v1.16.
+
+        ``range`` filters on the point timestamp (``valid_time``), **not** on when the run
+        happened — so a 12 h window already surfaces dozens of distinct ``init_date``s
+        (every run whose horizon covers the recent past). It is kept narrow purely for
+        speed: widening it to 48 h cost 2.9 s versus well under a second here, and bought
+        nothing, since sorting descending picks the newest runs either way.
+        """
         flux = f"""
 from(bucket: "{self._cfg.bucket}")
   |> range(start: -12h, stop: now())
@@ -1326,18 +1458,52 @@ from(bucket: "{self._cfg.bucket}")
         try:
             tables = self._query_api.query(flux, org=self._cfg.org)
         except Exception as exc:
-            logger.error("InfluxDB _latest_forecast_init_dates error: %s", exc)
+            logger.error("InfluxDB _recent_forecast_init_dates error: %s", exc)
             return {}
 
-        latest: dict[str, str] = {}
+        seen: dict[str, set[str]] = {}
         for table in tables:
             for record in table.records:
                 src = record.values.get("source", "")
                 idate = record.values.get("init_date", "")
-                if src and idate and idate > latest.get(src, ""):
-                    latest[src] = idate
-        logger.debug("Latest forecast init_dates: %s", latest)
-        return latest
+                if src and idate:
+                    seen.setdefault(src, set()).add(idate)
+
+        recent = {
+            src: sorted(dates, reverse=True)[:depth]
+            for src, dates in seen.items()
+        }
+        logger.debug("Recent forecast init_dates (depth=%d): %s", depth, recent)
+        return recent
+
+    def _latest_forecast_init_dates(self) -> dict[str, str]:
+        """Return ``{source: latest_init_date}`` — the newest run per source only."""
+        return {
+            src: dates[0]
+            for src, dates in self._recent_forecast_init_dates(depth=1).items()
+            if dates
+        }
+
+    def _forecast_init_date_filter(
+        self, depth: int = FORECAST_RUN_FALLBACK_DEPTH
+    ) -> str:
+        """
+        Build the Flux ``init_date`` predicate every forecast reader shares.
+
+        Using one builder is what guarantees the arrows and the rule set decision consider
+        the same runs — the property that broke when this logic was duplicated per query.
+        """
+        recent = self._recent_forecast_init_dates(depth)
+        dates = {d for dates in recent.values() for d in dates}
+        if dates:
+            clauses = " or ".join(f'r.init_date == "{_flux_str(d)}"' for d in sorted(dates))
+            return f"({clauses})"
+        # No run in the last 48 h — fall back to a bounded date window rather than all data.
+        three_days_ago = (datetime.now(timezone.utc) - timedelta(days=3)).strftime("%Y-%m-%d")
+        logger.warning(
+            "No recent forecast init_dates found — falling back to a 3-day init_date window"
+        )
+        return f'not exists r.init_date or r.init_date >= "{three_days_ago}"'
 
     def query_forecast_replay(
         self, start_dt: datetime, end_dt: datetime
@@ -1346,28 +1512,21 @@ from(bucket: "{self._cfg.bucket}")
         Return forecast data for all stations between ``start_dt`` and ``end_dt``.
 
         Two-step approach for performance:
-        1. Fast lookup of the latest init_date per source (one field, narrow range).
+        1. Fast lookup of the recent init_dates per source (one field, narrow range).
         2. Main query filtered to only those init_dates — minimal data, fast pivot.
+
+        Uses the shared ``_forecast_init_date_filter`` + ``_merge_forecast_candidates`` rule,
+        so the arrows drawn here and the rule set decision for the same frame consider the
+        same runs and resolve each field the same way.
 
         Returns { station_id: [ {"timestamp": ISO_str, field: value, ...}, ... ] }
         """
         start_str = start_dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         end_str = end_dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-        # Step 1: find the latest init_date per source
-        latest = self._latest_forecast_init_dates()
-        if latest:
-            init_date_clauses = " or ".join(
-                f'r.init_date == "{_flux_str(d)}"' for d in set(latest.values())
-            )
-            init_date_filter = f"({init_date_clauses})"
-        else:
-            # Fallback: last 3 days (slower but safe)
-            three_days_ago = (datetime.now(timezone.utc) - timedelta(days=3)).strftime("%Y-%m-%d")
-            init_date_filter = f'not exists r.init_date or r.init_date >= "{three_days_ago}"'
-            logger.warning("query_forecast_replay: no recent init_dates found, using 3-day fallback")
+        init_date_filter = self._forecast_init_date_filter()
 
-        # Step 2: query only the latest model run(s) — central values only
+        # Central values only — the ensemble band fields are not drawn on the map.
         flux = f"""
 from(bucket: "{self._cfg.bucket}")
   |> range(start: {start_str}, stop: {end_str})
@@ -1382,15 +1541,13 @@ from(bucket: "{self._cfg.bucket}")
             logger.error("InfluxDB forecast_replay query error: %s", exc)
             return {}
 
-        # Python dedup: prefer swissmeteo over open-meteo for same (station, valid_time)
-        _PREFERRED = "swissmeteo"
-        raw: dict[str, dict[str, dict]] = {}
-        src_of: dict[tuple[str, str], str] = {}  # (sid, vt_iso) -> source
+        # Gather every run's row per (station, valid_time), then merge per field so a newer
+        # run's null frame is backfilled from the previous run instead of blanking the hour.
+        candidates: dict[str, dict[str, list[dict]]] = {}
         for table in tables:
             for record in table.records:
                 sid = record.values.get("station_id", "")
                 vt_iso = record.get_time().isoformat()
-                in_src = record.values.get("source", "")
 
                 fields = {
                     k: v
@@ -1398,22 +1555,25 @@ from(bucket: "{self._cfg.bucket}")
                     if not k.startswith("_")
                     and k not in ("result", "table", "station_id", "network", "source", "model", "init_date")
                 }
-
-                raw.setdefault(sid, {})
-                existing = raw[sid].get(vt_iso)
-                if existing is None:
-                    raw[sid][vt_iso] = fields
-                    src_of[(sid, vt_iso)] = in_src
-                elif in_src == _PREFERRED and src_of.get((sid, vt_iso)) != _PREFERRED:
-                    raw[sid][vt_iso] = fields
-                    src_of[(sid, vt_iso)] = in_src
+                candidates.setdefault(sid, {}).setdefault(vt_iso, []).append({
+                    "source": record.values.get("source", ""),
+                    "init_date": record.values.get("init_date", ""),
+                    "fields": fields,
+                })
 
         result: dict[str, list[dict]] = {}
-        for sid, by_vt in raw.items():
-            result[sid] = [
-                {"timestamp": vt_iso, **{k: v for k, v in row.items()}}
-                for vt_iso, row in sorted(by_vt.items())
-            ]
+        for sid, by_vt in candidates.items():
+            rows = []
+            for vt_iso, cands in sorted(by_vt.items()):
+                merged = _merge_forecast_candidates(cands)
+                if not merged:
+                    continue
+                # Replay frames never carried provenance keys.
+                for key in ("source", "model", "init_date"):
+                    merged.pop(key, None)
+                rows.append({"timestamp": vt_iso, **merged})
+            if rows:
+                result[sid] = rows
 
         return result
 
@@ -1423,8 +1583,10 @@ from(bucket: "{self._cfg.bucket}")
         """
         Return forecast data for the given station IDs from now to ``+horizon_hours``.
 
-        For each station, deduplicates to the latest ``init_time`` per ``valid_time``
-        in Python (all model runs are stored; we pick the most recent one for evaluation).
+        Uses the shared ``_forecast_init_date_filter`` + ``_merge_forecast_candidates`` rule,
+        so the values the rules engine evaluates match the arrows the map draws for the same
+        moment, and a newer run's null frame is backfilled from the previous run rather than
+        blanking the hour.
 
         Returns::
 
@@ -1450,18 +1612,14 @@ from(bucket: "{self._cfg.bucket}")
         station_filter = " or ".join(
             f'r.station_id == "{_flux_str(sid)}"' for sid in station_ids
         )
-        # Limit to runs from the last 3 days so we don't pull all historical init_dates.
-        # Uses day-prefix string for the cutoff — lexicographic comparison works because
-        # new-format "YYYY-MM-DDTHH" >= "YYYY-MM-DD" is always true for that day.
-        # Old-format data (no init_date tag) is included via the `not exists` branch.
-        three_days_ago = (datetime.now(timezone.utc) - timedelta(days=3)).strftime("%Y-%m-%d")
+        init_date_filter = self._forecast_init_date_filter()
 
         flux = f"""
 from(bucket: "{self._cfg.bucket}")
   |> range(start: {start_str}, stop: {end_str})
   |> filter(fn: (r) => r._measurement == "{MEASUREMENT_FORECAST}")
   |> filter(fn: (r) => {station_filter})
-  |> filter(fn: (r) => not exists r.init_date or r.init_date >= "{three_days_ago}")
+  |> filter(fn: (r) => {init_date_filter})
   |> pivot(rowKey: ["_time", "station_id", "network", "source", "model", "init_date"], columnKey: ["_field"], valueColumn: "_value")
   |> sort(columns: ["_time"])
 """
@@ -1471,59 +1629,44 @@ from(bucket: "{self._cfg.bucket}")
             logger.error("InfluxDB forecast query error: %s", exc)
             return {}
 
-        # Staleness threshold for preferred source: if swissmeteo's newest init_time
-        # is older than this cutoff, treat it as unavailable and fall back to Open-Meteo.
-        _PREFERRED_SOURCE = "swissmeteo"
-        _PREFERRED_MAX_AGE_H = 24
-        preferred_cutoff_iso = (
-            now - timedelta(hours=_PREFERRED_MAX_AGE_H)
-        ).astimezone(timezone.utc).isoformat()
-
-        # raw[station_id][valid_time_iso] = {fields..., "_init_time": str}
-        raw: dict[str, dict[str, dict]] = {}
+        # Gather every candidate run per (station, valid_time), then apply the shared merge.
+        # The previous bespoke four-branch dedup picked a single winning row per valid_time,
+        # so a newer run's null frame blanked the hour outright instead of falling back.
+        candidates: dict[str, dict[str, list[dict]]] = {}
         for table in tables:
             for record in table.records:
                 sid = record.values.get("station_id", "")
                 valid_time_iso = record.get_time().isoformat()
-                init_time_str = record.values.get("init_time", "")
 
                 fields = {
                     k: v
                     for k, v in record.values.items()
                     if not k.startswith("_")
-                    and k not in ("result", "table", "station_id", "network", "init_time", "init_date")
+                    and k not in (
+                        "result", "table", "station_id", "network",
+                        "source", "model", "init_date", "init_time",
+                    )
                 }
-                # source / model kept intentionally — API surfaces them as forecast metadata
-                fields["_init_time"] = init_time_str
+                candidates.setdefault(sid, {}).setdefault(valid_time_iso, []).append({
+                    "source": record.values.get("source", ""),
+                    "model": record.values.get("model", ""),
+                    "init_date": record.values.get("init_date", ""),
+                    "fields": fields,
+                })
 
-                raw.setdefault(sid, {})
-                existing = raw[sid].get(valid_time_iso)
-                if existing is None:
-                    raw[sid][valid_time_iso] = fields
-                else:
-                    in_src   = fields.get("source", "")
-                    ex_src   = existing.get("source", "")
-                    in_fresh = init_time_str >= preferred_cutoff_iso
-                    ex_fresh = existing.get("_init_time", "") >= preferred_cutoff_iso
-
-                    if in_src == _PREFERRED_SOURCE and in_fresh and ex_src != _PREFERRED_SOURCE:
-                        # Incoming is a fresh preferred run — always wins
-                        raw[sid][valid_time_iso] = fields
-                    elif ex_src == _PREFERRED_SOURCE and ex_fresh and in_src != _PREFERRED_SOURCE:
-                        # Existing is a fresh preferred run — keep it
-                        pass
-                    elif in_src == ex_src and init_time_str > existing.get("_init_time", ""):
-                        # Same source: prefer the newer model run
-                        raw[sid][valid_time_iso] = fields
-                    elif in_src != ex_src and not ex_fresh and init_time_str > existing.get("_init_time", ""):
-                        # Preferred source is stale/absent — fall back to latest init_time
-                        raw[sid][valid_time_iso] = fields
-
-        # Strip internal tracking key
-        return {
-            sid: {vt: {k: v for k, v in row.items() if k != "_init_time"} for vt, row in by_vt.items()}
-            for sid, by_vt in raw.items()
-        }
+        result: dict[str, dict[str, dict]] = {}
+        for sid, by_vt in candidates.items():
+            merged_by_vt: dict[str, dict] = {}
+            for valid_time_iso, cands in by_vt.items():
+                merged = _merge_forecast_candidates(cands)
+                if merged:
+                    # source / model are surfaced as forecast metadata by
+                    # GET /api/stations/{id}/forecast; init_date never was.
+                    merged.pop("init_date", None)
+                    merged_by_vt[valid_time_iso] = merged
+            if merged_by_vt:
+                result[sid] = merged_by_vt
+        return result
 
     def query_history_for_stations(
         self, station_ids: list[str], days: int = 30, window_minutes: int = 30

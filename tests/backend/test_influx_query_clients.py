@@ -126,10 +126,19 @@ def _table(records):
     return t
 
 
+def _init_record(source, init_date):
+    """A row as returned by the _recent_forecast_init_dates lookup."""
+    rec = MagicMock()
+    rec.values = {"source": source, "init_date": init_date}
+    return rec
+
+
 def test_forecast_snapshot_filters_to_latest_init_date():
     """The pivot must be scoped to the newest run, exactly like query_forecast_replay."""
     client = _make_client()
-    client._latest_forecast_init_dates = MagicMock(return_value={"swissmeteo": "2026-08-06T00"})
+    client._recent_forecast_init_dates = MagicMock(
+        return_value={"swissmeteo": ["2026-08-06T00"]}
+    )
 
     client.query_forecast_snapshot_for_stations(["holfuy-1808"], _VT)
 
@@ -140,7 +149,9 @@ def test_forecast_snapshot_filters_to_latest_init_date():
 def test_forecast_snapshot_does_not_use_last():
     """`last()` is what fragmented the result per-run and caused the stale pick."""
     client = _make_client()
-    client._latest_forecast_init_dates = MagicMock(return_value={"swissmeteo": "2026-08-06T00"})
+    client._recent_forecast_init_dates = MagicMock(
+        return_value={"swissmeteo": ["2026-08-06T00"]}
+    )
 
     client.query_forecast_snapshot_for_stations(["holfuy-1808"], _VT)
 
@@ -153,7 +164,9 @@ def test_forecast_snapshot_picks_newest_init_date_not_first_row():
     have won under the old 'most fields' tiebreak. The newest run (194 deg) must win.
     """
     client = _make_client()
-    client._latest_forecast_init_dates = MagicMock(return_value={"swissmeteo": "2026-08-06T00"})
+    client._recent_forecast_init_dates = MagicMock(
+        return_value={"swissmeteo": ["2026-08-06T00"]}
+    )
     client._slow_query_api.query = MagicMock(return_value=[_table([
         _record("holfuy-1808", "2026-08-02T18", "swissmeteo", 171.0),
         _record("holfuy-1808", "2026-08-06T00", "swissmeteo", 194.0),
@@ -168,7 +181,9 @@ def test_forecast_snapshot_picks_newest_init_date_not_first_row():
 def test_forecast_snapshot_newest_init_date_wins_regardless_of_row_order():
     """Same assertion with the rows reversed — selection must not depend on arrival order."""
     client = _make_client()
-    client._latest_forecast_init_dates = MagicMock(return_value={"swissmeteo": "2026-08-06T00"})
+    client._recent_forecast_init_dates = MagicMock(
+        return_value={"swissmeteo": ["2026-08-06T00"]}
+    )
     client._slow_query_api.query = MagicMock(return_value=[_table([
         _record("holfuy-1808", "2026-08-06T00", "swissmeteo", 194.0),
         _record("holfuy-1808", "2026-08-02T18", "swissmeteo", 171.0),
@@ -181,8 +196,8 @@ def test_forecast_snapshot_newest_init_date_wins_regardless_of_row_order():
 
 def test_forecast_snapshot_prefers_swissmeteo_over_open_meteo():
     client = _make_client()
-    client._latest_forecast_init_dates = MagicMock(
-        return_value={"swissmeteo": "2026-08-06T00", "open-meteo": "2026-08-06T06"}
+    client._recent_forecast_init_dates = MagicMock(
+        return_value={"swissmeteo": ["2026-08-06T00"], "open-meteo": ["2026-08-06T06"]}
     )
     # open-meteo has the NEWER init_date, but swissmeteo is the preferred source.
     client._slow_query_api.query = MagicMock(return_value=[_table([
@@ -199,7 +214,9 @@ def test_forecast_snapshot_prefers_swissmeteo_over_open_meteo():
 def test_forecast_snapshot_prefers_reading_closest_to_valid_time():
     """Within one run, the ±30 min window can hold two hourly points."""
     client = _make_client()
-    client._latest_forecast_init_dates = MagicMock(return_value={"swissmeteo": "2026-08-06T00"})
+    client._recent_forecast_init_dates = MagicMock(
+        return_value={"swissmeteo": ["2026-08-06T00"]}
+    )
     client._slow_query_api.query = MagicMock(return_value=[_table([
         _record("holfuy-1808", "2026-08-06T00", "swissmeteo", 150.0, offset_min=-30),
         _record("holfuy-1808", "2026-08-06T00", "swissmeteo", 194.0, offset_min=0),
@@ -216,7 +233,9 @@ def test_snapshot_and_replay_select_the_same_init_date():
     (snapshot) must never come from different model runs.
     """
     client = _make_client()
-    client._latest_forecast_init_dates = MagicMock(return_value={"swissmeteo": "2026-08-06T00"})
+    client._recent_forecast_init_dates = MagicMock(
+        return_value={"swissmeteo": ["2026-08-06T00"]}
+    )
 
     client.query_forecast_snapshot_for_stations(["holfuy-1808"], _VT)
     snapshot_flux = _flux_arg(client._slow_query_api.query)
@@ -230,9 +249,157 @@ def test_snapshot_and_replay_select_the_same_init_date():
     assert clause in replay_flux
 
 
+# ---------------------------------------------------------------------------
+# Gap-fill across runs (v1.23.2).
+#
+# lsmfapi legitimately serves null frames at the ICON-CH1/CH2 seam — CH1's 06Z run
+# populated only to h+18 while CH2 resumed at h+34, leaving 15 consecutive hours of
+# tomorrow blank. The previous run covers exactly those hours, so a value is taken from
+# the newest run that actually HAS it. All three readers share one rule so the arrows and
+# the decision can never disagree.
+# ---------------------------------------------------------------------------
+
+def test_merge_prefers_newest_run_per_field():
+    from lenticularis.database.influx import _merge_forecast_candidates
+
+    merged = _merge_forecast_candidates([
+        {"source": "swissmeteo", "init_date": "2026-08-06T00",
+         "fields": {"wind_direction": 194.0, "wind_gust": 25.2}},
+        {"source": "swissmeteo", "init_date": "2026-08-06T06",
+         "fields": {"wind_direction": 109.0, "wind_gust": 16.2}},
+    ])
+    assert merged["wind_direction"] == 109.0
+    assert merged["wind_gust"] == 16.2
+
+
+def test_merge_backfills_a_null_frame_from_the_previous_run():
+    """The exact prod gap: 06Z has no value for this hour, 00Z does."""
+    from lenticularis.database.influx import _merge_forecast_candidates
+
+    merged = _merge_forecast_candidates([
+        {"source": "swissmeteo", "init_date": "2026-08-06T06",
+         "fields": {"wind_direction": None, "wind_speed": None, "wind_gust": None}},
+        {"source": "swissmeteo", "init_date": "2026-08-06T00",
+         "fields": {"wind_direction": 194.0, "wind_speed": 8.8, "wind_gust": 25.2}},
+    ])
+    assert merged["wind_direction"] == 194.0
+    assert merged["wind_gust"] == 25.2
+    # The run that actually supplied the data is the one reported.
+    assert merged["source"] == "swissmeteo"
+
+
+def test_merge_fills_only_the_gaps_never_overwrites_a_newer_value():
+    from lenticularis.database.influx import _merge_forecast_candidates
+
+    merged = _merge_forecast_candidates([
+        {"source": "swissmeteo", "init_date": "2026-08-06T06",
+         "fields": {"wind_direction": 109.0, "wind_gust": None}},
+        {"source": "swissmeteo", "init_date": "2026-08-06T00",
+         "fields": {"wind_direction": 194.0, "wind_gust": 25.2}},
+    ])
+    assert merged["wind_direction"] == 109.0   # newer run keeps precedence
+    assert merged["wind_gust"] == 25.2         # older run fills only the hole
+
+
+def test_merge_all_null_yields_empty_so_the_hour_is_omitted():
+    from lenticularis.database.influx import _merge_forecast_candidates
+
+    assert _merge_forecast_candidates([
+        {"source": "swissmeteo", "init_date": "2026-08-06T06",
+         "fields": {"wind_direction": None}},
+    ]) == {}
+    assert _merge_forecast_candidates([]) == {}
+
+
+def test_merge_preferred_source_outranks_a_newer_other_source():
+    from lenticularis.database.influx import _merge_forecast_candidates
+
+    merged = _merge_forecast_candidates([
+        {"source": "open-meteo", "init_date": "2026-08-06T12",
+         "fields": {"wind_direction": 20.0}},
+        {"source": "swissmeteo", "init_date": "2026-08-06T00",
+         "fields": {"wind_direction": 194.0}},
+    ])
+    assert merged["wind_direction"] == 194.0
+    assert merged["source"] == "swissmeteo"
+
+
+def test_merge_falls_back_to_other_source_for_a_field_swissmeteo_lacks():
+    from lenticularis.database.influx import _merge_forecast_candidates
+
+    merged = _merge_forecast_candidates([
+        {"source": "open-meteo", "init_date": "2026-08-06T12",
+         "fields": {"wind_direction": 20.0, "precipitation": 1.4}},
+        {"source": "swissmeteo", "init_date": "2026-08-06T00",
+         "fields": {"wind_direction": 194.0, "precipitation": None}},
+    ])
+    assert merged["wind_direction"] == 194.0
+    assert merged["precipitation"] == 1.4
+
+
+def test_snapshot_backfills_the_gap_end_to_end():
+    client = _make_client()
+    client._recent_forecast_init_dates = MagicMock(
+        return_value={"swissmeteo": ["2026-08-06T06", "2026-08-06T00"]}
+    )
+    # 06Z row carries no wind (the null frame); 00Z has the real values.
+    client._slow_query_api.query = MagicMock(return_value=[_table([
+        _record("holfuy-1808", "2026-08-06T06", "swissmeteo", None),
+        _record("holfuy-1808", "2026-08-06T00", "swissmeteo", 194.0),
+    ])])
+
+    result = client.query_forecast_snapshot_for_stations(["holfuy-1808"], _VT)
+
+    assert result["holfuy-1808"]["wind_direction"] == 194.0
+
+
+def test_all_three_readers_share_one_init_date_filter():
+    """
+    Arrows, the decision fallback, and the precomputed horizon must consider the same runs.
+    Verified by asserting all three Flux strings carry both recent init_dates.
+    """
+    client = _make_client()
+    client._recent_forecast_init_dates = MagicMock(
+        return_value={"swissmeteo": ["2026-08-06T06", "2026-08-06T00"]}
+    )
+
+    client.query_forecast_snapshot_for_stations(["s1"], _VT)
+    snapshot_flux = _flux_arg(client._slow_query_api.query)
+
+    client._slow_query_api.query.reset_mock()
+    client.query_forecast_replay(_VT - timedelta(hours=6), _VT + timedelta(hours=6))
+    replay_flux = _flux_arg(client._slow_query_api.query)
+
+    client.query_forecast_for_stations(["s1"], 120)
+    horizon_flux = _flux_arg(client._query_api.query)
+
+    for clause in ('r.init_date == "2026-08-06T06"', 'r.init_date == "2026-08-06T00"'):
+        assert clause in snapshot_flux
+        assert clause in replay_flux
+        assert clause in horizon_flux
+
+
+def test_run_fallback_depth_is_bounded():
+    """Scanning every retained run is what made these queries time out before v1.16."""
+    from lenticularis.database.influx import FORECAST_RUN_FALLBACK_DEPTH
+
+    client = _make_client()
+    many = [f"2026-08-0{d}T{h:02d}" for d in (4, 5, 6) for h in (0, 6, 12, 18)]
+    client._query_api.query = MagicMock(return_value=[_table([
+        _init_record("swissmeteo", d) for d in many
+    ])])
+
+    recent = client._recent_forecast_init_dates()
+
+    assert len(recent["swissmeteo"]) == FORECAST_RUN_FALLBACK_DEPTH
+    assert recent["swissmeteo"] == sorted(many, reverse=True)[:FORECAST_RUN_FALLBACK_DEPTH]
+
+
 def test_forecast_snapshot_naive_valid_time_is_treated_as_utc():
     client = _make_client()
-    client._latest_forecast_init_dates = MagicMock(return_value={"swissmeteo": "2026-08-06T00"})
+    client._recent_forecast_init_dates = MagicMock(
+        return_value={"swissmeteo": ["2026-08-06T00"]}
+    )
     client._slow_query_api.query = MagicMock(return_value=[_table([
         _record("holfuy-1808", "2026-08-06T00", "swissmeteo", 194.0),
     ])])
