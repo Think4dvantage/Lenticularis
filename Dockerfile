@@ -19,14 +19,12 @@ RUN pip install --no-cache-dir --upgrade pip setuptools
 # Install Poetry
 RUN pip install --no-cache-dir poetry==2.1.1
 
-# Copy dependency manifests first (layer caching)
-COPY pyproject.toml poetry.lock* ./
+# Copy dependency manifests first (layer caching). Literal filename, not a glob —
+# a missing poetry.lock must fail the build loudly, not silently fall through.
+COPY pyproject.toml poetry.lock ./
 
 # Install runtime dependencies only (no dev tools in prod image)
-# `poetry lock` regenerates the lockfile from pyproject.toml so the build
-# never fails due to a stale or missing lock file.
 RUN poetry config virtualenvs.create false \
-    && poetry lock \
     && poetry install --only main --no-interaction --no-ansi --no-root
 
 # Copy application source

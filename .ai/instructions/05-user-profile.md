@@ -35,6 +35,17 @@ The user does not write code manually. All code changes go through AI. This mean
 - Do not explain how to manually edit a file — just edit it
 - Do not ask "would you like me to implement this?" after a plan is approved — wait for the explicit instruction
 
+### Always verify current versions
+
+Never rely on training-data knowledge for what the "latest" version of a library, framework,
+runtime, or tool is — that knowledge is stale by construction. Before adding or upgrading any
+dependency (a Python/npm/pub.dev package, a Docker base image, a GitHub Action, a language
+runtime), check the actual latest **stable** release via its registry or official release page
+(PyPI, pub.dev, Docker Hub tags, the GitHub Actions marketplace) and pin to that — do not guess a
+version number from memory. This does not conflict with pinning exact versions (see
+`04-constraints.md` — never use a floating `:latest` tag): pin exact, but let "exact" mean "the
+current latest stable, verified," not a remembered one.
+
 ---
 
 ## Infrastructure Philosophy

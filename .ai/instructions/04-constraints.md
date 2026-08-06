@@ -1,5 +1,9 @@
 # Constraints — What NOT to Do
 
+> Generic, blueprint-owned hard rules. The fixed-bug history behind the Security/Performance/
+> Error-Handling rules below — real incidents, with root causes — lives in
+> `context/security-notes.md`. Read both.
+
 ## AI Files
 
 **All AI-related content lives exclusively in `.ai/`.** Never create tool-specific instruction files such as `CLAUDE.md`, `.cursorrules`, `.github/copilot-instructions.md`, `.windsurfrules`, or any equivalent — not even as thin pointers. Instructions, context, prompts, and plans all go in `.ai/` and nowhere else.
@@ -16,14 +20,8 @@
 
 **Never add npm or a build step.** The frontend is intentionally dependency-free. No webpack, vite, rollup, parcel, or any bundler. No `package.json`.
 
-**Never load a library from a CDN.** Leaflet and Chart.js are self-hosted in `static/vendor/`.
-The CSP in `api/main.py` is `script-src 'self'` / `style-src 'self'`, so any `unpkg.com` or
-`cdn.jsdelivr.net` reference is *blocked by the browser*, not just frowned upon. New libraries
-get downloaded into `static/vendor/<lib>/` and referenced by absolute `/static/…` path.
-
-**Bump the version in `pyproject.toml` whenever static assets change.** `pages.py` cache-busts
-assets with `?v=<app-version>` and `main.py` serves them `immutable, max-age=1y` — the version
-*is* the cache key. Changing an asset without bumping it pins the stale file in browsers for a year.
+**Never load a library from a CDN.** See `context/frontend-notes.md` for where vendored libraries
+live and the exact caching/version-bump mechanism.
 
 ---
 
@@ -43,7 +41,7 @@ All schema changes use raw `ALTER TABLE` statements guarded by `PRAGMA table_inf
 
 ## i18n
 
-**Never hardcode user-visible strings in JS** without a corresponding key in all locale files. All locales (`en.json`, `de.json`, `fr.json`, `it.json`) must be updated simultaneously.
+**Never hardcode user-visible strings in JS** without a corresponding key in all locale files. All locales must be updated simultaneously — see `03-frontend-conventions.md` for the current list.
 
 ---
 
@@ -68,179 +66,63 @@ All schema changes use raw `ALTER TABLE` statements guarded by `PRAGMA table_inf
 
 ---
 
-## Security — Fixed Bugs, Must Not Recur
+## Dependencies
 
-These were real vulnerabilities found and fixed in the security remediation batch. Each has a root cause that is easy to accidentally reintroduce.
-
-### Flux injection (T01)
-
-**Never interpolate user-supplied IDs directly into a Flux query string.**
-
-```python
-# WRONG — SQL/Flux injection
-query = f'|> filter(fn: (r) => r.station_id == "{station_id}")'
-
-# RIGHT — validate first with allowlist, then interpolate a known-safe value
-import re
-if not re.match(r'^[\w\-]{1,64}$', station_id):
-    raise HTTPException(status_code=404)
-query = f'|> filter(fn: (r) => r.station_id == "{station_id}")'
-```
-
-Validation must happen at the router level before the ID reaches `influx.py`. Station IDs and ruleset IDs (UUIDs) both need guards.
-
-### JWT fail-closed (T02)
-
-**The app must refuse to start if `auth.jwt_secret` is empty, too short, or a known placeholder.**
-
-This check lives in `api/main.py` at startup. Never remove it, never bypass it for convenience, never set `jwt_secret` to a short or well-known value in any deployed environment.
-
-### XSS — innerHTML with untrusted data (T03)
-
-**Never assign untrusted data to `element.innerHTML`, `element.outerHTML`, or `document.write()`.**
-
-Use `element.textContent` for plain text. If markup must be rendered (e.g. webcam links), use `sanitizeHTML(str)` (defined in the page's script) to strip everything except a known-safe allowlist of tags and attributes.
-
-```javascript
-// WRONG
-el.innerHTML = station.name;      // XSS if name contains <script>
-
-// RIGHT
-el.textContent = station.name;
-
-// RIGHT for controlled markup
-el.innerHTML = sanitizeHTML(htmlFromServer);
-```
-
-### Webcam URL scheme validation (T03)
-
-**Validate webcam URLs server-side in the Pydantic model — not just in the frontend.**
-
-The `RulesetWebcam` model must reject any URL whose scheme is not `http` or `https`. A missing or `javascript:` scheme is invalid and must raise a `ValueError`.
-
-### OAuth tokens in URL (T05)
-
-**Never put `access_token` or `refresh_token` in a URL query param, hash fragment, or redirect URL.**
-
-The OAuth callback page receives a `code` and exchanges it for tokens via a POST to `/api/auth/oauth/callback`. Tokens are stored in `localStorage` only — never embedded in a URL the browser can log.
-
-### OAuth `email_verified` (T05)
-
-**Always check `provider_data.get("email_verified")` before trusting an OAuth identity.**
-
-An unverified email means the provider could not confirm the user owns that address. Treat unverified as an error — return 400, do not create or log in the user.
+**Never let the Dockerfile's lockfile `COPY` fall back silently to a fresh resolve.** Use
+`COPY pyproject.toml poetry.lock ./` (the literal filename), never a glob like `poetry.lock*` that
+succeeds even when the file is missing. A missing lock must fail the build loudly — silently
+re-resolving lets dependency versions drift under a fixed image tag. Also drop any `poetry lock`
+step that runs before `poetry install` — once the `COPY` is strict, that step exists only to
+re-resolve a stale lock, which is the same drift risk in a different guise.
 
 ---
 
-## Performance — Fixed Bugs, Must Not Recur
+## Security
 
-### Blocking the async event loop (T07, T08)
+**Never interpolate a user-supplied value directly into a query string** (SQL, Flux, or any
+query language built by string formatting). Validate with an allowlist regex first, then
+interpolate the validated value.
 
-**Never call synchronous blocking I/O inside an `async def` function without `asyncio.to_thread()`.**
+**The app must refuse to start if a secret (JWT signing key, API key) is empty, too short, or a
+known placeholder value.** Fail closed at startup — never fall back to a default secret in any
+deployed environment.
 
-InfluxDB client methods (`write_points`, `query`) are synchronous. Calling them directly in an async handler blocks the entire event loop.
+**Never assign untrusted data to `element.innerHTML`, `element.outerHTML`, or `document.write()`**
+in frontend JS. Use `element.textContent` for plain text. If markup must be rendered, sanitize it
+first against a known-safe allowlist of tags/attributes — never trust it raw.
 
-```python
-# WRONG — blocks the event loop
-async def get_latest(station_id: str, ...):
-    data = influx.query_latest(station_id)   # synchronous → stalls all other requests
+**Never put an access or refresh token in a URL** — query param, hash fragment, or redirect
+target. URLs get logged (proxies, browser history, referrer headers). Tokens belong in
+`localStorage` or an HttpOnly cookie, set via a POST response body, never via a redirect URL.
 
-# RIGHT
-async def get_latest(station_id: str, ...):
-    data = await asyncio.to_thread(influx.query_latest, station_id)
-```
-
-This applies to the scheduler too — write calls in `_run_*_collector` must also be wrapped.
-
-### Per-station Influx loop (T09)
-
-**Never loop over stations to fetch Influx data one at a time when a batch method exists.**
-
-The rules evaluator used to call `query_latest(station_id)` for every station in every ruleset. It now calls `query_latest_for_stations(station_ids)` once per evaluation. Any new code that needs latest measurements for multiple stations must use the batch path.
-
-### Unbounded in-memory caches (T10)
-
-**Every module-level cache dict must have a maximum size and a `threading.Lock` guard.**
-
-A cache that grows without bound will eventually OOM the process. Pattern:
-
-```python
-import threading
-_CACHE: dict[str, tuple[Any, float]] = {}
-_CACHE_LOCK = threading.Lock()
-_CACHE_MAX = 512
-
-def _cache_set(key, value):
-    with _CACHE_LOCK:
-        if len(_CACHE) >= _CACHE_MAX:
-            # evict oldest entry
-            oldest = min(_CACHE, key=lambda k: _CACHE[k][1])
-            del _CACHE[oldest]
-        _CACHE[key] = (value, time.monotonic())
-```
+See `context/security-notes.md` for the specific past incidents (T01–T05) these rules trace back
+to, including the exact validation regex and OAuth `email_verified` check this project uses.
 
 ---
 
-## Error Handling — Fixed Bugs, Must Not Recur
+## Performance
 
-### Swallowed exceptions (T18)
+**Never call blocking synchronous I/O inside `async def` without `asyncio.to_thread()`.** This
+includes any synchronous DB/query client used from an async handler or scheduler job — it blocks
+the entire event loop and stalls every concurrent request.
 
-**Never silence exceptions in background tasks or async callbacks.**
+**Never loop over items to fetch data one at a time when a batch method exists.** Use a
+`query_x_for_stations(ids)`-style batch call once instead of a single-ID call per iteration.
 
-```python
-# WRONG — hides the real error
-try:
-    await do_thing()
-except Exception:
-    pass
+**Every module-level cache dict must have a maximum size.** An unbounded cache eventually OOMs
+the process. Bound it and evict (LRU or oldest-first) when full.
 
-# WRONG — logs but continues as if nothing happened
-try:
-    await do_thing()
-except Exception as e:
-    logger.warning("thing failed: %s", e)
-
-# RIGHT — log with full traceback and re-raise (or let it propagate)
-try:
-    await do_thing()
-except Exception:
-    logger.exception("thing failed")
-    raise
-```
-
-Background tasks that swallow exceptions silently stop doing their job with no visible signal.
-
-### Typed error envelope (T12)
-
-**Every error response must leave the app as `{"error": {"code", "message", "details"}}`.** Three
-handlers in `api/main.py` guarantee this — nothing else may return a bare `JSONResponse` for an error.
-
-To attach a *specific* error code, raise `AppException` from `api/errors.py`:
-
-```python
-from lenticularis.api.errors import AppException
-
-raise AppException(404, "ENTITY_NOT_FOUND", "Station not found", {"station_id": station_id})
-```
-
-`code` is the UPPERCASE vocabulary from `07-api-conventions.md`; `details` is a **dict**, not a string.
-
-Raising a plain `HTTPException` is also safe — the `HTTPException` handler in `main.py` maps the
-status onto a code via `_STATUS_TO_CODE` (400→`VALIDATION_FAILED`, 401→`AUTH_REQUIRED`,
-403→`PERMISSION_DENIED`, 404→`ENTITY_NOT_FOUND`, 409→`CONFLICT`, other 5xx→`INTERNAL_ERROR`,
-else `ERROR`) and wraps it in the same envelope. **This is what every router currently does.**
-
-Use `AppException` when the status code alone does not identify the failure (two different 409s,
-a 400 that is not a validation error) or when the frontend needs `details`. Otherwise `HTTPException`
-is fine — the envelope holds either way.
-
-> Not RFC 7807. RFC 7807 is `type`/`title`/`status`/`detail`/`instance` under
-> `application/problem+json`. This envelope is the project's own shape — do not rename it back.
+See `context/security-notes.md` (T07–T10) for the specific incidents and this project's cache
+eviction pattern.
 
 ---
 
-## InfluxDB Write Integrity (T19)
+## Error Handling
 
-**Never write two fields with the same key in a single InfluxDB point.** Flux silently drops one.
+**Never silence an exception in a background task, scheduler job, or async callback.** A
+swallowed exception makes a job stop doing its work with no visible signal — log with
+`logger.exception()` and re-raise (or let it propagate), never `pass` or log-and-continue.
 
-**Dedup guards on `_source` tag must compare values, not just check presence.** A guard that reads `if existing._source` will always be truthy even if `existing._source != new._source` — this was a no-op that let duplicate writes through.
+**Every error response must leave the app as `{"error": {"code", "message", "details"}}`.** See
+`07-api-conventions.md` for the format and `context/security-notes.md` (T12, T18–T19) for the
+current implementation and this project's InfluxDB write-integrity rules.

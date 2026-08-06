@@ -53,16 +53,30 @@ Do not remove existing entries unless they were explicitly deleted this session.
 - Add new backlog items discovered this session
 - Update the current version number if a milestone shipped
 
+### `context/backend-notes.md`, `frontend-notes.md`, `security-notes.md`, `testing-notes.md`
+
+This is where most session discoveries land — not `instructions/`. Write here whenever the
+session surfaced:
+- A new auth dependency, role, or permission rule → `backend-notes.md`
+- A fixed bug with a root cause worth guarding against → `security-notes.md`
+- A new frontend pattern, asset-pipeline detail, or logging convention → `frontend-notes.md`
+- A new test gotcha, fixture pattern, or coverage change → `testing-notes.md`
+
+If the matching file doesn't exist yet, create it (see `00-ai-usage.md` — "Framework vs Project
+Knowledge") and add a one-line cross-reference from the relevant `instructions/0X-*.md` file.
+
 ---
 
-## Step 3 — Update `.ai/instructions/` (if needed)
+## Step 3 — Update `.ai/instructions/` (rare)
 
-Only update instruction files if a convention genuinely changed:
-- New auth dependency introduced → `02-backend-conventions.md`
-- New hard rule discovered → `04-constraints.md`
-- New frontend pattern established → `03-frontend-conventions.md`
+`instructions/00-ai-usage.md` and `02`–`07` are blueprint-owned — `update-blueprint.md`
+overwrites them. Only touch them when something **generic and reusable by any project on this
+blueprint** changed, e.g. a new section heading, a cross-reference to a new context file, or a
+pattern that has nothing project-specific in it. If what changed is Lenticularis-specific, it
+belongs in Step 2's `context/*-notes.md` files instead, not here.
 
-Do not rewrite instructions just to add detail. Update only when behavior should change.
+Do not rewrite instructions just to add detail. Update only when the generic pattern itself
+should change.
 
 ---
 
@@ -111,7 +125,8 @@ Before declaring the session closed:
 
 - [ ] `context/architecture.md` reflects all new tables, routes, and measurements
 - [ ] `context/features.md` reflects shipped milestones and updated backlog
-- [ ] Instruction files updated if any convention changed
+- [ ] `context/*-notes.md` files reflect any new project-specific conventions or fixed bugs
+- [ ] Instruction files updated only if a genuinely generic, blueprint-reusable pattern changed
 - [ ] README.md (and PLANNING.md if present) synced via `update-readme.md`
 - [ ] In-progress tasks have a clear resume point in `tasks.md` or `RESUME.md`
 - [ ] No secrets or credentials appear in any committed file

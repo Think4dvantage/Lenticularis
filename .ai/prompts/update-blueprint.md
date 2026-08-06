@@ -13,8 +13,8 @@ Not all `.ai/` files are updated. The blueprint owns the **framework**. The proj
 
 | Category | Files | Rule |
 |---|---|---|
-| **Framework** — owned by blueprint | `instructions/00-ai-usage.md`, `instructions/02-backend-conventions.md`, `instructions/03-frontend-conventions.md`, `instructions/04-constraints.md`, `instructions/05-user-profile.md`, `instructions/06-testing-conventions.md`, `instructions/07-api-conventions.md`, all `prompts/*.md` | Always overwrite with latest from repo |
-| **Project data** — owned by this project | `instructions/01-project-overview.md`, `context/architecture.md`, `context/features.md` | Never touch — these are project-specific |
+| **Framework** — owned by blueprint | `instructions/00-ai-usage.md`, `instructions/02-backend-conventions.md`, `instructions/03-frontend-conventions.md`, `instructions/04-constraints.md`, `instructions/05-user-profile.md`, `instructions/06-testing-conventions.md`, `instructions/07-api-conventions.md`, `instructions/08-operability.md`, all `prompts/*.md` | Always overwrite with latest from repo |
+| **Project data** — owned by this project | `instructions/01-project-overview.md`, `context/architecture.md`, `context/features.md`, `context/*-notes.md` (project-specific conventions companion to a framework file — see `00-ai-usage.md`) | Never touch — these are project-specific |
 
 ---
 
@@ -101,11 +101,15 @@ Summary line: `N files updated, N added, N unchanged, N failed, N need review`
 
 ## Step 5 — Check for Conflicts with Project Data
 
-After updating, read the project data files (`01-project-overview.md`, `context/architecture.md`, `context/features.md`) and skim the updated `00-ai-usage.md` and `02-backend-conventions.md`.
+After updating, read the project data files (`01-project-overview.md`, `context/architecture.md`, `context/features.md`, `context/*-notes.md`) and skim the updated `00-ai-usage.md` and `02-backend-conventions.md`.
 
 If the updated framework references patterns, conventions, or sections that no longer match the project data files, flag them:
 
 > **Conflict:** `context/architecture.md` has no "Deployment" section but `00-ai-usage.md` now references it. Consider updating the project file to match the new blueprint structure.
+
+Also check that every `context/*-notes.md` file's companion `instructions/0X-*.md` file still has a
+cross-reference line pointing to it — a blueprint overwrite can silently drop that line if the
+generic file's section structure changed. Re-add it if missing.
 
 Do not auto-fix conflicts. Report them and ask if the user wants to address them.
 

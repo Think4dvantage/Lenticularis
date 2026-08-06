@@ -1,5 +1,8 @@
 # Backend Conventions
 
+> Generic, blueprint-owned patterns. Lenticularis's own role model, error vocabulary, and
+> collector rules live in `context/backend-notes.md` — read both.
+
 ## New API Router
 
 Create `src/lenticularis/api/routers/<domain>.py`, register it in `main.py`.
@@ -80,7 +83,8 @@ def _set_sqlite_pragma(dbapi_conn, _rec):
 ## Testing Conventions
 
 See `06-testing-conventions.md` for the full strategy.
-- **Backend**: Pytest in `tests/backend/`. Use `httpx.AsyncClient`.
+- **Backend**: Pytest in `tests/backend/`. Use `httpx.AsyncClient` with
+  `transport=ASGITransport(app=...)` — the bare `app=` kwarg was removed in httpx 0.28.
 - **Frontend**: Playwright in `tests/frontend/`.
 
 ---
@@ -97,18 +101,12 @@ Import from `lenticularis.api.dependencies`:
 
 | Dependency | Who passes |
 |---|---|
-| `get_current_user` | Any user with a valid token **and `is_active`**; 401 otherwise |
-| `get_current_user_optional` | Same, but returns `None` instead of raising. For endpoints with both a public and an authenticated view. **Does not check `is_active`** — see the caveat below |
-| `require_pilot` | **Denylist, not an allowlist** — rejects `customer` and `org_pilot` only. `pilot`, `admin`, *and* `org_admin` all pass. Guards write operations |
-| `require_admin` | `role == "admin"` only |
-| `require_org_admin` | `admin` bypasses; otherwise `org_admin` **with `org_id` set** |
-| `require_org_member` | `admin` bypasses; otherwise `org_admin` or `org_pilot` **with `org_id` set** |
+| `get_current_user` | Any logged-in user |
+| `require_admin` | `admin` only |
 
-System `admin` bypasses both org guards. All rejections are 403 except `get_current_user`'s 401.
-
-> **Caveat:** `get_current_user_optional` resolves the user without an `is_active` check, so a
-> deactivated account still returns a `User` there while `get_current_user` 401s. Do not use it to
-> guard anything that depends on the account being live.
+See `context/backend-notes.md` for the full role table (`require_pilot`, `require_org_admin`,
+`require_org_member`, and the `get_current_user_optional` caveat) — add new role-based
+dependencies there as they are introduced.
 
 ---
 
@@ -116,11 +114,33 @@ System `admin` bypasses both org guards. All rejections are 403 except `get_curr
 
 Add new keys to `config.py` Pydantic models **and** to `config.yml.example`. Never read `os.environ` directly — always go through `get_config()`.
 
+**Resolve config at the call site, not at import time or in a module-level global.** A shared/base
+module that calls `get_config()` itself binds its own reference to that name — a test that
+`monkeypatch`s `get_config()` on the *caller's* module namespace does not affect it, and the patch
+silently does nothing. Take the resolved value as a parameter instead, passed in by the caller
+that already went through `get_config()`. See `06-testing-conventions.md` for the test-side half
+of this.
+
 ---
 
 ## Scheduler Jobs
 
 Add to `CollectorScheduler` in `scheduler.py`. Use `AsyncIOScheduler` + `IntervalTrigger`. Track health in `_collector_health` dict.
+
+**Guard every job against overlapping runs with an `asyncio.Lock`.** If a trigger fires while the
+previous run of the same job is still active, skip and log — never let two runs of the same
+collector execute concurrently:
+
+```python
+_widget_lock = asyncio.Lock()
+
+async def _run_widget_collector() -> None:
+    if _widget_lock.locked():
+        logger.info("widget collection already in progress — skipping trigger")
+        return
+    async with _widget_lock:
+        ...
+```
 
 ---
 
@@ -156,50 +176,24 @@ The same rule applies to scheduler job methods that call influx `write_*`.
 
 ### Batch before looping
 
-Never call `influx.query_latest(station_id)` in a per-station loop. Use `query_latest_for_stations(list[str])` once. See `rules/evaluator.py` for the canonical pattern.
+Never call a single-ID query method in a per-station loop. Use a `query_x_for_stations(ids)`
+batch method once instead. See `context/backend-notes.md` for this project's canonical example.
 
 ---
 
 ## Error Responses
 
-All errors leave the app as `{"error": {"code", "message", "details"}}`. Handlers in `api/main.py`
-enforce this for `AppException`, `HTTPException`, and `RequestValidationError` alike.
-
-Raise `AppException` from `api/errors.py` when you need a specific code or structured `details`:
-
-```python
-from lenticularis.api.errors import AppException
-
-raise AppException(404, "ENTITY_NOT_FOUND", "Station not found", {"station_id": station_id})
-```
-
-`code` is the UPPERCASE vocabulary from `07-api-conventions.md`; `details` is a dict.
-
-A plain `HTTPException` is also acceptable — `main.py` derives the code from the status
-(`_STATUS_TO_CODE`) and wraps it identically. Every router currently takes this path. Reach for
-`AppException` only when the status alone does not identify the failure, or the frontend needs
-`details`. See `04-constraints.md` for the full rule.
+All errors leave the app as `{"error": {"code", "message", "details"}}`, enforced globally by
+handlers in `api/main.py`. Raise `AppException` from `api/errors.py` for a specific code or
+structured `details`; a plain `HTTPException` is also fine — see `07-api-conventions.md` for the
+format and `context/backend-notes.md` for the current implementation detail.
 
 ---
 
 ## Collector Conventions
 
-New collector checklist:
+New collector checklist — see `context/backend-notes.md` for the full, current version:
 - Subclass `BaseCollector` from `collectors/base.py`.
-- Import `to_float` and `normalize_wind_dir` from `collectors/utils.py` — never redefine local copies.
-- Use `self._collect_concurrent(items, fn, limit=8)` for bounded parallel fetches (wraps asyncio gather with a semaphore).
-- Log every fetch with elapsed time and result count.
-- Use `asyncio.to_thread()` for any synchronous write to InfluxDB.
-- Register the class in `_COLLECTOR_REGISTRY` in `scheduler.py`, add a config block to
-  `config.yml.example`, and add the network to `NETWORK_PRIORITY` in `services/dedup.py`.
-- **Normalise units to the unified schema.** `WeatherMeasurement` is km/h, °C, %, hPa. Convert at
-  the collector boundary (e.g. `jfb.py` multiplies knots by 1.852) — never store a foreign unit.
-- **Map only what the schema already holds.** If a source field has no `WeatherMeasurement` field,
-  drop it — do not widen the model to fit one source. `jfb.py` drops `TD`/`DIFFTD` (derivable from
-  temperature + humidity) and `G1h` (1-hour gust ≠ `wind_gust`, which is the 10-min peak everywhere
-  else — storing it there would silently break cross-network comparability).
-- **Never synthesise a field the source does not measure.** JFB reports QFE only; `pressure_qff` is
-  left `None`, because QFF is not derivable from QFE + elevation (that is QNH) and a fake value
-  would corrupt the föhn pressure-gradient comparison. `fga.py` does the same.
-- **Guard against stale data.** Skip and `WARNING` any reading older than ~2 h. Some APIs return
-  hours-old data with a `200 OK` and no error (see the `currentDateTime` note in `jfb.py`).
+- Normalise units to the unified schema at the collector boundary; never store a foreign unit.
+- Map only what the schema already holds; never synthesise a field the source does not measure.
+- Guard against stale data.
