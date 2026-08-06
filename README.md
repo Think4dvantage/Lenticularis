@@ -124,7 +124,7 @@ tests/backend/               # pytest suite (auth, rules, dedup, security, colle
 
 ## Development Status
 
-**Current version: v1.23.0** — published as `ghcr.io/Think4dvantage/Lenticularis:1.23.0` (and `:latest`).
+**Current version: v1.23.1** — published as `ghcr.io/Think4dvantage/Lenticularis:1.23.1` (and `:latest`).
 
 | Milestone | Status |
 |---|---|
@@ -170,6 +170,7 @@ tests/backend/               # pytest suite (auth, rules, dedup, security, colle
 | v1.22.5 — Fix: ARM64 Docker build failure (pip upgrade before Poetry) | ✅ Shipped |
 | v1.22.6 — Fix: 135x forecast-snapshot query slowdown (contains() → OR-chain equality) | ✅ Shipped |
 | v1.23.0 — Reactive ruleset evaluation + precomputed forecast horizon | ✅ Shipped |
+| v1.23.1 — Fix: forecast snapshot served a stale model run, contradicting the map arrows | ✅ Shipped |
 
 Remaining work items are tracked as an unordered backlog in [.ai/context/features.md](.ai/context/features.md).
 

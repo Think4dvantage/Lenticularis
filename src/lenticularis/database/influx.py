@@ -281,15 +281,30 @@ from(bucket: "{self._cfg.bucket}")
         return results
 
     def query_forecast_snapshot_for_stations(self, station_ids: list[str], valid_time: datetime) -> dict[str, dict]:
-        """Fetch the most recent forecast for specific stations at ``valid_time``.
+        """Fetch the freshest forecast for specific stations at ``valid_time``.
 
-        Scans ±30 minutes around ``valid_time`` in ``weather_forecast`` and returns
-        the last written record per station (= newest init_time = freshest model run).
+        Scans ±30 minutes around ``valid_time`` in ``weather_forecast``, restricted to
+        the **newest model run per source** — the same ``_latest_forecast_init_dates()``
+        selection ``query_forecast_replay`` uses. That shared selection is the point: the
+        map's wind arrows and the rule set decision shown for the same replay frame must
+        come from the same model run, or the pilot sees an arrow and a traffic light that
+        disagree.
+
         Returns a dict keyed by ``station_id`` with the same field shape as
         ``query_latest_for_stations``.
+
+        ⚠️ Do not reintroduce ``|> last()`` here. ``init_date`` is a *tag*, so every model
+        run is its own series and ``last()`` returns one record **per run**, not the newest
+        run. Combined with a "keep whichever entry has the most fields" tiebreak (all runs
+        carry the same fields, so a strict ``>`` never replaced the first row seen, and
+        tables arrive in ascending tag order) this silently resolved to the **oldest**
+        retained run — observed in prod serving a four-day-old forecast while the arrows
+        showed the current one.
         """
         if not station_ids:
             return {}
+        if valid_time.tzinfo is None:
+            valid_time = valid_time.replace(tzinfo=timezone.utc)
         # OR-chain of equality, NOT contains(value:, set:) — measured 135x slower
         # (9.3s vs 69ms) against weather_forecast, whose per-hour init_date tag
         # fragments it into a huge number of series that contains() cannot use the
@@ -298,6 +313,22 @@ from(bucket: "{self._cfg.bucket}")
         station_filter = " or ".join(
             f'r.station_id == "{_flux_str(sid)}"' for sid in station_ids
         )
+
+        latest = self._latest_forecast_init_dates()
+        if latest:
+            init_date_clauses = " or ".join(
+                f'r.init_date == "{_flux_str(d)}"' for d in set(latest.values())
+            )
+            init_date_filter = f"({init_date_clauses})"
+        else:
+            # Same fallback as query_forecast_replay: no run in the last 12 h.
+            three_days_ago = (datetime.now(timezone.utc) - timedelta(days=3)).strftime("%Y-%m-%d")
+            init_date_filter = f'not exists r.init_date or r.init_date >= "{three_days_ago}"'
+            logger.warning(
+                "query_forecast_snapshot_for_stations: no recent init_dates found, "
+                "using 3-day fallback"
+            )
+
         start = (valid_time - timedelta(minutes=30)).isoformat()
         stop  = (valid_time + timedelta(minutes=31)).isoformat()
         flux = f"""
@@ -305,7 +336,7 @@ from(bucket: "{self._cfg.bucket}")
   |> range(start: {start}, stop: {stop})
   |> filter(fn: (r) => r._measurement == "{MEASUREMENT_FORECAST}")
   |> filter(fn: (r) => {station_filter})
-  |> last()
+  |> filter(fn: (r) => {init_date_filter})
   |> pivot(rowKey: ["_time", "station_id", "network", "source", "model", "init_date"],
            columnKey: ["_field"], valueColumn: "_value")
 """
@@ -315,15 +346,18 @@ from(bucket: "{self._cfg.bucket}")
             logger.error("InfluxDB query_forecast_snapshot_for_stations error: %s", exc)
             return {}
 
+        _PREFERRED_SOURCE = "swissmeteo"
         results: dict[str, dict] = {}
+        ranks: dict[str, tuple] = {}
         for table in tables:
             for record in table.records:
                 sid = record.values.get("station_id", "")
                 if not sid:
                     continue
+                ts = record.get_time()
                 entry: dict = {
                     "station_id":  sid,
-                    "timestamp":   record.get_time(),
+                    "timestamp":   ts,
                     "is_forecast": True,
                 }
                 entry.update({
@@ -331,8 +365,15 @@ from(bucket: "{self._cfg.bucket}")
                     if not k.startswith("_")
                     and k not in ("result", "table", "station_id", "network", "model", "init_time")
                 })
-                # Keep the entry with the most fields (newest init_time written last)
-                if sid not in results or len(entry) > len(results[sid]):
+                # Explicit precedence — preferred source, then newest model run, then the
+                # reading closest to valid_time. Never "whichever row arrived first".
+                rank = (
+                    1 if record.values.get("source", "") == _PREFERRED_SOURCE else 0,
+                    record.values.get("init_date", "") or "",
+                    -abs((ts - valid_time).total_seconds()),
+                )
+                if sid not in ranks or rank > ranks[sid]:
+                    ranks[sid] = rank
                     results[sid] = entry
         return results
 

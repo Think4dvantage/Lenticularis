@@ -1,6 +1,54 @@
 # Feature History & Backlog
 
-## Current Version: v1.23.0 (shipped)
+## Current Version: v1.23.1 (shipped)
+
+### Fix: forecast snapshot served a stale model run, contradicting the map arrows (`database/influx.py`)
+
+Reported live right after the v1.23.0 deploy: "Amisbühl oben" read red/orange when replaying
+tomorrow, even though the station's wind arrow pointed into the green arc. Root-caused against
+prod data — and **v1.23.0 was not the cause; it exposed a pre-existing bug.**
+
+`query_forecast_snapshot_for_stations` was serving a **four-day-old model run**
+(`init_date=2026-08-02T18`) while the map's arrows showed the current one:
+
+| path | init_date used | dir @ 2026-08-07 14:00Z |
+|---|---|---|
+| arrow (`query_forecast_replay`) | latest (`2026-08-06T00`) | 194° |
+| precompute (`query_forecast_for_stations`) | latest | 194° ✅ agrees |
+| snapshot (`query_forecast_snapshot_for_stations`) | **oldest retained** (`2026-08-02T18`) | **171°** ❌ |
+
+`init_date` is a *tag*, so every model run is its own series: `|> last()` returned one record
+**per run**, not the newest run. The Python tiebreak then kept "whichever entry has the most
+fields" — every run carries the same fields, so a strict `>` never replaced the first row seen,
+and Flux returns tables in ascending tag order. Net effect: **the oldest retained run won.** The
+code comment claimed "newest init_time written last", which is not what that query does.
+
+Why v1.23.0 surfaced it: before then, replay marker colours came from this snapshot query (stale,
+171° → green). v1.23.0 routed them through the precomputed horizon, which uses
+`query_forecast_for_stations` (fresh, 194° → red). The decision changed because it started being
+**correct** — the green had been computed from a 4-day-old forecast that disagreed with the arrow
+the pilot was looking at.
+
+| Change | Detail |
+|---|---|
+| `query_forecast_snapshot_for_stations` — init_date filter | Now restricts the pivot to the newest run per source via `_latest_forecast_init_dates()`, the **same** selection `query_forecast_replay` uses. Arrow/decision agreement is now structural, not coincidental. Same 3-day fallback when no run landed in 12 h |
+| `|> last()` **removed** | It was the mechanism behind the stale pick. A docstring warning records why it must not come back |
+| Explicit selection precedence | `(preferred source, newest init_date, closest reading to valid_time)` — replaces "whichever row arrived first". Naive `valid_time` is normalised to UTC |
+| Two-step, like replay | Cheap `init_date` lookup on the fast (10 s) client; the pivot stays on the slow (60 s) client — the v1.22.2 timeout protection is unchanged |
+| `tests/backend/test_influx_query_clients.py` | +8 tests incl. the exact prod failure (stale row first → newest must still win), row-order independence, source preference, and **snapshot and replay selecting the same `init_date`**. Suite: 228 → **236** |
+
+**Verified against prod before tagging** (read-only, new logic run inline): arrow-vs-old
+mismatched **11 of 15** flyable hours; arrow-vs-new mismatched **0 of 15**. The precompute path was
+separately confirmed at **0 divergences** from the arrow, so it needed no change — the newest run
+writes rows even for null frames, so it wins the dedup rather than back-filling from an older run.
+
+⚠️ **Amisbühl stays red for tomorrow, and that is correct.** The current forecast gives 194°
+(outside the 90–180° green arc) with gusts ~25 km/h (the orange arcs cap gust at 15, green at 20).
+Separately, the `2026-08-06T06` run has **null wind_direction for 2026-08-07 06:00–15:00Z** — the
+documented lsmfapi h+8…h+33 null hole. Those hours legitimately show no arrow and evaluate red;
+that is upstream data absence, not a Lenticularis bug.
+
+## Previous Version: v1.23.0 (shipped)
 
 ### Reactive Ruleset Evaluation (`specs/009-reactive-ruleset-evaluation`)
 

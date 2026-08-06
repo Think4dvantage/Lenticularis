@@ -158,6 +158,33 @@ call sites still in `influx.py` all target `weather_data` only. Re-check this if
 
 ---
 
+### ⚠️ All forecast reads must select the same model run (v1.23.1)
+
+`init_date` is a **tag**, so every model run is a separate series and `weather_forecast` retains
+many runs for the same `valid_time`. Any query that does not explicitly pin a run can silently
+serve a stale one — and if two queries pin differently, the UI contradicts itself.
+
+**Invariant: everything that renders or decides on a forecast moment resolves the run through
+`_latest_forecast_init_dates()`.** Three readers, one selection:
+
+| Reader | Used by |
+|---|---|
+| `query_forecast_replay` | map wind arrows in replay |
+| `query_forecast_snapshot_for_stations` | `run_forecast_evaluation_at` (replay decision fallback), `GET /api/foehn/forecast` |
+| `query_forecast_for_stations` | `run_forecast_evaluation` (the precomputed horizon), station forecast charts |
+
+`query_forecast_for_stations` reaches back 3 days rather than pinning one run, but its per-`valid_time`
+dedup keeps the newest `init_time` — verified in prod at **0 divergences** from the arrow, because the
+newest run writes a row even when a frame's fields are null, so it wins the dedup instead of
+back-filling from an older run. If that upstream behaviour ever changes (null frames written as
+*absent rows*), this function would start filling holes from older runs and drift from the arrow —
+re-verify before assuming agreement.
+
+**Never resolve a run with `|> last()`.** It returns the last point *per series*, i.e. one record per
+`init_date`, not the newest run. Paired with a "keep the entry with the most fields" tiebreak this
+resolved to the **oldest** retained run and shipped a four-day-old forecast to the rules engine
+while the arrows showed the current one (fixed v1.23.1; see `features.md`).
+
 ## API Contracts
 
 ### Stations
