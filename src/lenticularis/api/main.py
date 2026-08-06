@@ -173,14 +173,29 @@ async def lifespan(app: FastAPI):
     )
     app.state.scheduler = scheduler
 
-    # Wire post-run hooks (replaces monkey-patching)
-    scheduler.on_collector_run = _make_registry_updater(
-        app.state.station_registry, app.state.display_registry, app.state.virtual_members, dedup_distance_m
+    # Wire post-run hooks (replaces monkey-patching).
+    # ⚠️ Each hook is a SINGLE callable slot, not a listener list — a second assignment
+    # silently discards the first. Everything that must run after a collector completes is
+    # composed into one callback here (specs/009 §2.1).
+    scheduler.on_collector_run = _compose_collector_hook(
+        _make_registry_updater(
+            app.state.station_registry, app.state.display_registry,
+            app.state.virtual_members, dedup_distance_m,
+        ),
+        scheduler,
     )
-    scheduler.on_forecast_run = _make_forecast_rewarmer(influx, app.state.display_registry)
+    scheduler.on_forecast_run = _compose_forecast_hook(
+        _make_forecast_rewarmer(influx, app.state.display_registry),
+        scheduler,
+    )
 
     await scheduler.start()
     logger.info("Startup complete — API is ready")
+
+    # FR-008: one evaluation pass over every rule set at boot, so nothing shows an
+    # indefinitely stale decision after a restart while waiting for its first data event.
+    # Backgrounded — it must not add to startup latency.
+    asyncio.get_event_loop().create_task(scheduler.evaluate_rulesets())
 
     # Warm the replay cache in the background so the first user sees instant day-button responses.
     asyncio.get_event_loop().create_task(warm_replay_cache(influx, app.state.display_registry))
@@ -263,6 +278,62 @@ def _make_forecast_rewarmer(influx, display_registry: dict):
                 n,
             )
             asyncio.get_event_loop().create_task(warm_replay_cache(influx, display_registry))
+
+    return _on_forecast_run
+
+
+def _compose_collector_hook(registry_updater, scheduler):
+    """
+    Run the registry updater, then reactively re-evaluate the rule sets that depend on
+    the stations this collector just reported (FR-001).
+
+    Both steps are best-effort and independent: a registry-update failure must not stop
+    evaluation, and vice versa. Failures are logged with a full traceback and never
+    silently swallowed (``04-constraints.md``).
+    """
+    _log = logging.getLogger(__name__)
+
+    async def _on_collector_run(collector):
+        await registry_updater(collector)
+        try:
+            stations = await collector.get_stations()
+            station_ids = {s.station_id for s in stations}
+            if station_ids:
+                await scheduler.evaluate_rulesets(
+                    station_ids, trigger=collector.__class__.__name__
+                )
+        except Exception:
+            _log.exception("Reactive ruleset evaluation after collector run failed")
+
+    return _on_collector_run
+
+
+def _compose_forecast_hook(rewarmer, scheduler):
+    """
+    Re-warm the replay cache, then recompute and store the whole forecast horizon for
+    every rule set depending on this collector's stations (FR-002, FR-002a).
+
+    Gated on the same "the run actually wrote something" condition the rewarmer uses —
+    a failed forecast run has no new data to react to.
+
+    Unlike an observation collector, a forecast collector has no ``get_stations()``: it
+    forecasts for whatever the scheduler's station registry holds (see
+    ``_run_forecast_collector``). The affected station set is therefore resolved inside
+    ``evaluate_rulesets_forecast`` from that same registry, not from the collector.
+    """
+    _log = logging.getLogger(__name__)
+
+    async def _on_forecast_run(collector, horizon_hours, health):
+        await rewarmer(collector, horizon_hours, health)
+        if health.get("status") != "ok" or (health.get("last_measurement_count") or 0) <= 0:
+            return
+        try:
+            await scheduler.evaluate_rulesets_forecast(
+                horizon_hours=horizon_hours,
+                trigger=collector.__class__.__name__,
+            )
+        except Exception:
+            _log.exception("Reactive forecast evaluation after forecast run failed")
 
     return _on_forecast_run
 

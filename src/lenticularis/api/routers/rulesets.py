@@ -19,9 +19,10 @@ POST   /api/rulesets/{id}/clone       — clone a public rule set
 from __future__ import annotations
 
 import asyncio
+import json
 import uuid
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
@@ -201,6 +202,74 @@ def create_ruleset(
 # Evaluate — compute current GREEN/ORANGE/RED decision from live station data
 # ---------------------------------------------------------------------------
 
+# A scrub can land on any minute; stored forecast decisions are hourly. Bracket the
+# request the same ±30 min the live snapshot query uses, so both paths resolve the
+# same forecast hour.
+_FORECAST_DECISION_WINDOW = timedelta(minutes=30)
+
+
+def _precomputed_forecast_decision(rs: RuleSet, influx, at_time: datetime) -> Optional[dict]:
+    """
+    Return the stored forecast decision nearest *at_time*, or ``None`` if there is none.
+
+    Reads the horizon that reactive evaluation precomputes on every forecast collector run
+    (specs/009), so replay does not re-evaluate live once per frame. ``None`` means "not
+    precomputed" and the caller must fall back — never treat it as a decision.
+    """
+    if at_time.tzinfo is None:
+        at_time = at_time.replace(tzinfo=timezone.utc)
+    try:
+        rows = influx.query_forecast_decisions_for_ruleset(
+            rs.id,
+            at_time - _FORECAST_DECISION_WINDOW,
+            at_time + _FORECAST_DECISION_WINDOW,
+        )
+    except Exception:
+        logger.exception("Precomputed forecast decision lookup failed for ruleset %s", rs.id)
+        return None
+    if not rows:
+        return None
+
+    def _distance(row: dict) -> float:
+        try:
+            vt = datetime.fromisoformat(str(row.get("valid_time")).replace("Z", "+00:00"))
+        except (TypeError, ValueError):
+            return float("inf")
+        if vt.tzinfo is None:
+            vt = vt.replace(tzinfo=timezone.utc)
+        return abs((vt - at_time).total_seconds())
+
+    row = min(rows, key=_distance)
+    if _distance(row) == float("inf") or not row.get("decision"):
+        return None
+
+    try:
+        condition_results = json.loads(row.get("condition_results_json") or "[]")
+    except (TypeError, ValueError):
+        logger.warning("Unparseable stored condition_results for ruleset %s", rs.id)
+        condition_results = []
+
+    # ``no_data_stations`` is not persisted — write_decisions_batch stores only decision and
+    # condition_results. Derive it: a station is unreportable when every condition
+    # referencing it came back without a value. That reproduces the live path in the case
+    # that actually matters (a station missing from the forecast snapshot entirely).
+    values_by_station: dict[str, list] = {}
+    for cr in condition_results:
+        station_id = cr.get("station_id")
+        if station_id:
+            values_by_station.setdefault(station_id, []).append(cr.get("actual_value"))
+    no_data = sorted(
+        sid for sid, values in values_by_station.items() if all(v is None for v in values)
+    )
+
+    return {
+        "decision":          row["decision"],
+        "evaluated_at":      at_time.isoformat(),
+        "condition_results": condition_results,
+        "no_data_stations":  no_data,
+    }
+
+
 def _evaluate_at(
     rs: RuleSet,
     influx,
@@ -213,7 +282,8 @@ def _evaluate_at(
 
     - No ``at_time``: live station data, decision written to InfluxDB.
     - ``at_time`` set, ``forecast`` false: observed data at that moment (read-only).
-    - ``at_time`` set, ``forecast`` true: forecast data for that ``valid_time`` (read-only).
+    - ``at_time`` set, ``forecast`` true: the precomputed forecast decision for that
+      ``valid_time`` if one exists, otherwise evaluated live (read-only).
 
     Shared by the primary rule set and any linked landing rulesets so both are evaluated in
     the same mode — see specs/007-replay-aware-ruleset-decisions.
@@ -224,6 +294,14 @@ def _evaluate_at(
         write_decision(rs, result, influx)
         return result
     if forecast:
+        # Precomputed horizon first (specs/009) — this is what keeps replay Play from
+        # waiting on a fresh InfluxDB round-trip per frame.
+        precomputed = _precomputed_forecast_decision(rs, influx, at_time)
+        if precomputed is not None:
+            return precomputed
+        # ⚠️ Do NOT remove this fallback. A rule set created between two forecast collector
+        # runs, or one whose horizon write failed, has nothing stored yet and must still
+        # resolve on demand (specs/009 §7.2).
         from lenticularis.rules.evaluator import run_forecast_evaluation_at
         return run_forecast_evaluation_at(rs, influx, at_time)
     from lenticularis.rules.evaluator import run_evaluation_at

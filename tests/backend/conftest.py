@@ -62,7 +62,44 @@ _TEST_CONFIG = MainConfig(
 # Fake InfluxDB client — all queries return empty/None by default
 # ---------------------------------------------------------------------------
 
+class RecordingWriteApi:
+    """
+    Captures points instead of writing them.
+
+    ``write_decision`` / ``write_decisions_batch`` reach into ``influx._write_api`` and
+    ``influx._cfg`` directly, inside a ``try/except`` that only logs.  Without these two
+    attributes a write raises ``AttributeError`` internally and is silently discarded —
+    so a test asserting "the forecast horizon was written" would pass having written
+    nothing.  See specs/009 tasks.md D5.
+    """
+
+    def __init__(self):
+        self.points: list = []
+
+    def write(self, bucket=None, org=None, record=None):
+        if record is None:
+            return
+        if isinstance(record, list):
+            self.points.extend(record)
+        else:
+            self.points.append(record)
+
+
+class FakeInfluxConfig:
+    bucket = "test-bucket"
+    org = "test-org"
+
+
 class FakeInflux:
+    def __init__(self):
+        self._write_api = RecordingWriteApi()
+        self._cfg = FakeInfluxConfig()
+
+    @property
+    def written_points(self) -> list:
+        """Points captured by the recording write api, for assertions."""
+        return self._write_api.points
+
     def query_latest(self, station_id: str):
         return None
 
@@ -111,6 +148,11 @@ class FakeInflux:
         # background task needing a real engine that init_db() never built here.
         # A long-lived rule set with existing history is the representative default.
         return [{"timestamp": "2020-01-01T00:00:00+00:00", "decision": "green"}]
+
+    def query_forecast_decisions_for_ruleset(self, ruleset_id, start, end):
+        # Empty by default = "no precomputed horizon", so the router falls through to
+        # the live forecast path. Tests exercising a cache hit override this.
+        return []
 
     def close(self):
         pass

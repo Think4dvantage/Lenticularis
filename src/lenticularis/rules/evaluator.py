@@ -69,7 +69,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional
 
-from lenticularis.database.influx import InfluxClient
+from lenticularis.database.influx import MEASUREMENT_DECISIONS, InfluxClient
 from lenticularis.database.models import RuleCondition, RuleSet
 
 logger = logging.getLogger(__name__)
@@ -938,14 +938,20 @@ def write_decisions_batch(
     ruleset: RuleSet,
     results: list[tuple[str, str, list[dict]]],
     influx: InfluxClient,
+    measurement: str = MEASUREMENT_DECISIONS,
 ) -> None:
     """
-    Write a batch of historical evaluation decisions to InfluxDB.
+    Write a batch of evaluation decisions to InfluxDB.
 
     Each entry in *results* is a ``(timestamp_iso, decision, condition_results)``
     tuple as returned by ``run_history_backfill``.  Each point is written with
-    its original historical timestamp so the decision-history chart is populated
-    back in time.
+    its original timestamp so the decision-history chart is populated back in time.
+
+    *measurement* defaults to the observed-history measurement.  Reactive forecast
+    evaluation passes ``MEASUREMENT_DECISIONS_FORECAST`` to store a whole precomputed
+    forecast horizon instead — kept in a separate measurement so a future ``valid_time``
+    decision can never collide with the observed decision later recorded for that same
+    hour (specs/009 §2.5).
     """
     from influxdb_client import Point
 
@@ -960,7 +966,7 @@ def write_decisions_batch(
             logger.warning("Invalid timestamp in backfill result: %s", ts_iso)
             continue
         p = (
-            Point("rule_decisions")
+            Point(measurement)
             .tag("ruleset_id", ruleset.id)
             .tag("owner_id", ruleset.owner_id)
             .tag("site_type", ruleset.site_type)
@@ -980,11 +986,11 @@ def write_decisions_batch(
             record=points,
         )
         logger.info(
-            "Wrote %d historical decisions for ruleset %s", len(points), ruleset.id
+            "Wrote %d decisions to %s for ruleset %s", len(points), measurement, ruleset.id
         )
     except Exception as exc:
         logger.error(
-            "Failed to write historical decisions for ruleset %s: %s", ruleset.id, exc
+            "Failed to write decisions to %s for ruleset %s: %s", measurement, ruleset.id, exc
         )
 
 

@@ -28,6 +28,8 @@ MEASUREMENT_FORECAST = "weather_forecast"
 MEASUREMENT_FORECAST_THERMAL = "weather_forecast_thermal"
 MEASUREMENT_FORECAST_DEVIATION = "forecast_deviation"
 MEASUREMENT_GRID_FORECAST_DEVIATION = "grid_forecast_deviation"
+MEASUREMENT_DECISIONS = "rule_decisions"
+MEASUREMENT_DECISIONS_FORECAST = "rule_decisions_forecast"
 
 
 def _flux_str(value) -> str:
@@ -720,6 +722,55 @@ from(bucket: "{self._cfg.bucket}")
             for record in table.records:
                 rows.append({
                     "timestamp": record.get_time().isoformat(),
+                    "decision": record.values.get("decision"),
+                    "condition_results_json": record.values.get("condition_results"),
+                })
+        return rows
+
+    def query_forecast_decisions_for_ruleset(
+        self,
+        ruleset_id: str,
+        start: datetime,
+        end: datetime,
+    ) -> list[dict]:
+        """
+        Return precomputed forecast decisions for ``ruleset_id`` between ``start`` and ``end``.
+
+        The read side of the reactive forecast horizon (specs/009 §4.3): a forecast collector
+        run touching one of a rule set's stations recomputes and stores a decision per future
+        ``valid_time`` in ``rule_decisions_forecast``, so map replay reads an already-computed
+        decision instead of evaluating live once per frame.
+
+        ⚠️ ``stop:`` is passed explicitly and is **not** optional here — Flux defaults it to
+        ``now()``, and every point this reads is at a *future* timestamp.  Omitting it returns
+        an empty result with no error, which would silently degrade every read to the live
+        fallback path.
+
+        Uses a plain ``r.ruleset_id == "…"`` filter — never ``contains()`` (v1.22.6).
+        """
+        start_str = start.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        end_str = end.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        flux = f"""
+from(bucket: "{self._cfg.bucket}")
+  |> range(start: {start_str}, stop: {end_str})
+  |> filter(fn: (r) => r._measurement == "{MEASUREMENT_DECISIONS_FORECAST}")
+  |> filter(fn: (r) => r.ruleset_id == "{_flux_str(ruleset_id)}")
+  |> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")
+  |> sort(columns: ["_time"])
+"""
+        try:
+            tables = self._query_api.query(flux, org=self._cfg.org)
+        except Exception as exc:
+            logger.error(
+                "InfluxDB forecast_decisions query error for %s: %s", ruleset_id, exc
+            )
+            return []
+
+        rows: list[dict] = []
+        for table in tables:
+            for record in table.records:
+                rows.append({
+                    "valid_time": record.get_time().isoformat(),
                     "decision": record.values.get("decision"),
                     "condition_results_json": record.values.get("condition_results"),
                 })

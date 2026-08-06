@@ -1,6 +1,45 @@
 # Feature History & Backlog
 
-## Current Version: v1.22.6 (shipped)
+## Current Version: v1.23.0 (shipped)
+
+### Reactive Ruleset Evaluation (`specs/009-reactive-ruleset-evaluation`)
+
+Ruleset decisions were recomputed on a fixed `IntervalTrigger(minutes=10)` regardless of whether
+any station data had changed — Holfuy delivers every 5 min, so a decision could be 10 min stale.
+Separately, forecast decisions were **never** cached: `run_forecast_evaluation_at` re-queried
+InfluxDB on every call, including once per replay frame during Play. v1.22.6 made that query 135×
+faster but left the "recompute on every read" architecture intact. This feature fixes both.
+
+| Change | Detail |
+|---|---|
+| `rules/reactive.py` — new | `affected_ruleset_ids(db, station_ids, virtual_members)` — one `SELECT DISTINCT` reverse lookup over `rule_conditions` (`station_id` **or** `station_b_id`), never a per-station loop. Plus the FR-007 in-flight guard (`try_claim`/`release`, module-level set + lock, self-draining so no bound needed) |
+| **Whole-cluster station expansion** | Expansion runs in **both** directions — reported id → canonical **and** canonical → all members. A one-way member→canonical map would have been enough for today's data, but canonicality is priority-ranked (`meteoswiss > … > jfb`), so adding a higher-priority station near an existing one *moves* the canonical id and leaves older conditions pointing at what is now a member. Those rule sets would have silently stopped being re-evaluated |
+| `scheduler.evaluate_rulesets(station_ids=None, trigger=…)` | Generalised from `_run_ruleset_evaluator`. `None` = boot pass (FR-008); a set = only the rule sets depending on those stations. **Now runs via `asyncio.to_thread`** — the old version did blocking SQLite + InfluxDB work directly on the event loop, which mattered far more once it fires per collector run instead of every 10 min |
+| `scheduler.evaluate_rulesets_forecast(...)` — new | Recomputes the **entire** horizon per affected rule set and stores it via `write_decisions_batch(..., measurement="rule_decisions_forecast")`. Station set defaults to the scheduler's own registry — a forecast collector has no `get_stations()`, unlike an observation collector |
+| `rule_decisions_forecast` — new InfluxDB measurement | Same tags/fields as `rule_decisions`, timestamped at `valid_time`. Kept separate so a future-hour forecast decision can never collide with the observed decision later recorded for that same hour |
+| `write_decisions_batch` gains `measurement=` | Defaults to `rule_decisions`, so the history-backfill caller is untouched |
+| `query_forecast_decisions_for_ruleset` — new | Read side. **Passes an explicit `stop:`** — Flux defaults it to `now()` and every point here is at a *future* timestamp, so omitting it returns nothing silently. Plain `r.ruleset_id == "…"`, never `contains()` |
+| `GET /api/rulesets/{id}/evaluate?forecast=true` | Reads the precomputed decision (nearest stored hour within ±30 min) and **falls back** to the live `run_forecast_evaluation_at` on a miss — a rule set created between two forecast runs must still resolve |
+| Fixed 10-min job **removed** (FR-005) | Both the `add_job(IntervalTrigger(minutes=10), id="collector_ruleset_evaluator")` registration **and** the separate `call_later(… _trigger_now("collector_ruleset_evaluator"))` startup kick. The boot pass moved to `main.py`'s lifespan |
+| Hooks **composed, never replaced** | `on_collector_run` / `on_forecast_run` are single callable slots, not listener lists — a second assignment silently discards the registry updater. `_compose_collector_hook` / `_compose_forecast_hook` wrap the existing callbacks |
+| Health entry kept as `ruleset_evaluator` | `interval_minutes: None`, `status: "reactive"`, plus `last_affected_count`. `stats.html` renders interval generically (`… : '—'`) and nothing references the key by name, so **no frontend or i18n change** |
+| `tests/backend/test_reactive_evaluation.py` — new | 31 tests. Suite: 197 → **228** |
+
+**`no_data_stations` on a cache hit is derived, not stored** — `write_decisions_batch` persists only
+`decision` + `condition_results`, and `run_forecast_evaluation` does not produce per-step no-data
+lists. The router reconstructs it as "every condition referencing this station came back with
+`actual_value is None`", which reproduces the live path in the case that matters (a station missing
+from the forecast snapshot entirely).
+
+**Known limitation, carried from plan §4.2**: a full-horizon rewrite relies on last-write-wins per
+`(tags, time)`. If a later model run's horizon is *shorter* than an earlier one's (lsmfapi's
+h+8–h+33 null hole), the orphaned hours are never overwritten and linger stale. `weather_forecast`
+has the identical gap today.
+
+**Deploy note**: no SQLite schema change, no frontend change, no new config key. A new InfluxDB
+measurement appears on first forecast run after deploy. Version bumped to 1.23.0.
+
+## Previous Version: v1.22.6 (shipped)
 
 ### Fix: catastrophic `contains()` slowdown in forecast-snapshot queries (`database/influx.py`)
 
@@ -507,30 +546,6 @@ Key new files: `api/errors.py`, `api/routers/pages.py`, `collectors/utils.py`, `
 ---
 
 ## Backlog (unordered)
-
-### Reactive Ruleset Evaluation — **planned, spec + plan written**, `specs/009-reactive-ruleset-evaluation`
-
-Raised 2026-08-03 during the replay-lag investigation (v1.22.6) and turned into a full feature the
-same day. Two problems, one plan: (1) rulesets are re-evaluated on a fixed 10-min poll
-(`_run_ruleset_evaluator`) regardless of whether any station data actually changed — Holfuy
-delivers every 5 min, so a decision can be up to 10 min stale; (2) forecast decisions are never
-precomputed — every replay frame in forecast mode triggers a fresh live Influx query, which is the
-actual root cause v1.22.6 only mitigated (9.3s → 69ms), not eliminated.
-
-**Read the spec folder for the current design** (`spec.md` + `plan.md`, all 4 clarifications
-resolved 2026-08-03) — summary:
-- Ruleset evaluation is triggered by the existing `on_collector_run`/`on_forecast_run` hooks
-  (composed, not replaced) via a station→ruleset reverse lookup (`rule_conditions.station_id`),
-  expanded through the virtual-station mapping so a physical member station updating still finds
-  rulesets keyed to the canonical id. The fixed 10-min poll is removed entirely; one evaluation
-  pass still runs at boot.
-- Forecast updates recompute and store the **entire horizon** in a new measurement
-  (`rule_decisions_forecast`), reusing `write_decisions_batch` — a function that already exists
-  for exactly this shape (built for history backfill). Replay reads a precomputed decision instead
-  of querying live per frame, with a fallback to today's live path on a cache miss.
-
-**Not started**: `tasks.md` not yet written, no code touched. Next session: write `tasks.md` from
-plan §5, then implement Phase-by-phase per that plan's file list.
 
 ### Thermal Forecast (lsmfapi thermal-grid endpoint) — **planned, ready to implement**, `specs/006-thermal-forecast`
 

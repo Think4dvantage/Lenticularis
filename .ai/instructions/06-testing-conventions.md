@@ -291,8 +291,17 @@ jobs:
 | Thermal collector (`test_thermal_collector.py`) | hand-written 4-point×3-frame fixture; fully-null frame → zero points; partially-null frame → point emitted with the null field absent; unambiguous nearest-grid-point selection; station with no coords skipped; 503 cache_warming → `None` |
 | Unmet-green precedence (`test_unmet_green_precedence.py`, `test_rules_evaluator.py`) | a matched other group/condition is not overridden by an unrelated unmet green group; the original spec-004 case (nothing else matches) still fails safe to red; covers all 3 duplicated decision blocks that don't delegate to `_evaluate_from_station_data` |
 | Influx query clients (`test_influx_query_clients.py`) | forecast snapshot uses the slow (60s) client; forecast/thermal-forecast snapshot and the Föhn pressure history's forecast leg all generate an OR-chain `==` filter, never `contains()` |
+| Reactive evaluation (`test_reactive_evaluation.py`) | station→ruleset reverse lookup incl. `station_b_id` and **both directions** of virtual-cluster expansion; zero-condition rule set never triggered; in-flight claim/release; the forecast-step→batch-tuple adapter; measurement routing (default vs `rule_decisions_forecast`); the read query's explicit `stop:` and absence of `contains()`; router cache-hit / nearest-hour / cache-miss-fallback / naive-datetime handling; the removed scheduler job; `_maybe_notify` suppression surviving the move |
 
-Current suite: **197 passing** (2026-08-03).
+Current suite: **228 passing** (2026-08-06).
+
+### `FakeInflux` can observe writes
+
+`write_decision` / `write_decisions_batch` reach into `influx._write_api` and `influx._cfg`
+directly, inside a `try/except` that only logs. `FakeInflux` therefore provides a
+`RecordingWriteApi` and a stub `_cfg` — **without them a write raises `AttributeError`
+internally and is silently discarded**, so a test asserting "the decision was written" would
+pass having written nothing. Assert against `fake_influx.written_points`.
 
 ### Time-dependent fixtures — do not hardcode a clock time
 

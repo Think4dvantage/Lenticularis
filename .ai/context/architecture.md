@@ -84,6 +84,27 @@ relationship's `cascade="all, delete-orphan"` is what actually deletes children.
 - **Fields**: `decision` (green/orange/red), `condition_results` (JSON array). There is **no `blocking_conditions` field** — it appears nowhere in the codebase
 - Written by two paths in `rules/evaluator.py`, both emitting the identical tag/field set: `run_evaluation` (live, one point) and `write_decisions_batch` (history backfill, batched with original timestamps)
 
+### `rule_decisions_forecast` (v1.23.0, `specs/009-reactive-ruleset-evaluation`)
+- **Tags**: `ruleset_id`, `owner_id`, `site_type` — identical to `rule_decisions`
+- **Timestamp**: `valid_time` (the future hour the decision applies to, **not** when it was computed)
+- **Fields**: `decision` (green/orange/red), `condition_results` (JSON array) — same as `rule_decisions`
+- **Deliberately a separate measurement, not merged into `rule_decisions`.** `rule_decisions` is the
+  append-only *observed* history behind the org-dashboard/analysis strip. A forecast decision stored
+  at a future `valid_time` would collide with the observed decision later recorded for that same
+  hour — two series at one timestamp, ambiguous which the history strip should read. Same reasoning
+  that kept `weather_forecast_thermal` out of `weather_forecast`.
+- **Overwrite semantics**: a full-horizon rewrite, not an append. Every forecast collector run writes
+  the whole horizon; identical `(tags, time)` means InfluxDB overwrites in place, so the freshest
+  model run always wins with no delete step. ⚠️ **Known gap**: if a later run's horizon is *shorter*
+  than an earlier one's (lsmfapi's h+8–h+33 null hole), the orphaned hours are never overwritten and
+  linger stale. `weather_forecast` has the identical gap.
+- Written by `scheduler.evaluate_rulesets_forecast()` via `write_decisions_batch(...,
+  measurement=MEASUREMENT_DECISIONS_FORECAST)`; read by
+  `InfluxClient.query_forecast_decisions_for_ruleset(ruleset_id, start, end)`.
+- ⚠️ **The read query must pass an explicit `stop:`.** Flux defaults `range()`'s stop to `now()`, and
+  every point in this measurement is at a *future* timestamp — omitting it returns an empty result
+  with no error, silently degrading every read to the live fallback path.
+
 **Removed**: `station_wind_profile` measurement was removed (v1.16). Altitude wind data is served by the wind forecast grid map, not per-station.
 
 ---
@@ -266,6 +287,34 @@ A one-condition group evaluates identically to a standalone condition: `total_un
 `len(standalone) + len(groups)`, so which bucket a lone condition lands in does not change the count,
 and a one-member group contributes `_worst([c])` — that same colour.
 
+### Evaluation is event-driven, not scheduled (v1.23.0, `specs/009`)
+
+There is **no** fixed-interval ruleset evaluation job — the `IntervalTrigger(minutes=10)` and its
+`collector_ruleset_evaluator` job id were removed. Evaluation is triggered by the existing
+`on_collector_run` / `on_forecast_run` scheduler hooks:
+
+- `scheduler.evaluate_rulesets(station_ids, trigger)` — live decisions, after an observation run.
+- `scheduler.evaluate_rulesets_forecast(station_ids, horizon_hours, trigger)` — the whole forecast
+  horizon, after a forecast run.
+- Both resolve *which* rule sets to touch via `rules/reactive.py`'s `affected_ruleset_ids()`, a
+  single `SELECT DISTINCT` over `rule_conditions` (matching `station_id` **or** `station_b_id`),
+  never a per-station loop.
+- Station ids are expanded across the whole dedup cluster **in both directions** (reported→canonical
+  *and* canonical→all members). One-way expansion is not sufficient: canonicality is priority-ranked,
+  so a new higher-priority station near an existing one moves the canonical id and strands older
+  conditions on what is now a member.
+- `try_claim`/`release` (module-level set + lock, self-draining) collapse a burst of overlapping
+  collector runs to one evaluation per rule set. A refused claim is **skipped, not queued**.
+- One full pass runs at boot from `main.py`'s lifespan, so nothing is indefinitely stale after a
+  restart.
+
+⚠️ `scheduler.on_collector_run` / `on_forecast_run` are **single callable slots, not listener
+lists**. A second assignment silently discards the first — `main.py` composes everything into one
+callback via `_compose_collector_hook` / `_compose_forecast_hook`.
+
+Health is still reported under the `ruleset_evaluator` key (`interval_minutes: None`,
+`status: "reactive"`, plus `last_affected_count`), so `/stats` keeps a visible row.
+
 Public entry points: `run_evaluation`, `run_evaluation_at`, `run_forecast_evaluation`,
 `run_forecast_evaluation_at`, `run_history_backfill`, `write_decisions_batch`. The core is
 `_evaluate_from_station_data(ruleset, station_data) -> (decision, results)`. There is **no**
@@ -283,6 +332,14 @@ param — the caller (the map's replay engine) states the mode explicitly rather
 inferring it from comparing `at_time` to its own clock. Linked landing rulesets (the launch-site
 halo) are now evaluated in the same `at_time`/`forecast` mode as the primary rule set — previously
 always live regardless of the primary rule set's mode.
+
+**Since v1.23.0 the `forecast=true` branch reads first, evaluates second.** `_evaluate_at` tries
+`query_forecast_decisions_for_ruleset` for the nearest stored hour within ±30 min of `at_time`, and
+only calls `run_forecast_evaluation_at` when nothing is stored. ⚠️ **Do not remove that fallback** —
+a rule set created between two forecast collector runs, or one whose horizon write failed, has
+nothing precomputed and must still resolve on demand. `no_data_stations` is *derived* on the cached
+path (a station whose every condition came back with `actual_value is None`), since only `decision`
+and `condition_results` are persisted.
 
 ---
 

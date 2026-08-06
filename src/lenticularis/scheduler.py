@@ -324,32 +324,27 @@ class CollectorScheduler:
         logger.info("Registered thermal forecast collector (every 60 min)")
 
         # ---- ruleset evaluator (writes rule_decisions to InfluxDB) ----------
+        # No job is registered: evaluation is event-driven since specs/009, triggered by the
+        # on_collector_run / on_forecast_run hooks composed in main.py's lifespan (FR-005).
+        # The health entry stays so a broken reactive path is still visible on /stats —
+        # interval_minutes is None, which stats.html renders as "—".
         if self._session_factory is not None:
             self._collector_health["ruleset_evaluator"] = {
                 "collector": "ruleset_evaluator",
                 "type": "derived",
                 "enabled": True,
-                "interval_minutes": 10,
-                "status": "scheduled",
+                "interval_minutes": None,
+                "status": "reactive",
                 "last_started_at": None,
                 "last_finished_at": None,
                 "last_success_at": None,
                 "last_error_at": None,
                 "last_error": None,
                 "last_measurement_count": None,
+                "last_affected_count": None,
                 "consecutive_failures": 0,
             }
-            self._scheduler.add_job(
-                func=self._run_ruleset_evaluator,
-                trigger=IntervalTrigger(minutes=10),
-                id="collector_ruleset_evaluator",
-                name="ruleset evaluator",
-                misfire_grace_time=180,
-                coalesce=True,
-                max_instances=1,
-                next_run_time=None,
-            )
-            logger.info("Registered ruleset evaluator with 10-minute interval")
+            logger.info("Ruleset evaluator is reactive (triggered by collector runs)")
 
         # ---- forecast deviation writer (HH:05 every hour) ------------------
         self._collector_health["forecast_deviation_writer"] = {
@@ -421,12 +416,8 @@ class CollectorScheduler:
             lambda: asyncio.ensure_future(self._trigger_now("collector_foehn")),
         )
 
-        # Ruleset evaluator starts after collectors have written fresh data
-        if self._session_factory is not None:
-            asyncio.get_event_loop().call_later(
-                random.uniform(_JITTER_SECONDS * 2, _JITTER_SECONDS * 3),
-                lambda: asyncio.ensure_future(self._trigger_now("collector_ruleset_evaluator")),
-            )
+        # The ruleset evaluator has no job to trigger — main.py's lifespan runs the single
+        # boot pass (FR-008) and every later evaluation is hook-driven (specs/009).
 
         logger.info(
             "Scheduler started — %d observation collector(s), %d forecast collector(s), föhn collector",
@@ -482,23 +473,68 @@ class CollectorScheduler:
             })
             logger.error("FoehnCollector failed: %s", exc)
 
-    async def _run_ruleset_evaluator(self) -> None:
-        """Evaluate all rulesets with conditions and write decisions to InfluxDB."""
+    async def evaluate_rulesets(
+        self,
+        station_ids: Optional[set[str]] = None,
+        trigger: str = "boot",
+    ) -> None:
+        """
+        Evaluate rule sets against live station data and write their decisions to InfluxDB.
+
+        ``station_ids`` is ``None`` for the boot pass (FR-008) — every rule set that has
+        conditions.  A non-empty set restricts evaluation to the rule sets that actually
+        depend on those stations (FR-001/FR-004), which is how every post-boot evaluation
+        is triggered now that the fixed 10-minute poll is gone (FR-005).
+
+        The body is synchronous — both the SQLite session and the InfluxDB client are — so
+        it runs in a worker thread.  This is awaited from the collector-run hooks, which are
+        on the event loop, and blocking there would stall every in-flight request.
+        """
+        if self._session_factory is None:
+            return
         health = self._collector_health.get("ruleset_evaluator")
         if health:
             health["status"] = "running"
             health["last_started_at"] = datetime.now(timezone.utc)
+        await asyncio.to_thread(self._evaluate_rulesets_sync, station_ids, trigger)
 
+    def _evaluate_rulesets_sync(
+        self,
+        station_ids: Optional[set[str]],
+        trigger: str,
+    ) -> None:
+        """Blocking body of :meth:`evaluate_rulesets`. Never call directly from the loop."""
+        health = self._collector_health.get("ruleset_evaluator")
         db = self._session_factory()
         count = 0
+        skipped = 0
         try:
             from sqlalchemy import select
-            from lenticularis.database.models import RuleSet, User
+            from lenticularis.database.models import RuleSet
             from lenticularis.rules.evaluator import run_evaluation, write_decision
+            from lenticularis.rules.reactive import affected_ruleset_ids, release, try_claim
 
-            rulesets = db.execute(select(RuleSet)).scalars().all()
+            if station_ids is None:
+                rulesets = db.execute(select(RuleSet)).scalars().all()
+                affected_count = len(rulesets)
+            else:
+                affected = affected_ruleset_ids(db, station_ids, self._virtual_members)
+                affected_count = len(affected)
+                rulesets = (
+                    db.execute(select(RuleSet).where(RuleSet.id.in_(list(affected))))
+                    .scalars()
+                    .all()
+                    if affected
+                    else []
+                )
+
             for rs in rulesets:
                 if not rs.conditions:
+                    continue
+                # FR-007: a rule set already being evaluated by an overlapping collector run
+                # is skipped, not queued — the in-flight pass is reading the same fresh data.
+                if not try_claim(rs.id):
+                    skipped += 1
                     continue
                 try:
                     result = run_evaluation(rs, self._influx, self._virtual_members)
@@ -507,6 +543,8 @@ class CollectorScheduler:
                     self._maybe_notify(rs, result["decision"], db)
                 except Exception as exc:
                     logger.error("Ruleset evaluator: failed to evaluate %s: %s", rs.id, exc)
+                finally:
+                    release(rs.id)
 
             finished_at = datetime.now(timezone.utc)
             if health:
@@ -516,9 +554,21 @@ class CollectorScheduler:
                     "last_success_at": finished_at,
                     "last_error": None,
                     "last_measurement_count": count,
+                    "last_affected_count": affected_count,
                     "consecutive_failures": 0,
                 })
-            logger.info("Ruleset evaluator: evaluated %d rulesets", count)
+            # A reactive path that silently stops triggering must be visible in the logs,
+            # not merely "not erroring" — same reasoning as the thermal collector's
+            # coverage logging (specs/006 §7.1).
+            logger.info(
+                "[Lenti:reactive-eval] trigger=%s stations=%s affected_rulesets=%d "
+                "evaluated=%d skipped_in_flight=%d",
+                trigger,
+                "all" if station_ids is None else len(station_ids),
+                affected_count,
+                count,
+                skipped,
+            )
         except Exception as exc:
             finished_at = datetime.now(timezone.utc)
             if health:
@@ -529,7 +579,108 @@ class CollectorScheduler:
                     "last_error": str(exc),
                     "consecutive_failures": int(health.get("consecutive_failures", 0)) + 1,
                 })
-            logger.error("Ruleset evaluator job failed: %s", exc)
+            logger.exception("Ruleset evaluator failed (trigger=%s): %s", trigger, exc)
+        finally:
+            db.close()
+
+    async def evaluate_rulesets_forecast(
+        self,
+        station_ids: Optional[set[str]] = None,
+        horizon_hours: int = 120,
+        trigger: str = "boot",
+    ) -> None:
+        """
+        Recompute and store the whole forecast horizon for every affected rule set.
+
+        FR-002a: a forecast decision is computed for the rule set's *entire* horizon in one
+        pass and written to ``rule_decisions_forecast``, so replay reads a precomputed
+        decision for any future hour instead of querying InfluxDB per frame.
+
+        ``station_ids`` defaults to the scheduler's whole station registry — a forecast
+        collector run covers every station with coordinates, and unlike an observation
+        collector it has no per-run station set of its own.
+        """
+        if self._session_factory is None:
+            return
+        if station_ids is None:
+            station_ids = set(self._station_registry.keys())
+        if not station_ids:
+            return
+        await asyncio.to_thread(
+            self._evaluate_rulesets_forecast_sync, station_ids, horizon_hours, trigger
+        )
+
+    def _evaluate_rulesets_forecast_sync(
+        self,
+        station_ids: set[str],
+        horizon_hours: int,
+        trigger: str,
+    ) -> None:
+        """Blocking body of :meth:`evaluate_rulesets_forecast`."""
+        db = self._session_factory()
+        count = 0
+        steps_written = 0
+        skipped = 0
+        try:
+            from sqlalchemy import select
+            from lenticularis.database.influx import MEASUREMENT_DECISIONS_FORECAST
+            from lenticularis.database.models import RuleSet
+            from lenticularis.rules.evaluator import (
+                run_forecast_evaluation,
+                write_decisions_batch,
+            )
+            from lenticularis.rules.reactive import affected_ruleset_ids, release, try_claim
+
+            affected = affected_ruleset_ids(db, station_ids, self._virtual_members)
+            rulesets = (
+                db.execute(select(RuleSet).where(RuleSet.id.in_(list(affected))))
+                .scalars()
+                .all()
+                if affected
+                else []
+            )
+
+            for rs in rulesets:
+                if not rs.conditions:
+                    continue
+                if not try_claim(f"forecast:{rs.id}"):
+                    skipped += 1
+                    continue
+                try:
+                    steps = run_forecast_evaluation(
+                        rs, self._influx, horizon_hours=horizon_hours
+                    )
+                    if not steps:
+                        continue
+                    # run_forecast_evaluation yields dicts; write_decisions_batch consumes
+                    # (timestamp_iso, decision, condition_results) tuples. The shapes differ —
+                    # adapt here rather than changing either signature.
+                    batch = [
+                        (s["valid_time"], s["decision"], s["condition_results"])
+                        for s in steps
+                    ]
+                    write_decisions_batch(
+                        rs, batch, self._influx,
+                        measurement=MEASUREMENT_DECISIONS_FORECAST,
+                    )
+                    count += 1
+                    steps_written += len(batch)
+                except Exception as exc:
+                    logger.error(
+                        "Reactive forecast evaluation failed for ruleset %s: %s", rs.id, exc
+                    )
+                finally:
+                    release(f"forecast:{rs.id}")
+
+            logger.info(
+                "[Lenti:reactive-eval] forecast trigger=%s stations=%d affected_rulesets=%d "
+                "evaluated=%d steps=%d skipped_in_flight=%d",
+                trigger, len(station_ids), len(affected), count, steps_written, skipped,
+            )
+        except Exception as exc:
+            logger.exception(
+                "Reactive forecast evaluation pass failed (trigger=%s): %s", trigger, exc
+            )
         finally:
             db.close()
 
