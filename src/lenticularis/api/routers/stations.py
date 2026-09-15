@@ -163,6 +163,51 @@ def _build_replay_payload(
     return payload
 
 
+_replay_refresh_inflight: set[str] = set()
+_replay_refresh_lock = threading.Lock()
+
+
+def _schedule_replay_refresh(
+    cache_key: str,
+    influx: Any,
+    registry: dict,
+    start_dt: datetime,
+    end_dt: datetime,
+    include_forecast: bool,
+    forecast_hours: int,
+) -> None:
+    """
+    Rebuild one cache entry in the background and store the fresh result.
+
+    Used when a request finds a TTL-expired entry: the stale payload is served
+    immediately (never blocking the request on a rebuild) while this refreshes
+    it for the next caller. At most one refresh per cache key runs at a time —
+    a second stale hit while one is already in flight is a no-op.
+    """
+    with _replay_refresh_lock:
+        if cache_key in _replay_refresh_inflight:
+            return
+        _replay_refresh_inflight.add(cache_key)
+
+    async def _refresh() -> None:
+        try:
+            payload = await asyncio.get_event_loop().run_in_executor(
+                None, _build_replay_payload, influx, registry, start_dt, end_dt, include_forecast, forecast_hours
+            )
+            if include_forecast and payload.get("fc_frame_count", 0) == 0:
+                logger.warning("Replay background refresh SKIP CACHE (no forecast data): %s", cache_key)
+            else:
+                _replay_cache[cache_key] = (payload, time.monotonic())
+                logger.info("Replay background refresh DONE: %s", cache_key)
+        except Exception:
+            logger.exception("Replay background refresh FAILED: %s", cache_key)
+        finally:
+            with _replay_refresh_lock:
+                _replay_refresh_inflight.discard(cache_key)
+
+    asyncio.get_event_loop().create_task(_refresh())
+
+
 def invalidate_forecast_replay_cache() -> int:
     """
     Remove all replay cache entries that include forecast data (``include_forecast=True``).
@@ -390,7 +435,6 @@ async def get_replay(
         if age_s < _REPLAY_CACHE_TTL_S:
             logger.debug("Replay cache HIT (age=%.0fs): %s", age_s, cache_key)
             return payload
-        del _replay_cache[cache_key]
 
     influx = _get_influx(request)
     registry = _get_display_registry(request)
@@ -412,6 +456,20 @@ async def get_replay(
     else:
         end_dt = now
         start_dt = now - timedelta(hours=24)
+
+    if cached_entry is not None:
+        # Stale-while-revalidate: the warm-up cycle (startup + post-forecast-run) only
+        # touches this entry every ~60 min, but the TTL is 5 min, so most requests would
+        # otherwise land in the ~55-minute gap and pay a full synchronous rebuild. Serve
+        # the stale payload now and refresh it in the background instead — no request
+        # ever blocks on a rebuild (v1.23.3).
+        payload, stored_at = cached_entry
+        logger.info(
+            "Replay cache STALE (age=%.0fs) — serving stale, refreshing in background: %s",
+            time.monotonic() - stored_at, cache_key,
+        )
+        _schedule_replay_refresh(cache_key, influx, registry, start_dt, end_dt, include_forecast, forecast_hours)
+        return payload
 
     payload = await asyncio.get_event_loop().run_in_executor(
         None, _build_replay_payload, influx, registry, start_dt, end_dt, include_forecast, forecast_hours

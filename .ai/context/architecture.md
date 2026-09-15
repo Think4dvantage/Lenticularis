@@ -403,6 +403,35 @@ and `condition_results` are persisted.
 
 **Post-forecast invalidation**: `main.py` lifespan wires a real async hook via `scheduler.on_forecast_run = _make_forecast_hook(influx, display_registry)`. After each successful forecast run (`status == "ok"` and `measurement_count > 0`), the hook calls `invalidate_forecast_replay_cache()` then spawns `warm_replay_cache()` as a background task.
 
+### ⚠️ Stale-while-revalidate on read (v1.23.3)
+
+The TTL (5 min) is shorter than the only two events that repopulate the cache — startup and
+the hourly forecast collector run. That left a **~55-minute gap per hour** where the entry was
+technically expired: the *previous* behaviour deleted a stale entry on read and rebuilt
+synchronously (the reported ~10s cold-miss), so whichever request happened to land in that gap
+paid the full `_build_replay_payload` cost (InfluxDB obs + forecast query, ~1.5–6s depending on
+`FORECAST_RUN_FALLBACK_DEPTH`), and the *next* request within 5 min looked fast purely because
+someone else had already eaten that cost.
+
+`GET /api/stations/replay` now serves a TTL-expired entry **immediately** and refreshes it via
+`_schedule_replay_refresh()` as a background `asyncio.Task` — no request ever blocks on a
+rebuild. `_replay_refresh_inflight: set[str]` (guarded by a `threading.Lock`, mirroring the
+`_TTLCache` pattern) ensures at most one refresh per cache key runs at a time; a second stale
+hit while one is in flight is a no-op, not a second rebuild. The refresh honours the same
+cache-poisoning guard as every other write path — an empty-forecast rebuild is discarded, not
+stored, so the stale-but-populated entry keeps being served (and retried) rather than being
+replaced with a hole.
+
+A **true** cache miss (no entry at all — a custom date outside the 9 pre-warmed offsets, or a
+cold cache after restart) still builds synchronously; only an *expired* entry gets the
+stale-serve treatment, since there is nothing to serve instead on a genuine miss.
+
+`tests/backend/test_replay_cache.py` — fresh hit skips rebuild entirely; stale hit serves the
+stale payload and the background refresh lands in the cache afterward; two concurrent stale
+hits (`asyncio.gather`, not sequential — sequential awaits let the first request's refresh
+finish before the second starts) trigger exactly one rebuild; true miss builds synchronously
+and stores; an empty-forecast refresh result is discarded and the in-flight guard still clears.
+
 **Both `GET /api/stations` and `GET /api/stations/replay` still return every station in one atomic
 payload** — no bounding-box/`station_ids` query parameter exists on either (specs/archive/008, deliberately
 rejected: it would fragment this shared cache into one entry per viewport per pilot instead of one

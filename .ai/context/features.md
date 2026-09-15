@@ -1,6 +1,42 @@
 # Feature History & Backlog
 
-## Current Version: v1.23.2 (shipped)
+## Current Version: v1.23.3 (shipped)
+
+### Fix: replay endpoint blocked on a synchronous rebuild for ~55 minutes of every hour
+
+Reported live: "if someone already ran a replay of a day, loading is ~10s faster than if it's
+never been replayed" — i.e. the server-side warm-up appeared to only benefit whoever happened
+to be second. Root-caused, not assumed: `warm_replay_cache()` is real and correctly wired
+(startup + after every successful forecast collector run, `main.py:267-282`), and the cache-key
+construction on both the warm-up and read paths matches exactly — so this was not a wiring bug.
+
+The actual gap: `_REPLAY_CACHE_TTL_S = 300` (5 min), but the only two events that repopulate the
+cache are startup and the **hourly** forecast collector run. Every warmed entry therefore reads
+as "stale" for ~55 of every 60 minutes, and the old read path (`GET /api/stations/replay`)
+deleted a stale entry and rebuilt it synchronously — paying the full InfluxDB obs+forecast query
+cost (~1.5–6s per `FORECAST_RUN_FALLBACK_DEPTH`, plus history query) in the request path. Whoever
+landed in that 55-minute window ate the ~10s; the next visitor within 5 min looked fast only
+because someone else had already paid for it.
+
+| Change | Detail |
+|---|---|
+| `GET /api/stations/replay` — stale-while-revalidate | A TTL-expired hit is now served **immediately** from the stale payload; a background `asyncio.Task` (`_schedule_replay_refresh`) rebuilds and re-stores it. No request ever blocks on a rebuild |
+| `_replay_refresh_inflight` — new | Module-level `set[str]` + `threading.Lock`, mirroring `_TTLCache`'s own guard style. At most one background refresh per cache key runs at a time; a second stale hit while one is in flight is a no-op, not a second query |
+| Empty-forecast refresh discarded | The background refresh honours the same cache-poisoning guard as every other write path — a refresh that comes back with `fc_frame_count == 0` is dropped, so the stale-but-populated entry keeps being served (and retried on the next stale hit) rather than replaced with a hole |
+| A true cache miss is unaffected | Only an *expired* entry gets stale-serve treatment. A custom date outside the 9 pre-warmed offsets, or a cold cache right after restart, still has nothing to serve and builds synchronously as before |
+| `tests/backend/test_replay_cache.py` — new | 5 tests: fresh hit never rebuilds; stale hit serves stale + background refresh lands afterward; two concurrent stale hits (`asyncio.gather`) trigger exactly one rebuild; true miss builds synchronously and stores; empty-forecast refresh is discarded and releases the in-flight guard. Suite: 245 → **250** |
+
+**Not done here, deliberately deferred**: a second, related ask — gating the map's "Play" button
+on only the viewport-visible stations' data having arrived, loading the rest in the background —
+was investigated but not built. The current `/api/stations/replay` returns every station's
+full-day data as one atomic payload (no per-viewport fetch exists), and a bounding-box query
+param was already considered and rejected once before (specs/archive/008) because it would
+fragment the cache from one shared entry per day into one entry per viewport per pilot. Decision:
+ship this fix first and re-measure — once the cache is reliably warm, the single full-day fetch
+should drop from ~10s to roughly the raw query cost (~1.5–6s) or an instant cache hit for
+effectively everyone, which may remove most of the motivation for splitting the fetch at all.
+
+## Previous Version: v1.23.2 (shipped)
 
 ### Fix: phantom rows blanked 15 hours of tomorrow's forecast; gap-fill across model runs
 
