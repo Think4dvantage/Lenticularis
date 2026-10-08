@@ -1,6 +1,6 @@
 [project]
 name = "lenticularis"
-version = "1.23.3"
+version = "1.24.0"
 description = "Weather Data tracking with focus on Ruleset for certain Locations and the surrounding Weather Data"
 authors = [
     {name = "Raphael Eymann, r+lenti@eymanns.ch"}
@@ -22,6 +22,7 @@ dependencies = [
     "python-jose[cryptography] (>=3.3.0,<4.0.0)",
     "bcrypt (>=4.0.0,<6.0.0)",
     "email-validator (>=2.0.0,<3.0.0)",
+    "mcp (>=1.30.0,<2.0.0)",
 ]
 
 

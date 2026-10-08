@@ -39,7 +39,7 @@ src/lenticularis/
 │   ├── errors.py            # AppException + _envelope() — {"error":{code,message,details}}
 │   └── routers/             # One file per domain (auth, stations, rulesets, org, ai, …)
 │       ├── org.py           # /api/org/{slug}/status|dashboard|rulesets
-│       ├── public.py        # /api/public — the ONLY unauthenticated API surface
+│       ├── public.py        # /api/public — the ONLY unauthenticated *rule-set* surface (station/föhn data routes are open by design)
 │       └── pages.py         # ALL HTML page routes + ?v= asset cache-busting
 ├── collectors/              # One file per data network (meteoswiss, slf, metar, jfb, fga, …)
 │   ├── base.py              # BaseCollector ABC + _collect_concurrent()
@@ -49,6 +49,8 @@ src/lenticularis/
 │   ├── db.py                # init_db(), get_db() dependency, column migrations
 │   └── influx.py            # InfluxDB 2.x client (write + all query methods)
 ├── models/                  # Pydantic request/response schemas
+├── mcp_server/              # Public read-only MCP server (/mcp) — verified stations only; never
+│                            #   imports pilot-owned models (enforced by test_mcp_invariants.py)
 ├── rules/evaluator.py       # Live + forecast rule evaluation engine
 ├── services/                # Auth helpers, stats, AI analysis, FCM push
 │   ├── dedup.py             # build_deduped_registry() + haversine_m() — reuse, never redefine

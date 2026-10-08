@@ -10,6 +10,7 @@ query_forecast_replay already uses the slow client for the same reason.
 """
 from __future__ import annotations
 
+import re
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
@@ -407,3 +408,84 @@ def test_forecast_snapshot_naive_valid_time_is_treated_as_utc():
     result = client.query_forecast_snapshot_for_stations(["holfuy-1808"], _VT.replace(tzinfo=None))
 
     assert result["holfuy-1808"]["wind_direction"] == 194.0
+
+
+# ---------------------------------------------------------------------------
+# specs/010-mcp-server — query_history_range + keep_init_date
+# ---------------------------------------------------------------------------
+
+_T0 = datetime(2026, 10, 1, tzinfo=timezone.utc)
+_T1 = datetime(2026, 10, 2, tzinfo=timezone.utc)
+
+
+def test_history_range_aggregates_per_field_not_a_blanket_mean():
+    client = _make_client()
+    client.query_history_range(
+        ["a"], _T0, _T1, "1h", ["wind_speed", "wind_gust", "precipitation", "wind_direction", "snow_depth"]
+    )
+    flux = _flux_arg(client._query_api.query)
+    # one stream per aggregate; gusts must be max (a mean would understate peaks)
+    assert "fn: max" in flux and "fn: sum" in flux and "fn: last" in flux and "fn: mean" in flux
+    streams = re.findall(r"s\d = base.*?(?=\ns\d = base|\n\nunion)", flux, re.S)
+    max_stream = [s for s in streams if "fn: max" in s][0]
+    assert 'r._field == "wind_gust"' in max_stream and "wind_speed" not in max_stream
+    sum_stream = [s for s in streams if "fn: sum" in s][0]
+    assert 'r._field == "precipitation"' in sum_stream
+
+
+def test_history_range_pools_members_per_field_with_or_chain_and_explicit_range():
+    client = _make_client()
+    client.query_history_range(["a", "b"], _T0, _T1, "30m", ["wind_speed"])
+    flux = _flux_arg(client._query_api.query)
+    assert "contains(" not in flux
+    assert 'r.station_id == "a" or r.station_id == "b"' in flux
+    assert 'group(columns: ["_field"])' in flux
+    assert "range(start: 2026-10-01T00:00:00Z, stop: 2026-10-02T00:00:00Z)" in flux
+
+
+def test_history_range_rejects_injection_via_window_and_fields():
+    import pytest
+
+    client = _make_client()
+    with pytest.raises(ValueError):
+        client.query_history_range(["a"], _T0, _T1, '1h) |> drop()', ["wind_speed"])
+    client.query_history_range(["a"], _T0, _T1, "1h", ['wind_speed" or true or "', "temperature"])
+    flux = _flux_arg(client._query_api.query)
+    assert "or true" not in flux and 'r._field == "temperature"' in flux
+    # station ids are escaped, not trusted
+    client.query_history_range(['x"] |> drop() //'], _T0, _T1, "1h", ["temperature"])
+    assert '\\"' in _flux_arg(client._query_api.query)
+
+
+def test_history_range_returns_empty_on_error_and_no_members():
+    client = _make_client()
+    assert client.query_history_range([], _T0, _T1, "1h", ["temperature"]) == []
+    client._query_api.query.side_effect = RuntimeError("boom")
+    assert client.query_history_range(["a"], _T0, _T1, "1h", ["temperature"]) == []
+
+
+def _fc_record(init_date):
+    rec = MagicMock()
+    rec.values = {"station_id": "s1", "network": "meteoswiss", "source": "swissmeteo", "model": "icon-ch1",
+                  "init_date": init_date, "wind_speed": 10.0}
+    rec.get_time = MagicMock(return_value=_VT)
+    return rec
+
+
+def test_forecast_for_stations_init_date_dropped_by_default_kept_on_request():
+    client = _make_client()
+    client._query_api.query.side_effect = None
+    client._query_api.query.return_value = [_table([_init_record("swissmeteo", "2026-10-08T04")])]
+    # first call resolves candidate runs, second returns the pivoted rows
+    client._query_api.query.side_effect = [
+        [_table([_init_record("swissmeteo", "2026-10-08T04")])],
+        [_table([_fc_record("2026-10-08T04")])],
+        [_table([_init_record("swissmeteo", "2026-10-08T04")])],
+        [_table([_fc_record("2026-10-08T04")])],
+    ]
+    default = client.query_forecast_for_stations(["s1"], 24)
+    kept = client.query_forecast_for_stations(["s1"], 24, keep_init_date=True)
+    row_default = next(iter(default["s1"].values()))
+    row_kept = next(iter(kept["s1"].values()))
+    assert "init_date" not in row_default and row_default["wind_speed"] == 10.0
+    assert row_kept["init_date"] == "2026-10-08T04"

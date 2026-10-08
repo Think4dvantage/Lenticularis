@@ -16,11 +16,13 @@ Shutdown:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import logging.config
 from contextlib import asynccontextmanager
 from importlib.metadata import PackageNotFoundError, version as _pkg_version
 from pathlib import Path
+from typing import Optional
 
 try:
     _APP_VERSION = _pkg_version("lenticularis")
@@ -56,6 +58,9 @@ from lenticularis.api.routers import public as public_router
 from lenticularis.database.db import init_db, get_session_factory
 from lenticularis.collectors.foehn import _VIRTUAL_WEATHER_STATIONS
 from lenticularis.services.dedup import build_deduped_registry
+from lenticularis.mcp_server.registry import McpRegistry
+from lenticularis.mcp_server.server import McpEndpoint, McpHandle
+from starlette.routing import Route
 
 
 # ---------------------------------------------------------------------------
@@ -166,6 +171,17 @@ async def lifespan(app: FastAPI):
         len(display_reg), len(app.state.station_registry), len(virt_members),
     )
 
+    # Public MCP server (specs/010-mcp-server): its own verified-only registry, deduplicated
+    # separately so private-network stations can never leak in through a merged cluster.
+    mcp_handle: Optional[McpHandle] = None
+    if cfg.mcp.enabled:
+        app.state.mcp_registry = McpRegistry(cfg.mcp.verified_networks)
+        app.state.mcp_registry.rebuild(app.state.station_registry, dedup_distance_m, manual_pairs)
+        mcp_handle = McpHandle(cfg.mcp, lambda: app.state, _APP_VERSION)
+        app.state.mcp = mcp_handle
+    else:
+        logger.info("[Lenti:mcp] disabled by config (mcp.enabled=false)")
+
     # Scheduler
     scheduler = CollectorScheduler(
         cfg, influx, app.state.station_registry, get_session_factory(),
@@ -181,6 +197,7 @@ async def lifespan(app: FastAPI):
         _make_registry_updater(
             app.state.station_registry, app.state.display_registry,
             app.state.virtual_members, dedup_distance_m,
+            mcp_registry=getattr(app.state, "mcp_registry", None),
         ),
         scheduler,
     )
@@ -203,7 +220,10 @@ async def lifespan(app: FastAPI):
     # Backfill forecast_deviation if the measurement is sparse (runs once, no-ops if data exists).
     asyncio.get_event_loop().create_task(scheduler.run_forecast_deviation_backfill_if_needed())
 
-    yield  # Server is running
+    # The MCP session manager must be entered once, here — a mounted sub-app's own lifespan
+    # is never run by Starlette.
+    async with (mcp_handle.run() if mcp_handle is not None else contextlib.nullcontext()):
+        yield  # Server is running
 
     # Graceful shutdown
     logger.info("Shutting down…")
@@ -229,9 +249,15 @@ def rebuild_display_registry(app_state) -> None:
     app_state.display_registry.update(new_display)
     app_state.virtual_members.clear()
     app_state.virtual_members.update(new_virtual)
+    mcp_registry = getattr(app_state, "mcp_registry", None)
+    if mcp_registry is not None:
+        mcp_registry.rebuild(app_state.station_registry, distance_m, manual_pairs)
 
 
-def _make_registry_updater(registry: dict, display_registry: dict, virtual_members: dict, dedup_distance_m: float):
+def _make_registry_updater(
+    registry: dict, display_registry: dict, virtual_members: dict, dedup_distance_m: float,
+    mcp_registry: Optional[McpRegistry] = None,
+):
     """Return an async callback that rebuilds the station display registry after each observation run."""
     _log = logging.getLogger(__name__)
 
@@ -258,6 +284,8 @@ def _make_registry_updater(registry: dict, display_registry: dict, virtual_membe
                 display_registry.update(new_display)
                 virtual_members.clear()
                 virtual_members.update(new_virtual)
+                if mcp_registry is not None:
+                    mcp_registry.rebuild(registry, dedup_distance_m, manual_pairs)
         except Exception:
             _log.warning("Registry update after collector run failed (best-effort)", exc_info=True)
 
@@ -433,6 +461,13 @@ def create_app() -> FastAPI:
     app.include_router(org_router.router)
     app.include_router(wind_forecast_router.router)
     app.include_router(public_router.router)
+
+    # Public MCP endpoint. Explicit routes (not Mount): a Mount answers POST /mcp with a 307 to
+    # /mcp/ — and behind Traefik that redirect would downgrade to http://. The handle itself is
+    # built in the lifespan; until then (or when disabled) callers get a clean 503.
+    _mcp_endpoint = McpEndpoint(lambda: app.state)
+    app.router.routes.append(Route("/mcp", endpoint=_mcp_endpoint))
+    app.router.routes.append(Route("/mcp/", endpoint=_mcp_endpoint))
 
     # Static files (frontend) + page routes
     static_dir = Path(__file__).parent.parent.parent.parent / "static"

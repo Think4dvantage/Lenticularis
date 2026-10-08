@@ -127,8 +127,11 @@ class FakeInflux:
     def query_forecast_replay(self, start, end):
         return {}
 
-    def query_forecast_for_stations(self, station_ids, hours=120):
+    def query_forecast_for_stations(self, station_ids, horizon_hours=120, keep_init_date=False):
         return {}
+
+    def query_history_range(self, member_ids, start, end, every, fields):
+        return []
 
     def query_forecast_accuracy_ranking(self, station_ids=None):
         return []

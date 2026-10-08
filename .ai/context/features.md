@@ -1,6 +1,34 @@
 # Feature History & Backlog
 
-## Current Version: v1.23.3 (shipped)
+## Current Version: v1.24.0 (implemented, awaiting tag)
+
+### Public read-only MCP server for AI assistants (`specs/010-mcp-server`)
+
+Other AI tools (Claude Code / claude.ai / Cursor …) can now query Lenticularis for current, past and
+forecast weather and föhn status via `POST /mcp`. Anonymous, read-only, rate-limited, **verified
+stations only**. Design and traps: `architecture.md` → "Public MCP Server".
+
+| Change | Detail |
+|---|---|
+| `src/lenticularis/mcp_server/` — new | `registry.py` (verified-only, privately deduplicated), `sanitize.py` (allowlist, units, suppressed fields, accent-insensitive match), `tools.py` (6 tools), `server.py` (stateless Streamable-HTTP glue), `ratelimit.py`, `usage.py` |
+| Tools | `search_stations`, `get_current_weather`, `get_weather_history`, `get_forecast`, `get_foehn_status`, `describe_service` + resource `lenticularis://about` |
+| Verified = station quality | Allowlist `mcp.verified_networks` (meteoswiss, slf, metar, holfuy, windline, fga, jfb). Wunderground/Ecowitt (private persons) excluded entirely; Holfuy assumed redistributable |
+| `InfluxClient.query_history_range` — new | Per-field aggregation (gust=max, precip=sum, direction/snow=last, rest=mean), pooled across verified members, OR-chain filters, injection-safe window/fields |
+| `query_forecast_for_stations(keep_init_date=False)` | Opt-in provenance so the tool can report when the model run was issued; default unchanged |
+| `GET /api/health/mcp` — new | Enabled flag, verified station count, per-tool calls/errors/avg ms, distinct callers, rate-limited count |
+| `config.py` / `config.yml.example` | `McpConfig` (`mcp:` block) |
+| Dependency | `mcp (>=1.30,<2)` added; `poetry.lock` regenerated with Poetry 2.2.1 — only additions, no existing pin moved; `poetry check --lock` passes |
+| Tests | `test_mcp_registry/ratelimit/tools/transport/invariants.py` + 5 in `test_influx_query_clients.py`. Suite: 250 → **313** |
+
+**Verified end-to-end** with the real MCP Python client against uvicorn through the full middleware stack:
+initialize, list tools, search, current, private-station rejection, resource listing.
+
+**Deploy notes**: no SQLite/InfluxDB schema change. Add `mcp.allowed_hosts` to the server `config.yml` if
+the public hostname differs from the defaults (`lenti.cloud`, `lenti.sdh.lol`, `lenti-dev.lg4.ch`) — an
+unlisted Host gets `421`. Add a Traefik `rateLimit` middleware via the lg4 IaC repo. Not yet verified
+against prod data (no dev env — see Phase 5 in `specs/010-mcp-server/plan.md`).
+
+## Previous Version: v1.23.3 (shipped)
 
 ### Fix: replay endpoint blocked on a synchronous rebuild for ~55 minutes of every hour
 
@@ -451,7 +479,7 @@ sites they have already configured.
 | **No-data rule sets omitted** | The evaluator returns green when nothing triggers, including on no data. Defensible for a pilot who sees `no_data_stations`; a lie to a visitor. Omitted entirely rather than shown as a confident green |
 | `PublicRuleSetMarker` | id, name, lat, lon, site_type, decision — and nothing else. Deliberately not derived from `RuleSetOut`, which carries `owner_display_name` and would have leaked owner identity by default |
 | 500 m proximity suppression | Signed-in only, reusing `haversine_m()` from `services/dedup.py`. Per-viewer, so never served from the anonymous cache |
-| `api/routers/public.py` — new | `/api/public` — the only unauthenticated surface. 60 s shared cache with a poisoning guard (an empty build is never cached, so a transient Influx failure cannot blank the map for the TTL) |
+| `api/routers/public.py` — new | `/api/public` — the only unauthenticated *rule-set* surface (station and föhn data routes are open by design). 60 s shared cache with a poisoning guard (an empty build is never cached, so a transient Influx failure cannot blank the map for the TTL) |
 | `static/index.html` | The ruleset layer was entirely inside `if (isLoggedIn())`; now branches by auth state |
 | `tests/backend/test_public_rulesets.py` | 17 tests — the D4 gate, no-data omission, owner-field leakage, one-Influx-call batching, cache isolation between viewers, 500 m boundary |
 
@@ -697,6 +725,15 @@ Key new files: `api/errors.py`, `api/routers/pages.py`, `collectors/utils.py`, `
 ---
 
 ## Backlog (unordered)
+
+### MCP server for AI assistants — **release 1 implemented (v1.24.0)**, `specs/010-mcp-server`
+
+Release 1 = public, anonymous, read-only weather tools; see the v1.24.0 entry above. Remaining:
+tag/deploy, read-only prod verification (SC-3), then archive the spec.
+
+**Backlog follow-up — authenticated MCP access to pilot rule sets** (traffic-light decisions, own
+rule sets): deferred by decision; needs token/OAuth auth. Release 1 must not block it (FR-017).
+Also deferred until verified: thermal forecast and wind-aloft grid tools.
 
 ### Upstream: lsmfapi CH1/CH2 stitch nulls h+19–h+33 on `/api/forecast/station` — **reported, not fixed**
 

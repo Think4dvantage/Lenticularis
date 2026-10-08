@@ -24,6 +24,7 @@ Paragliding weather decision-support system for Switzerland. Collects data from 
 - **Multilanguage UI** — EN / DE / FR / IT; auto-detected from browser, switchable from nav, persisted to `localStorage`
 - **Auth** — JWT register/login + Google OAuth; pilot-owned sites and rule sets; admin role for user/collector management; `org_id` embedded in JWT for org-scoped access
 - **Email alerts** — per-ruleset notification on traffic-light transitions (`notify_on` colours)
+- **Public MCP server for AI assistants** — `POST /mcp` (Streamable HTTP, stateless, no login): station search, current / past / forecast weather and föhn status for other AI tools. Read-only, rate-limited, and **verified stations only** — private Wunderground/Ecowitt stations and known-faulty sensor values are never served. Add it to a client with e.g. `claude mcp add --transport http lenticularis https://lenti.cloud/mcp`
 - **Zero external dependencies at runtime** — Leaflet and Chart.js are self-hosted under `static/vendor/`; no CDN, no npm, no build step. Static assets are served immutable and cache-busted by app version
 - **Docker deployment** — single `docker-compose up -d` deploys app + InfluxDB; dev overlay with live volume mounts; Traefik multi-router label pattern for org subdomains; images published to `ghcr.io` on every `v*` tag
 
@@ -84,7 +85,7 @@ src/lenticularis/
 │   ├── errors.py            # AppException + _envelope() — {"error":{code,message,details}}
 │   └── routers/             # auth, stations, rulesets, stats, foehn, org, ai,
 │                            #   wind_forecast, admin, health, pages,
-│                            #   public (the only unauthenticated API surface)
+│                            #   public (unauthenticated rule-set map; station + föhn data routes are open too)
 ├── collectors/              # One file per network: meteoswiss, slf, metar, holfuy,
 │                            #   windline, ecowitt, wunderground, fga, jfb, foehn,
 │                            #   forecast_swissmeteo, forecast_grid_swissmeteo, …
@@ -172,6 +173,7 @@ tests/backend/               # pytest suite (auth, rules, dedup, security, colle
 | v1.23.0 — Reactive ruleset evaluation + precomputed forecast horizon | ✅ Shipped |
 | v1.23.1 — Fix: forecast snapshot served a stale model run, contradicting the map arrows | ✅ Shipped |
 | v1.23.2 — Fix: phantom rows blanked 15h of forecast; gap-fill across model runs | ✅ Shipped |
+| v1.24.0 — Public read-only MCP server (`/mcp`) for AI assistants (`specs/010-mcp-server`) | 🟡 Implemented, not yet tagged |
 
 Remaining work items are tracked as an unordered backlog in [.ai/context/features.md](.ai/context/features.md).
 

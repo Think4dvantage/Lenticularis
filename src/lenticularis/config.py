@@ -94,6 +94,26 @@ class OAuthConfig(BaseModel):
     facebook: FacebookOAuthConfig = FacebookOAuthConfig()
 
 
+class McpConfig(BaseModel):
+    """Public, read-only MCP server (specs/010-mcp-server)."""
+    enabled: bool = True
+    # Allowlist, fail-closed: a network is exposed only if listed here. A newly added
+    # collector stays hidden from MCP until it is added consciously.
+    verified_networks: list[str] = ["meteoswiss", "slf", "metar", "holfuy", "windline", "fga", "jfb"]
+    # Host headers accepted by the transport's DNS-rebinding protection.
+    allowed_hosts: list[str] = [
+        "lenti.cloud", "lenti.sdh.lol", "lenti-dev.lg4.ch", "localhost", "127.0.0.1",
+    ]
+    rate_limit_per_minute: int = 60
+    rate_limit_max_callers: int = 1000
+    # Number of reverse proxies in front of the app (Traefik = 1). The caller key is the
+    # X-Forwarded-For entry that many hops from the right — the one our own proxy observed.
+    trusted_proxy_hops: int = 1
+    max_history_points: int = 500
+    max_search_results: int = 25
+    stale_after_minutes: int = 120
+
+
 class MainConfig(BaseModel):
     influxdb: InfluxDBConfig
     collectors: list[CollectorConfig]
@@ -106,6 +126,7 @@ class MainConfig(BaseModel):
     station_dedup: StationDedupConfig = StationDedupConfig()
     oauth: OAuthConfig = OAuthConfig()
     smtp: SmtpConfig = SmtpConfig()
+    mcp: McpConfig = McpConfig()
 
 
 #Module vars

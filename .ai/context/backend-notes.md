@@ -134,3 +134,21 @@ New collector checklist:
   would corrupt the föhn pressure-gradient comparison. `fga.py` does the same.
 - **Guard against stale data.** Skip and `WARNING` any reading older than ~2 h. Some APIs return
   hours-old data with a `200 OK` and no error (see the `currentDateTime` note in `jfb.py`).
+
+---
+
+## Public MCP server (`mcp_server/`, v1.24.0)
+
+Full design: `context/architecture.md` → "Public MCP Server". Working rules for this package:
+- **No pilot-owned imports, no writes.** `mcp_server/` must not import `database.models`, `database.db`,
+  `rules`, `services.auth` or any router — `tests/backend/test_mcp_invariants.py` fails the build if it does.
+- **Tool logic lives in `tools.py` (no SDK imports) and is unit-tested directly** with a fake influx and a
+  `SimpleNamespace` state; `server.py` is transport glue only. `ASGITransport` never runs the lifespan, so
+  transport tests enter `McpHandle.run()` in a dedicated task (anyio cancel scopes must exit in the task that
+  entered them — a pytest-asyncio fixture's setup/teardown are different tasks).
+- Errors raised to callers are `McpToolError(code, message)` using the project vocabulary; the message must
+  say what to try next ("use search_stations first"). Anything else is logged and returned as `INTERNAL_ERROR`.
+- Every value that leaves the package passes `sanitize.clean_values` (allowlist, nulls dropped, suppressed
+  fields removed, rounded). Station ids are validated with `STATION_ID_RE` **and** must exist in the verified
+  registry before any Influx call.
+- New output field? Add it to `OBSERVATION_FIELDS`/`FORECAST_FIELDS` **and** `UNITS`.

@@ -181,3 +181,44 @@ is fine — the envelope holds either way.
 **Never write two fields with the same key in a single InfluxDB point.** Flux silently drops one.
 
 **Dedup guards on `_source` tag must compare values, not just check presence.** A guard that reads `if existing._source` will always be truthy even if `existing._source != new._source` — this was a no-op that let duplicate writes through.
+
+---
+
+## Public MCP server — exposure rules (v1.24.0)
+
+### Private-station leak through dedup pooling (found in design, closed by construction)
+
+**Never serve MCP data through the website's `display_registry` / `virtual_members`.** Website dedup
+merges co-located stations across every network, and `query_latest_virtual` / `query_history_virtual`
+pool all members newest-wins — so filtering a response's final station list is not enough: a MeteoSwiss
+station with an Ecowitt neighbour would return the Ecowitt reading. `McpRegistry` removes unverified
+networks **before** dedup. Regression tests: `tests/backend/test_mcp_registry.py`
+(`test_dedup_member_leak_closed`, `test_private_canonical_cluster_does_not_hide_verified_member`).
+
+### Allowlist, fail-closed
+
+`mcp.verified_networks` is an allowlist. Wunderground and Ecowitt are operated by private individuals
+and are deliberately excluded. New collectors are hidden until added (`prompts/add-collector.md` 3b).
+**Assumption recorded 2026-10-08 (owner):** Holfuy data may be redistributed (winds.mobi redistributes
+it); if that changes, remove `holfuy` from `verified_networks` — config only.
+
+### Known-faulty values
+
+`mcp_server/sanitize.py:SUPPRESSED_FIELDS` — `jfb-hollandiahutte-sac` declares 3248 m but reports a
+~750 m reading (~928 hPa / 23 °C): temperature, humidity and both pressures are never emitted. For a
+merged group a field is dropped if ANY member suppresses it (pooled values cannot be attributed).
+
+### Föhn inputs are admin-editable at runtime
+
+`PUT /api/foehn/config?set_as_default=true` can change the system default config while the app runs, so
+`get_foehn_status` drops any input station whose network is not verified on **every call** (not just at
+startup). A test also asserts today's default config only references verified networks.
+
+### Abuse control and error hygiene
+
+Anonymous endpoint ⇒ per-caller rate limit (`mcp.rate_limit_per_minute`, bounded table), keyed by the
+rightmost `X-Forwarded-For` entry (the address our own proxy saw; left entries are client-forgeable) and
+hashed with a random per-process salt (an unsalted IPv4 hash is reversible). Unexpected exceptions are
+logged with `logger.exception` and returned as a generic `INTERNAL_ERROR` — the SDK's default error text
+could otherwise leak Flux queries or hostnames. A Traefik `rateLimit` middleware (lg4 IaC repo) is the
+recommended complement.

@@ -22,6 +22,23 @@ def _serialise_row(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+@router.get("/mcp")
+async def get_mcp_health(request: Request):
+    """Public MCP server status: enabled flag, verified station count and usage counters."""
+    handle = getattr(request.app.state, "mcp", None)
+    registry = getattr(request.app.state, "mcp_registry", None)
+    if handle is None or registry is None:
+        return {"enabled": False}
+    return {
+        "enabled": True,
+        "verified_networks": sorted(registry.verified_networks),
+        "verified_stations": len(registry.stations),
+        "rate_limit_per_minute": handle.cfg.rate_limit_per_minute,
+        "tracked_callers": len(handle.limiter),
+        **handle.usage.snapshot(),
+    }
+
+
 @router.get("/collectors")
 async def get_collectors_health(request: Request):
     """Return last-run health state for each configured collector."""

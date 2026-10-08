@@ -48,6 +48,13 @@ Add `"<net>"` to `NETWORK_PRIORITY`. Position it by trust: higher = wins when tw
 stations are co-located within 50 m. Unknown networks already sort last, so appending is the
 safe default.
 
+## 3b. Public MCP allowlist — `config.py` `McpConfig.verified_networks` + `config.yml.example`
+
+The public MCP server (`/mcp`) exposes only networks listed in `mcp.verified_networks` — an allowlist,
+so a new network is **hidden by default**. Add `"<net>"` there only if it is institutional or
+professional/semi-professional. **Never** add privately operated personal-station networks (like
+`wunderground` / `ecowitt`). Mirror the change in the server's `config.yml` if it overrides `mcp:`.
+
 ## 4. Config — `config.yml.example` (committed) **and** the local `config.yml` (gitignored)
 
 Mirror an existing block:
@@ -139,6 +146,7 @@ Confirm the expected station count and **fresh timestamps** (not hours stale).
 - [ ] `collectors/<net>.py` — BaseCollector subclass, units normalised, staleness guard
 - [ ] `scheduler.py` — import + `_COLLECTOR_REGISTRY` entry
 - [ ] `services/dedup.py` — `NETWORK_PRIORITY`
+- [ ] MCP: decide whether `<net>` goes in `mcp.verified_networks` (default: no; never for personal stations)
 - [ ] `config.yml.example` + local `config.yml`
 - [ ] `stations.html` — filter `<option>` **and** `.network-<net>` colour
 - [ ] `.network-<net>` colour on index / station-detail / forecast-accuracy / forecast-analysis

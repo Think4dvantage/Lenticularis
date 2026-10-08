@@ -224,6 +224,12 @@ already stored, so the fix is retroactive.
 
 ### Public (unauthenticated)
 
+**Policy: any public-worthy data is open.** Weather-station routes (`/api/stations*`) carry no auth
+dependency, and the föhn read routes (`/status`, `/forecast`, `/observation`, `/history`) use
+`get_current_user_optional` — both are open **by design** (owner decision 2026-10-06; this is the
+basis for the public MCP server, `specs/010-mcp-server`). Only pilot-owned data (rule sets, decisions,
+föhn *config*, accounts) is gated. `/api/public` below is specifically the open surface for **rule sets**.
+
 - `GET /api/public/rulesets/map` — **the only unauthenticated route in the rule set surface.**
   Curated examples for visitors: `is_showcase AND is_public`, positioned, evaluated against real
   data. Returns `{data: [{id, name, lat, lon, site_type, decision}], generated_at}` — a narrow
@@ -263,6 +269,51 @@ defines the response/error *format*, not the route list; it is not a route refer
 | — | `routers/pages.py` | 20 HTML page routes (no `/api` prefix) |
 
 There is **no launch-sites API** — a "launch site" is a `ruleset` with `site_type="launch"`.
+
+---
+
+## Public MCP Server (v1.24.0, `specs/010-mcp-server`)
+
+`POST /mcp` — Model Context Protocol over **stateless Streamable HTTP with JSON responses**, no auth,
+read-only. Code in `src/lenticularis/mcp_server/`; config block `mcp:` (`McpConfig`). Six tools:
+`search_stations`, `get_current_weather`, `get_weather_history`, `get_forecast`, `get_foehn_status`,
+`describe_service` (+ resource `lenticularis://about`). Contracts: `specs/010-mcp-server/contracts/mcp-tools.md`.
+Status/usage: `GET /api/health/mcp`.
+
+**Verified stations only.** `mcp.verified_networks` is a fail-closed **allowlist** (default
+meteoswiss, slf, metar, holfuy, windline, fga, jfb). Wunderground/Ecowitt are private stations and are
+never served. A newly added collector stays hidden until listed (see `prompts/add-collector.md` step 3b).
+
+⚠️ **MCP has its own registry — never reuse the website's `display_registry`/`virtual_members`.**
+The website dedup merges co-located stations across ALL networks and `query_latest_virtual` /
+`query_history_virtual` pool every member newest-wins, so a MeteoSwiss station with an Ecowitt neighbour
+would leak Ecowitt values. `McpRegistry` (`mcp_server/registry.py`) drops private networks **before**
+dedup, then dedups on its own. It is rebuilt inside `rebuild_display_registry` and the registry updater in
+`main.py`. Consequence: `jfb` ranks *below* ecowitt/wunderground in `NETWORK_PRIORITY`, so a cluster whose
+website canonical is a private station has a different canonical id (and values) in MCP — by design.
+
+Other load-bearing details (all learned in the Phase 0 spike):
+- **No `Mount`.** `Mount("/mcp")` answers `POST /mcp` with a 307 to `http://…/mcp/` (uvicorn does not trust
+  `X-Forwarded-Proto` behind Traefik). `create_app()` registers explicit `Route("/mcp")` + `Route("/mcp/")`
+  that forward to the sub-app at path `/` (`McpEndpoint` → `McpHandle.__call__`).
+- **The handle is built in the lifespan** (config is available there; `app = create_app()` runs at import).
+  `session_manager.run()` is entered once, in the lifespan. Until then / if disabled → clean 503.
+- **Constructing `FastMCP` reconfigures the root logger** — `McpHandle._build` snapshots and restores it.
+- DNS-rebinding protection is on: `mcp.allowed_hosts` must list every public hostname (`421` otherwise).
+- Pin `mcp>=1.30,<2` — mcp 2.x renames `FastMCP`→`MCPServer` and pulls different HTTP deps.
+- Rate limit is applied **inside the tool layer** (LLM-visible `RATE_LIMITED … Retry in N seconds`),
+  keyed by the rightmost `X-Forwarded-For` entry (`trusted_proxy_hops`, default 1) hashed with a random
+  per-process salt. Unexpected exceptions are logged and returned as generic `INTERNAL_ERROR`.
+- History (`InfluxClient.query_history_range`) aggregates **per field**: gust=max, precipitation=sum,
+  direction/snow_depth=last, rest=mean — a blanket mean would understate peak gusts.
+- Föhn tools use the **system default config only**, and drop any input station whose network is not
+  verified at runtime (the default config is admin-editable live).
+- Forecast reports `forecast_issued` via `query_forecast_for_stations(keep_init_date=True)`; missing hours
+  are listed, never interpolated. Known-faulty values (Hollandiahütte temp/humidity/pressure) are removed in
+  one choke point, `mcp_server/sanitize.py:SUPPRESSED_FIELDS`.
+- Influx readers return `{}` on failure, so a database outage reads as "no data" — documented, not fixed.
+
+Out of scope / backlog: pilot rule sets and decisions (needs auth), thermal and wind-aloft tools (unverified).
 
 ---
 

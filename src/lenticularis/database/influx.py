@@ -11,6 +11,7 @@ Provides:
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -719,6 +720,93 @@ from(bucket: "{self._cfg.bucket}")
             for record in table.records:
                 entry: dict = {"timestamp": record.get_time()}
                 entry.update({k: v for k, v in record.values.items() if not k.startswith("_") and k not in ("result", "table", "station_id", "network")})
+                rows.append(entry)
+        return rows
+
+    # ------------------------------------------------------------------
+    # Query — history over an explicit range, aggregated (public MCP server)
+    # ------------------------------------------------------------------
+
+    # Per-field aggregation. A plain mean would understate peak gusts and is meaningless for
+    # direction, so each field gets the aggregate that preserves its meaning.
+    HISTORY_AGGREGATES: dict[str, str] = {
+        "wind_gust": "max",
+        "precipitation": "sum",
+        "wind_direction": "last",
+        "snow_depth": "last",
+    }
+
+    def query_history_range(
+        self,
+        member_ids: list[str],
+        start: datetime,
+        end: datetime,
+        every: str,
+        fields: list[str],
+    ) -> list[dict]:
+        """
+        Return ``every``-bucketed observations pooled across ``member_ids`` between ``start``
+        and ``end`` (UTC). Members are pooled per field (``group(columns: ["_field"])``) so a
+        merged station yields one value per bucket.
+
+        Aggregation per field: see ``HISTORY_AGGREGATES`` (default ``mean``). Returns
+        ``[{"timestamp": datetime, field: value, ...}]`` sorted by time. Station ids use an
+        OR-chain of equality filters, never ``contains()`` (see architecture.md).
+        """
+        if not member_ids or not fields:
+            return []
+        if not re.fullmatch(r"\d{1,3}(m|h|d)", every):
+            raise ValueError(f"invalid window: {every!r}")
+        safe_fields = [f for f in fields if re.fullmatch(r"[a-z_]{1,32}", f)]
+        if not safe_fields:
+            return []
+
+        station_filter = " or ".join(f'r.station_id == "{_flux_str(sid)}"' for sid in member_ids)
+        start_s = start.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        end_s = end.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        by_fn: dict[str, list[str]] = {}
+        for f in safe_fields:
+            by_fn.setdefault(self.HISTORY_AGGREGATES.get(f, "mean"), []).append(f)
+
+        streams: list[str] = []
+        names: list[str] = []
+        for i, (fn, flds) in enumerate(sorted(by_fn.items())):
+            field_filter = " or ".join(f'r._field == "{_flux_str(f)}"' for f in flds)
+            name = f"s{i}"
+            names.append(name)
+            streams.append(f"""
+{name} = base
+  |> filter(fn: (r) => {field_filter})
+  |> toFloat()
+  |> group(columns: ["_field"])
+  |> aggregateWindow(every: {every}, fn: {fn}, createEmpty: false, timeSrc: "_start")""")
+
+        flux = f"""
+base = from(bucket: "{self._cfg.bucket}")
+  |> range(start: {start_s}, stop: {end_s})
+  |> filter(fn: (r) => r._measurement == "{MEASUREMENT_WEATHER}")
+  |> filter(fn: (r) => {station_filter})
+{''.join(streams)}
+
+union(tables: [{', '.join(names)}])
+  |> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")
+  |> sort(columns: ["_time"])
+"""
+        try:
+            tables = self._query_api.query(flux, org=self._cfg.org)
+        except Exception as exc:
+            logger.error("InfluxDB query_history_range error for %s: %s", member_ids, exc)
+            return []
+
+        rows: list[dict] = []
+        for table in tables:
+            for record in table.records:
+                entry: dict = {"timestamp": record.get_time()}
+                entry.update({
+                    k: v for k, v in record.values.items()
+                    if not k.startswith("_") and k not in ("result", "table")
+                })
                 rows.append(entry)
         return rows
 
@@ -1578,7 +1666,7 @@ from(bucket: "{self._cfg.bucket}")
         return result
 
     def query_forecast_for_stations(
-        self, station_ids: list[str], horizon_hours: int = 120
+        self, station_ids: list[str], horizon_hours: int = 120, keep_init_date: bool = False
     ) -> dict[str, dict[str, dict]]:
         """
         Return forecast data for the given station IDs from now to ``+horizon_hours``.
@@ -1661,8 +1749,10 @@ from(bucket: "{self._cfg.bucket}")
                 merged = _merge_forecast_candidates(cands)
                 if merged:
                     # source / model are surfaced as forecast metadata by
-                    # GET /api/stations/{id}/forecast; init_date never was.
-                    merged.pop("init_date", None)
+                    # GET /api/stations/{id}/forecast; init_date never was. The public MCP
+                    # server opts in (keep_init_date) to report when the model run was issued.
+                    if not keep_init_date:
+                        merged.pop("init_date", None)
                     merged_by_vt[valid_time_iso] = merged
             if merged_by_vt:
                 result[sid] = merged_by_vt
